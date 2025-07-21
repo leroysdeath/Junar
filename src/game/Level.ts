@@ -37,6 +37,35 @@ export class Level {
     return this.data.walls;
   }
 
+  // Calculate the exact center coordinates of the map
+  getMapCenter(): Vector2 {
+    // Calculate center in grid coordinates
+    const centerGridX = Math.floor(this.data.width / 2);
+    const centerGridY = Math.floor(this.data.height / 2);
+    
+    // Convert to pixel coordinates (multiply by 32px grid size)
+    const centerPixelX = centerGridX * 32;
+    const centerPixelY = centerGridY * 32;
+    
+    return { x: centerPixelX, y: centerPixelY };
+  }
+
+  // Get a safe spawn position at map center with fallback strategy
+  getCenterSpawn(): Vector2 {
+    const mapCenter = this.getMapCenter();
+    
+    // First, try the exact center
+    if (this.isPositionSafe(mapCenter.x, mapCenter.y, 32, 32)) {
+      console.log(`Player spawning at exact map center: (${mapCenter.x}, ${mapCenter.y})`);
+      return mapCenter;
+    }
+    
+    console.log(`Map center (${mapCenter.x}, ${mapCenter.y}) is blocked, searching for nearest safe position...`);
+    
+    // Fallback: Find nearest safe position to center using spiral search
+    return this.findSafeSpawnPosition(mapCenter, 32);
+  }
+
   // Check if a position is safe for player spawning (no collision with walls/trees)
   isPositionSafe(x: number, y: number, width: number = 32, height: number = 32): boolean {
     // Convert pixel coordinates to grid coordinates
@@ -117,6 +146,7 @@ export class Level {
 
   // Get a validated safe player spawn position
   getSafePlayerSpawn(): Vector2 {
-    return this.findSafeSpawnPosition(this.data.playerSpawn);
+    // Always spawn at map center, not the predefined spawn point
+    return this.getCenterSpawn();
   }
 }
