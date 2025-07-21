@@ -62,6 +62,8 @@ export class Game {
   restart() {
     this.currentLevelIndex = 0;
     this.score = 0;
+    this.arrows = [];
+    this.lastArrowTime = 0;
     this.startLevel();
   }
 
@@ -73,6 +75,7 @@ export class Game {
       new Enemy(spawn.pos, spawn.type, index)
     );
     this.arrows = [];
+    this.lastArrowTime = 0;
     
     this.callbacks.onStateChange('playing');
     this.callbacks.onLevelChange(this.currentLevelIndex + 1);
@@ -235,14 +238,23 @@ export class Game {
   }
 
   private render() {
+    // Clear canvas with dark green background
     this.ctx.fillStyle = '#1a4a3a';
     this.ctx.fillRect(0, 0, 800, 600);
     
-    if (this.gameState === 'playing' || this.gameState === 'levelComplete') {
+    // Always render the level, player, and enemies when they exist
+    // This ensures we can see the game even in menu state for debugging
+    if (this.level && this.player) {
       this.renderer.renderLevel(this.level);
       this.renderer.renderPlayer(this.player);
-      this.renderer.renderEnemies(this.enemies);
-      this.renderer.renderArrows(this.arrows);
+      
+      if (this.enemies.length > 0) {
+        this.renderer.renderEnemies(this.enemies);
+      }
+      
+      if (this.arrows.length > 0) {
+        this.renderer.renderArrows(this.arrows);
+      }
     }
   }
 
