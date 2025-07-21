@@ -190,4 +190,31 @@ export class Renderer {
       this.ctx.restore();
     });
   }
+
+  renderLineOfSightIndicator(player: Player, hasLineOfSight: boolean) {
+    const pos = player.getPosition();
+    const centerX = pos.x + 16;
+    const centerY = pos.y + 16;
+    
+    // Draw a subtle indicator around the player
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.6;
+    
+    if (hasLineOfSight) {
+      // Green glow when enemy is in sight
+      this.ctx.strokeStyle = '#00FF00';
+      this.ctx.lineWidth = 3;
+      this.ctx.setLineDash([4, 4]);
+    } else {
+      // Red outline when no enemy in sight
+      this.ctx.strokeStyle = '#FF4444';
+      this.ctx.lineWidth = 2;
+      this.ctx.setLineDash([2, 2]);
+    }
+    
+    this.ctx.strokeRect(pos.x - 2, pos.y - 2, 36, 36);
+    this.ctx.setLineDash([]); // Reset line dash
+    
+    this.ctx.restore();
+  }
 }

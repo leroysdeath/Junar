@@ -127,8 +127,9 @@ function App() {
                   <h3 className="text-amber-400 font-bold mb-3 text-center">Instructions</h3>
                   <ul className="text-sm space-y-2 text-amber-100">
                     <li><strong>Movement:</strong> Use WASD or Arrow Keys</li>
-                    <li><strong>Combat:</strong> Arrows fire automatically</li>
+                    <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
                     <li><strong>Objective:</strong> Eliminate all enemies to advance</li>
+                    <li><strong>Strategy:</strong> Position for clear line of sight</li>
                     <li><strong>Warning:</strong> Avoid all enemy contact!</li>
                     <li><strong>Levels:</strong> 9 levels + epic boss battle</li>
                     <li><strong>Victory:</strong> Defeat the Ancient Tree Guardian</li>

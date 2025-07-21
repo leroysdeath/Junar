@@ -31,8 +31,10 @@ export class Game {
   private arrowCooldown = 500; // 0.5 seconds
   private arrowLength = 32; // Match player avatar height (32px)
   private arrowSpacing = 8; // 25% of arrow length (32 * 0.25 = 8px)
+  private maxDetectionRange = 300; // Maximum range for enemy detection
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
+  private hasLineOfSight = false; // Track if player has line of sight to any enemy
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -84,6 +86,7 @@ export class Game {
     this.callbacks.onLevelChange(this.currentLevelIndex + 1);
     this.callbacks.onEnemiesChange(this.enemies.length);
     this.callbacks.onScoreChange(this.score);
+    this.hasLineOfSight = false;
   }
 
   private gameLoop(currentTime: number) {
@@ -103,8 +106,11 @@ export class Game {
     const input = this.inputManager.getInput();
     this.player.update(deltaTime, input, this.level);
     
+    // Update line of sight detection
+    this.hasLineOfSight = this.checkLineOfSightToEnemies();
+    
     // Auto-fire arrows
-    if (currentTime - this.lastArrowTime >= this.arrowCooldown) {
+    if (currentTime - this.lastArrowTime >= this.arrowCooldown && this.hasLineOfSight) {
       this.fireArrow();
       this.lastArrowTime = currentTime;
     }
@@ -142,36 +148,113 @@ export class Game {
     }
   }
 
-  private fireArrow() {
-    if (this.enemies.length === 0) return;
+  private checkLineOfSightToEnemies(): boolean {
+    if (this.enemies.length === 0) return false;
     
-    // Find nearest enemy
     const playerPos = this.player.getPosition();
-    let nearestEnemy = this.enemies[0];
+    const playerCenterX = playerPos.x + 16; // Player center
+    const playerCenterY = playerPos.y + 16;
+    
+    // Check line of sight to each enemy
+    for (const enemy of this.enemies) {
+      const enemyPos = enemy.getPosition();
+      const enemyCenterX = enemyPos.x + 16; // Enemy center
+      const enemyCenterY = enemyPos.y + 16;
+      
+      // Calculate distance to enemy
+      const dx = enemyCenterX - playerCenterX;
+      const dy = enemyCenterY - playerCenterY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Skip if enemy is beyond detection range
+      if (distance > this.maxDetectionRange) continue;
+      
+      // Check if there's a clear line of sight
+      if (this.hasDirectLineOfSight(
+        { x: playerCenterX, y: playerCenterY },
+        { x: enemyCenterX, y: enemyCenterY }
+      )) {
+        return true; // Found at least one enemy with clear line of sight
+      }
+    }
+    
+    return false; // No enemies in line of sight
+  }
+
+  private hasDirectLineOfSight(start: Vector2, end: Vector2): boolean {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0) return true;
+    
+    // Use smaller steps for more accurate collision detection
+    const steps = Math.ceil(distance / 8); // Check every 8 pixels
+    const stepX = dx / steps;
+    const stepY = dy / steps;
+    
+    // Check each point along the line for wall collisions
+    for (let i = 1; i < steps; i++) {
+      const checkX = start.x + stepX * i;
+      const checkY = start.y + stepY * i;
+      
+      // Convert to grid coordinates
+      const gridX = Math.floor(checkX / 32);
+      const gridY = Math.floor(checkY / 32);
+      
+      // Check if this point hits a wall
+      if (this.level.isWall(gridX, gridY)) {
+        return false; // Line of sight blocked by wall
+      }
+    }
+    
+    return true; // Clear line of sight
+  }
+
+  private fireArrow() {
+    if (this.enemies.length === 0 || !this.hasLineOfSight) return;
+    
+    // Find nearest enemy with line of sight
+    const playerPos = this.player.getPosition();
+    const playerCenterX = playerPos.x + 16;
+    const playerCenterY = playerPos.y + 16;
+    
+    let nearestEnemy = null;
     let nearestDistance = Infinity;
     
     this.enemies.forEach(enemy => {
+      const enemyPos = enemy.getPosition();
+      const enemyCenterX = enemyPos.x + 16;
+      const enemyCenterY = enemyPos.y + 16;
+      
       const dist = Math.sqrt(
-        Math.pow(enemy.getPosition().x - playerPos.x, 2) +
-        Math.pow(enemy.getPosition().y - playerPos.y, 2)
+        Math.pow(enemyCenterX - playerCenterX, 2) +
+        Math.pow(enemyCenterY - playerCenterY, 2)
       );
-      if (dist < nearestDistance) {
+      
+      // Only consider enemies within range and with line of sight
+      if (dist < nearestDistance && 
+          dist <= this.maxDetectionRange &&
+          this.hasDirectLineOfSight(
+            { x: playerCenterX, y: playerCenterY },
+            { x: enemyCenterX, y: enemyCenterY }
+          )) {
         nearestDistance = dist;
         nearestEnemy = enemy;
       }
     });
     
+    if (!nearestEnemy) return; // No valid target found
+    
     // Calculate direction
     const enemyPos = nearestEnemy.getPosition();
-    const dx = enemyPos.x - playerPos.x;
-    const dy = enemyPos.y - playerPos.y;
+    const enemyCenterX = enemyPos.x + 16;
+    const enemyCenterY = enemyPos.y + 16;
+    const dx = enemyCenterX - playerCenterX;
+    const dy = enemyCenterY - playerCenterY;
     const length = Math.sqrt(dx * dx + dy * dy);
     
     if (length > 0) {
-      // Calculate spawn position with proper spacing from player center
-      const playerCenterX = playerPos.x + 16; // Player is 32px, so center is +16
-      const playerCenterY = playerPos.y + 16;
-      
       this.arrows.push({
         pos: { x: playerCenterX, y: playerCenterY },
         dir: { x: dx / length, y: dy / length },
@@ -262,6 +345,11 @@ export class Game {
       
       if (this.arrows.length > 0) {
         this.renderer.renderArrows(this.arrows);
+      }
+      
+      // Render line of sight indicator
+      if (this.gameState === 'playing') {
+        this.renderer.renderLineOfSightIndicator(this.player, this.hasLineOfSight);
       }
     }
   }
