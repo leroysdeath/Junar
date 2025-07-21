@@ -14,7 +14,7 @@ function App() {
   const [showInstructions, setShowInstructions] = useState(false);
 
   const initGame = useCallback(() => {
-    if (canvasRef.current) {
+    if (canvasRef.current && !gameRef.current) {
       gameRef.current = new Game(canvasRef.current, {
         onStateChange: setGameState,
         onLevelChange: setCurrentLevel,
@@ -27,10 +27,11 @@ function App() {
   }, [soundEnabled]);
 
   const startGame = () => {
-    setGameState('playing');
-    setCurrentLevel(1);
-    setScore(0);
-    initGame();
+    if (gameRef.current) {
+      gameRef.current.restart();
+    } else {
+      initGame();
+    }
   };
 
   const restartGame = () => {
@@ -44,11 +45,14 @@ function App() {
     }
   };
 
+  // Initialize game when component mounts
   useEffect(() => {
+    initGame();
     return () => {
       gameRef.current?.cleanup();
+      gameRef.current = null;
     };
-  }, []);
+  }, [initGame]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex items-center justify-center p-4">
