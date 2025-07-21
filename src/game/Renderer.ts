@@ -163,29 +163,38 @@ export class Renderer {
 
   renderArrows(arrows: Array<{ pos: Vector2; dir: Vector2; id: number }>) {
     arrows.forEach(arrow => {
-      const arrowLength = 32; // Match player avatar height
-      const arrowWidth = 6; // Arrow shaft width
-      const headLength = 8; // Arrow head length
-      const headWidth = 12; // Arrow head width
+      const arrowLength = 24; // Slightly smaller for cardinal directions
+      const arrowWidth = 4; // Thinner shaft for cleaner look
+      const headLength = 6; // Smaller arrow head
+      const headWidth = 8; // Narrower arrow head
       
-      const angle = Math.atan2(arrow.dir.y, arrow.dir.x);
+      // Determine cardinal direction and set angle accordingly
+      let angle = 0;
+      if (arrow.dir.x === 1) angle = 0; // Right
+      else if (arrow.dir.x === -1) angle = Math.PI; // Left
+      else if (arrow.dir.y === 1) angle = Math.PI / 2; // Down
+      else if (arrow.dir.y === -1) angle = -Math.PI / 2; // Up
       
       this.ctx.save();
       this.ctx.translate(arrow.pos.x, arrow.pos.y);
       this.ctx.rotate(angle);
       
-      // Arrow shaft - solid black, centered
-      this.ctx.fillStyle = '#000000';
+      // Arrow shaft - solid dark brown for better visibility
+      this.ctx.fillStyle = '#4a3c28';
       this.ctx.fillRect(-arrowLength/2, -arrowWidth/2, arrowLength - headLength, arrowWidth);
       
-      // Arrow head - solid black triangle
-      this.ctx.fillStyle = '#000000';
+      // Arrow head - solid dark brown triangle
+      this.ctx.fillStyle = '#4a3c28';
       this.ctx.beginPath();
       this.ctx.moveTo(arrowLength/2, 0); // Point of arrow
       this.ctx.lineTo(arrowLength/2 - headLength, -headWidth/2); // Top of head
       this.ctx.lineTo(arrowLength/2 - headLength, headWidth/2); // Bottom of head
       this.ctx.closePath();
       this.ctx.fill();
+      
+      // Add arrow fletching for cardinal direction clarity
+      this.ctx.fillStyle = '#8B4513';
+      this.ctx.fillRect(-arrowLength/2, -arrowWidth/4, 4, arrowWidth/2);
       
       this.ctx.restore();
     });

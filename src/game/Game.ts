@@ -214,65 +214,149 @@ export class Game {
   private fireArrow() {
     if (this.enemies.length === 0 || !this.hasLineOfSight) return;
     
-    // Find nearest enemy with line of sight
+    // Find nearest enemy with line of sight in cardinal directions only
     const playerPos = this.player.getPosition();
     const playerCenterX = playerPos.x + 16;
     const playerCenterY = playerPos.y + 16;
     
     let nearestEnemy = null;
     let nearestDistance = Infinity;
+    let bestDirection: Vector2 | null = null;
     
     this.enemies.forEach(enemy => {
       const enemyPos = enemy.getPosition();
       const enemyCenterX = enemyPos.x + 16;
       const enemyCenterY = enemyPos.y + 16;
       
-      const dist = Math.sqrt(
-        Math.pow(enemyCenterX - playerCenterX, 2) +
-        Math.pow(enemyCenterY - playerCenterY, 2)
-      );
+      // Calculate direction to enemy
+      const dx = enemyCenterX - playerCenterX;
+      const dy = enemyCenterY - playerCenterY;
+      
+      // Determine which cardinal direction the enemy is in
+      const cardinalDirection = this.getCardinalDirection(dx, dy);
+      if (!cardinalDirection) return; // Skip if not in a cardinal direction
+      
+      // Check if there's line of sight in this cardinal direction
+      if (!this.hasCardinalLineOfSight(
+        { x: playerCenterX, y: playerCenterY },
+        cardinalDirection
+      )) return;
+      
+      // Calculate distance using cardinal direction only
+      const dist = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
       
       // Only consider enemies within range and with line of sight
-      if (dist < nearestDistance && 
-          dist <= this.maxDetectionRange &&
-          this.hasDirectLineOfSight(
-            { x: playerCenterX, y: playerCenterY },
-            { x: enemyCenterX, y: enemyCenterY }
-          )) {
+      if (dist < nearestDistance && dist <= this.maxDetectionRange) {
         nearestDistance = dist;
         nearestEnemy = enemy;
+        bestDirection = cardinalDirection;
       }
     });
     
-    if (!nearestEnemy) return; // No valid target found
+    if (!nearestEnemy || !bestDirection) return; // No valid target found
     
-    // Calculate direction
-    const enemyPos = nearestEnemy.getPosition();
-    const enemyCenterX = enemyPos.x + 16;
-    const enemyCenterY = enemyPos.y + 16;
-    const dx = enemyCenterX - playerCenterX;
-    const dy = enemyCenterY - playerCenterY;
-    const length = Math.sqrt(dx * dx + dy * dy);
+    // Fire arrow in cardinal direction
+    this.arrows.push({
+      pos: { x: playerCenterX, y: playerCenterY },
+      dir: { x: bestDirection.x, y: bestDirection.y },
+      id: this.nextArrowId++
+    });
     
-    if (length > 0) {
-      this.arrows.push({
-        pos: { x: playerCenterX, y: playerCenterY },
-        dir: { x: dx / length, y: dy / length },
-        id: this.nextArrowId++
-      });
-      
-      this.soundManager.play('arrow');
-    }
+    this.soundManager.play('arrow');
   }
 
-  private checkCollisions() {
-    const playerPos = this.player.getPosition();
+  private getCardinalDirection(dx: number, dy: number): Vector2 | null {
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
     
+    // Determine which cardinal direction is dominant
+    if (absDx > absDy) {
+      // Horizontal movement is dominant
+      if (dx > 0) return { x: 1, y: 0 }; // Right
+      else return { x: -1, y: 0 }; // Left
+    } else if (absDy > absDx) {
+      // Vertical movement is dominant
+      if (dy > 0) return { x: 0, y: 1 }; // Down
+      else return { x: 0, y: -1 }; // Up
+    }
+    
+    // If dx and dy are equal, prioritize horizontal movement
+    if (absDx > 0) {
+      if (dx > 0) return { x: 1, y: 0 }; // Right
+      else return { x: -1, y: 0 }; // Left
+    }
+    
+    return null; // No movement
+  }
+
+  private hasCardinalLineOfSight(start: Vector2, direction: Vector2): boolean {
+    const stepSize = 16; // Check every 16 pixels
+    const maxSteps = Math.floor(this.maxDetectionRange / stepSize);
+    
+    for (let step = 1; step <= maxSteps; step++) {
+      const checkX = start.x + (direction.x * stepSize * step);
+      const checkY = start.y + (direction.y * stepSize * step);
+      
+      // Check bounds
+      if (checkX < 0 || checkX >= 800 || checkY < 0 || checkY >= 600) {
+        break; // Reached boundary
+      }
+      
+      // Convert to grid coordinates
+      const gridX = Math.floor(checkX / 32);
+      const gridY = Math.floor(checkY / 32);
+      
+      // Check if this point hits a wall
+      if (this.level.isWall(gridX, gridY)) {
+        return false; // Line of sight blocked by wall
+      }
+      
+      // Check if there's an enemy at this position
+      for (const enemy of this.enemies) {
+        const enemyPos = enemy.getPosition();
+        const enemyCenterX = enemyPos.x + 16;
+        const enemyCenterY = enemyPos.y + 16;
+        
+        // Check if enemy is close to this cardinal line position
+        const distanceToLine = Math.sqrt(
+          Math.pow(checkX - enemyCenterX, 2) + 
+          Math.pow(checkY - enemyCenterY, 2)
+        );
+        
+        if (distanceToLine <= 20) { // Enemy is close enough to the cardinal line
+          return true; // Found enemy in line of sight
+        }
+      }
+    }
+    
+    return false; // No enemy found in cardinal line of sight
+  }
+
+  private getCardinalDistance(playerX: number, playerY: number, enemyX: number, enemyY: number, direction: Vector2): number {
+    // Calculate distance along the cardinal direction only
+    if (direction.x !== 0) {
+      // Horizontal direction - use X distance
+      return Math.abs(enemyX - playerX);
+    } else {
+      // Vertical direction - use Y distance
+      // Calculate direction to enemy
+    }
+  }
+  private checkCollisions() {
+      // Get cardinal direction
+      const cardinalDirection = this.getCardinalDirection(dx, dy);
+      if (!cardinalDirection) continue;
+      
+      // Calculate cardinal distance
+      const distance = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
+      
+      // Skip if enemy is beyond detection range
+      if (distance > this.maxDetectionRange) continue;
     // Check enemy-player collisions
-    this.enemies.forEach(enemy => {
-      if (this.collisionManager.checkCollision(
-        { x: playerPos.x, y: playerPos.y, width: 32, height: 32 },
-        { x: enemy.getPosition().x, y: enemy.getPosition().y, width: 32, height: 32 }
+      // Check if there's a clear cardinal line of sight
+      if (this.hasCardinalLineOfSight(
+        { x: playerCenterX, y: playerCenterY },
+        cardinalDirection
       )) {
         this.gameOver();
         return;
