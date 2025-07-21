@@ -19,7 +19,7 @@ export class Renderer {
         const pixelY = y * 32;
         
         if (walls[y][x]) {
-          // Render tree (green blocks)
+          // Render tree (green blocks with collision)
           this.ctx.fillStyle = '#228B22';
           this.ctx.fillRect(pixelX, pixelY, 32, 32);
           
@@ -33,7 +33,7 @@ export class Renderer {
           this.ctx.fillRect(pixelX + 24, pixelY + 12, 4, 4);
           this.ctx.fillRect(pixelX + 12, pixelY + 24, 4, 4);
         } else {
-          // Render dirt/brown floor
+          // Render dirt/brown floor (no collision)
           this.ctx.fillStyle = '#8B4513';
           this.ctx.fillRect(pixelX, pixelY, 32, 32);
           
