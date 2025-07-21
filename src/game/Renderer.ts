@@ -163,12 +163,26 @@ export class Renderer {
 
   renderArrows(arrows: Array<{ pos: Vector2; dir: Vector2; id: number }>) {
     arrows.forEach(arrow => {
-      this.ctx.fillStyle = '#8B4513';
-      this.ctx.fillRect(arrow.pos.x, arrow.pos.y, 4, 2);
+      // Calculate arrow direction for proper orientation
+      const angle = Math.atan2(arrow.dir.y, arrow.dir.x);
       
-      // Arrow tip
-      this.ctx.fillStyle = '#C0C0C0';
-      this.ctx.fillRect(arrow.pos.x + 2, arrow.pos.y + 1, 2, 1);
+      this.ctx.save();
+      this.ctx.translate(arrow.pos.x + 2, arrow.pos.y + 1);
+      this.ctx.rotate(angle);
+      
+      // Arrow shaft (thick black line)
+      this.ctx.fillStyle = '#000000';
+      this.ctx.fillRect(-6, -1, 8, 2);
+      
+      // Arrow head (pointed triangle)
+      this.ctx.beginPath();
+      this.ctx.moveTo(2, 0);
+      this.ctx.lineTo(-2, -2);
+      this.ctx.lineTo(-2, 2);
+      this.ctx.closePath();
+      this.ctx.fill();
+      
+      this.ctx.restore();
     });
   }
 }
