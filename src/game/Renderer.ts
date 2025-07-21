@@ -163,22 +163,27 @@ export class Renderer {
 
   renderArrows(arrows: Array<{ pos: Vector2; dir: Vector2; id: number }>) {
     arrows.forEach(arrow => {
-      // Calculate arrow direction for proper orientation
+      const arrowLength = 32; // Match player avatar height
+      const arrowWidth = 6; // Arrow shaft width
+      const headLength = 8; // Arrow head length
+      const headWidth = 12; // Arrow head width
+      
       const angle = Math.atan2(arrow.dir.y, arrow.dir.x);
       
       this.ctx.save();
-      this.ctx.translate(arrow.pos.x + 2, arrow.pos.y + 1);
+      this.ctx.translate(arrow.pos.x, arrow.pos.y);
       this.ctx.rotate(angle);
       
-      // Arrow shaft (thick black line)
+      // Arrow shaft - solid black, centered
       this.ctx.fillStyle = '#000000';
-      this.ctx.fillRect(-6, -1, 8, 2);
+      this.ctx.fillRect(-arrowLength/2, -arrowWidth/2, arrowLength - headLength, arrowWidth);
       
-      // Arrow head (pointed triangle)
+      // Arrow head - solid black triangle
+      this.ctx.fillStyle = '#000000';
       this.ctx.beginPath();
-      this.ctx.moveTo(2, 0);
-      this.ctx.lineTo(-2, -2);
-      this.ctx.lineTo(-2, 2);
+      this.ctx.moveTo(arrowLength/2, 0); // Point of arrow
+      this.ctx.lineTo(arrowLength/2 - headLength, -headWidth/2); // Top of head
+      this.ctx.lineTo(arrowLength/2 - headLength, headWidth/2); // Bottom of head
       this.ctx.closePath();
       this.ctx.fill();
       

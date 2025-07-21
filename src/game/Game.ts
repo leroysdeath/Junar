@@ -28,6 +28,8 @@ export class Game {
   
   private lastArrowTime = 0;
   private arrowCooldown = 500; // 0.5 seconds
+  private arrowLength = 32; // Match player avatar height (32px)
+  private arrowSpacing = 8; // 25% of arrow length (32 * 0.25 = 8px)
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
 
@@ -113,8 +115,9 @@ export class Game {
     
     // Update arrows
     this.arrows = this.arrows.filter(arrow => {
-      arrow.pos.x += arrow.dir.x * 400 * (deltaTime / 1000);
-      arrow.pos.y += arrow.dir.y * 400 * (deltaTime / 1000);
+      const arrowSpeed = 400; // pixels per second
+      arrow.pos.x += arrow.dir.x * arrowSpeed * (deltaTime / 1000);
+      arrow.pos.y += arrow.dir.y * arrowSpeed * (deltaTime / 1000);
       
       // Check bounds
       if (arrow.pos.x < 0 || arrow.pos.x > 800 || arrow.pos.y < 0 || arrow.pos.y > 600) {
@@ -164,8 +167,12 @@ export class Game {
     const length = Math.sqrt(dx * dx + dy * dy);
     
     if (length > 0) {
+      // Calculate spawn position with proper spacing from player center
+      const playerCenterX = playerPos.x + 16; // Player is 32px, so center is +16
+      const playerCenterY = playerPos.y + 16;
+      
       this.arrows.push({
-        pos: { x: playerPos.x + 16, y: playerPos.y + 16 },
+        pos: { x: playerCenterX, y: playerCenterY },
         dir: { x: dx / length, y: dy / length },
         id: this.nextArrowId++
       });
