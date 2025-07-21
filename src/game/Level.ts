@@ -149,4 +149,127 @@ export class Level {
     // Always spawn at map center, not the predefined spawn point
     return this.getCenterSpawn();
   }
+
+  // Get all valid edge spawn positions for enemies
+  getEdgeSpawnPositions(): Vector2[] {
+    const edgePositions: Vector2[] = [];
+    const gridSize = 32;
+    
+    // Top edge (y = 1, skip corners for better distribution)
+    for (let x = 2; x < this.data.width - 2; x++) {
+      const pixelX = x * gridSize;
+      const pixelY = 1 * gridSize;
+      if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+        edgePositions.push({ x: pixelX, y: pixelY });
+      }
+    }
+    
+    // Bottom edge (y = height - 2, skip corners)
+    for (let x = 2; x < this.data.width - 2; x++) {
+      const pixelX = x * gridSize;
+      const pixelY = (this.data.height - 2) * gridSize;
+      if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+        edgePositions.push({ x: pixelX, y: pixelY });
+      }
+    }
+    
+    // Left edge (x = 1, skip corners)
+    for (let y = 2; y < this.data.height - 2; y++) {
+      const pixelX = 1 * gridSize;
+      const pixelY = y * gridSize;
+      if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+        edgePositions.push({ x: pixelX, y: pixelY });
+      }
+    }
+    
+    // Right edge (x = width - 2, skip corners)
+    for (let y = 2; y < this.data.height - 2; y++) {
+      const pixelX = (this.data.width - 2) * gridSize;
+      const pixelY = y * gridSize;
+      if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+        edgePositions.push({ x: pixelX, y: pixelY });
+      }
+    }
+    
+    return edgePositions;
+  }
+
+  // Generate enemy spawns at edge positions with minimum distance from player
+  generateEdgeEnemySpawns(enemyCount: number, minDistanceFromPlayer: number = 128): EnemySpawn[] {
+    const edgePositions = this.getEdgeSpawnPositions();
+    const playerCenter = this.getMapCenter();
+    const enemyTypes: EnemyType[] = ['panther', 'primate', 'bear'];
+    
+    // Filter positions that are far enough from player spawn
+    const validPositions = edgePositions.filter(pos => {
+      const distance = Math.sqrt(
+        Math.pow(pos.x - playerCenter.x, 2) + 
+        Math.pow(pos.y - playerCenter.y, 2)
+      );
+      return distance >= minDistanceFromPlayer;
+    });
+    
+    if (validPositions.length === 0) {
+      console.warn('No valid edge positions found for enemy spawning');
+      return [];
+    }
+    
+    const spawns: EnemySpawn[] = [];
+    const usedPositions = new Set<string>();
+    
+    for (let i = 0; i < enemyCount; i++) {
+      // Try to find an unused position
+      let attempts = 0;
+      let selectedPosition: Vector2 | null = null;
+      
+      while (attempts < 50 && !selectedPosition) {
+        const randomIndex = Math.floor(Math.random() * validPositions.length);
+        const candidate = validPositions[randomIndex];
+        const posKey = `${candidate.x},${candidate.y}`;
+        
+        if (!usedPositions.has(posKey)) {
+          selectedPosition = candidate;
+          usedPositions.add(posKey);
+        }
+        attempts++;
+      }
+      
+      if (selectedPosition) {
+        const randomType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+        spawns.push({
+          pos: { ...selectedPosition },
+          type: randomType
+        });
+      }
+    }
+    
+    console.log(`Generated ${spawns.length} edge enemy spawns out of ${enemyCount} requested`);
+    return spawns;
+  }
+
+  // Check if position has line of sight to player (for advanced spawn logic)
+  hasLineOfSightToPlayer(enemyPos: Vector2, playerPos: Vector2): boolean {
+    const dx = playerPos.x - enemyPos.x;
+    const dy = playerPos.y - enemyPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0) return true;
+    
+    const steps = Math.ceil(distance / 16); // Check every 16 pixels
+    const stepX = dx / steps;
+    const stepY = dy / steps;
+    
+    for (let i = 1; i < steps; i++) {
+      const checkX = enemyPos.x + stepX * i;
+      const checkY = enemyPos.y + stepY * i;
+      const gridX = Math.floor(checkX / 32);
+      const gridY = Math.floor(checkY / 32);
+      
+      if (this.isWall(gridX, gridY)) {
+        return false; // Line of sight blocked
+      }
+    }
+    
+    return true; // Clear line of sight
+  }
 }

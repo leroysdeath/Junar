@@ -43,11 +43,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 2 - More complex paths
@@ -76,13 +72,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 3 - Winding maze paths
@@ -111,16 +101,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 4 - Dense maze with multiple paths
@@ -149,20 +130,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' },
-      { pos: { x: 512, y: 416 }, type: 'primate' },
-      { pos: { x: 352, y: 160 }, type: 'panther' },
-      { pos: { x: 224, y: 224 }, type: 'bear' },
-      { pos: { x: 608, y: 288 }, type: 'primate' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 5 - Complex interconnected maze
@@ -191,23 +159,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' },
-      { pos: { x: 512, y: 416 }, type: 'primate' },
-      { pos: { x: 352, y: 160 }, type: 'panther' },
-      { pos: { x: 224, y: 224 }, type: 'bear' },
-      { pos: { x: 608, y: 288 }, type: 'primate' },
-      { pos: { x: 448, y: 352 }, type: 'panther' },
-      { pos: { x: 256, y: 480 }, type: 'bear' },
-      { pos: { x: 544, y: 128 }, type: 'primate' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 6 - Advanced maze with dead ends
@@ -236,25 +188,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' },
-      { pos: { x: 512, y: 416 }, type: 'primate' },
-      { pos: { x: 352, y: 160 }, type: 'panther' },
-      { pos: { x: 224, y: 224 }, type: 'bear' },
-      { pos: { x: 608, y: 288 }, type: 'primate' },
-      { pos: { x: 448, y: 352 }, type: 'panther' },
-      { pos: { x: 256, y: 480 }, type: 'bear' },
-      { pos: { x: 544, y: 128 }, type: 'primate' },
-      { pos: { x: 416, y: 480 }, type: 'panther' },
-      { pos: { x: 672, y: 224 }, type: 'bear' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 7 - Very complex maze
@@ -283,27 +217,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' },
-      { pos: { x: 512, y: 416 }, type: 'primate' },
-      { pos: { x: 352, y: 160 }, type: 'panther' },
-      { pos: { x: 224, y: 224 }, type: 'bear' },
-      { pos: { x: 608, y: 288 }, type: 'primate' },
-      { pos: { x: 448, y: 352 }, type: 'panther' },
-      { pos: { x: 256, y: 480 }, type: 'bear' },
-      { pos: { x: 544, y: 128 }, type: 'primate' },
-      { pos: { x: 416, y: 480 }, type: 'panther' },
-      { pos: { x: 672, y: 224 }, type: 'bear' },
-      { pos: { x: 320, y: 352 }, type: 'primate' },
-      { pos: { x: 128, y: 160 }, type: 'panther' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 8 - Extremely dense maze
@@ -332,30 +246,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' },
-      { pos: { x: 512, y: 416 }, type: 'primate' },
-      { pos: { x: 352, y: 160 }, type: 'panther' },
-      { pos: { x: 224, y: 224 }, type: 'bear' },
-      { pos: { x: 608, y: 288 }, type: 'primate' },
-      { pos: { x: 448, y: 352 }, type: 'panther' },
-      { pos: { x: 256, y: 480 }, type: 'bear' },
-      { pos: { x: 544, y: 128 }, type: 'primate' },
-      { pos: { x: 416, y: 480 }, type: 'panther' },
-      { pos: { x: 672, y: 224 }, type: 'bear' },
-      { pos: { x: 320, y: 352 }, type: 'primate' },
-      { pos: { x: 128, y: 160 }, type: 'panther' },
-      { pos: { x: 544, y: 352 }, type: 'bear' },
-      { pos: { x: 416, y: 224 }, type: 'primate' },
-      { pos: { x: 256, y: 288 }, type: 'panther' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 9 - Maximum complexity maze
@@ -384,33 +275,7 @@ export const levels: LevelData[] = [
       '#########################'
     ]),
     playerSpawn: { x: 64, y: 64 },
-    enemySpawns: [
-      { pos: { x: 704, y: 544 }, type: 'panther' },
-      { pos: { x: 384, y: 288 }, type: 'primate' },
-      { pos: { x: 192, y: 416 }, type: 'bear' },
-      { pos: { x: 576, y: 160 }, type: 'panther' },
-      { pos: { x: 288, y: 352 }, type: 'primate' },
-      { pos: { x: 480, y: 224 }, type: 'bear' },
-      { pos: { x: 640, y: 352 }, type: 'panther' },
-      { pos: { x: 160, y: 288 }, type: 'bear' },
-      { pos: { x: 512, y: 416 }, type: 'primate' },
-      { pos: { x: 352, y: 160 }, type: 'panther' },
-      { pos: { x: 224, y: 224 }, type: 'bear' },
-      { pos: { x: 608, y: 288 }, type: 'primate' },
-      { pos: { x: 448, y: 352 }, type: 'panther' },
-      { pos: { x: 256, y: 480 }, type: 'bear' },
-      { pos: { x: 544, y: 128 }, type: 'primate' },
-      { pos: { x: 416, y: 480 }, type: 'panther' },
-      { pos: { x: 672, y: 224 }, type: 'bear' },
-      { pos: { x: 320, y: 352 }, type: 'primate' },
-      { pos: { x: 128, y: 160 }, type: 'panther' },
-      { pos: { x: 544, y: 352 }, type: 'bear' },
-      { pos: { x: 416, y: 224 }, type: 'primate' },
-      { pos: { x: 256, y: 288 }, type: 'panther' },
-      { pos: { x: 672, y: 416 }, type: 'bear' },
-      { pos: { x: 128, y: 352 }, type: 'primate' },
-      { pos: { x: 544, y: 480 }, type: 'panther' }
-    ]
+    enemySpawns: [] // Will be generated at edges
   },
   
   // Level 10 - Boss Arena (open space design maintained)
@@ -438,29 +303,138 @@ export const levels: LevelData[] = [
       '#.......................#',
       '#########################'
     ]),
-    playerSpawn: { x: 64, y: 288 },
-    enemySpawns: [
-      // Boss enemy spawns around the arena perimeter
-      { pos: { x: 128, y: 96 }, type: 'panther' },
-      { pos: { x: 256, y: 96 }, type: 'primate' },
-      { pos: { x: 384, y: 96 }, type: 'bear' },
-      { pos: { x: 512, y: 96 }, type: 'panther' },
-      { pos: { x: 640, y: 96 }, type: 'primate' },
-      { pos: { x: 704, y: 160 }, type: 'bear' },
-      { pos: { x: 704, y: 288 }, type: 'panther' },
-      { pos: { x: 704, y: 416 }, type: 'primate' },
-      { pos: { x: 640, y: 480 }, type: 'bear' },
-      { pos: { x: 512, y: 480 }, type: 'panther' },
-      { pos: { x: 384, y: 480 }, type: 'primate' },
-      { pos: { x: 256, y: 480 }, type: 'bear' },
-      { pos: { x: 128, y: 480 }, type: 'panther' },
-      { pos: { x: 128, y: 416 }, type: 'primate' },
-      { pos: { x: 128, y: 352 }, type: 'bear' },
-      { pos: { x: 128, y: 224 }, type: 'panther' },
-      { pos: { x: 128, y: 160 }, type: 'primate' },
-      { pos: { x: 576, y: 160 }, type: 'bear' },
-      { pos: { x: 576, y: 416 }, type: 'panther' },
-      { pos: { x: 320, y: 160 }, type: 'primate' }
-    ]
+    playerSpawn: { x: 400, y: 304 }, // Map center: 25*32/2=400, 19*32/2=304
+    enemySpawns: [] // Will be generated at edges
   }
 ];
+
+// Generate enemy spawns for each level at runtime
+export function initializeLevels(): LevelData[] {
+  return levels.map((levelData, index) => {
+    // Create a temporary level instance to access edge spawn methods
+    const tempLevel = {
+      data: levelData,
+      isWall(x: number, y: number): boolean {
+        if (x < 0 || x >= levelData.width || y < 0 || y >= levelData.height) {
+          return true;
+        }
+        return levelData.walls[y][x];
+      },
+      isPositionSafe(x: number, y: number, width: number = 32, height: number = 32): boolean {
+        const gridX1 = Math.floor(x / 32);
+        const gridY1 = Math.floor(y / 32);
+        const gridX2 = Math.floor((x + width - 1) / 32);
+        const gridY2 = Math.floor((y + height - 1) / 32);
+        
+        for (let gridY = gridY1; gridY <= gridY2; gridY++) {
+          for (let gridX = gridX1; gridX <= gridX2; gridX++) {
+            if (this.isWall(gridX, gridY)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      },
+      getMapCenter() {
+        const centerGridX = Math.floor(levelData.width / 2);
+        const centerGridY = Math.floor(levelData.height / 2);
+        return { x: centerGridX * 32, y: centerGridY * 32 };
+      },
+      getEdgeSpawnPositions() {
+        const edgePositions: Array<{x: number, y: number}> = [];
+        const gridSize = 32;
+        
+        // Top edge
+        for (let x = 2; x < levelData.width - 2; x++) {
+          const pixelX = x * gridSize;
+          const pixelY = 1 * gridSize;
+          if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+            edgePositions.push({ x: pixelX, y: pixelY });
+          }
+        }
+        
+        // Bottom edge
+        for (let x = 2; x < levelData.width - 2; x++) {
+          const pixelX = x * gridSize;
+          const pixelY = (levelData.height - 2) * gridSize;
+          if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+            edgePositions.push({ x: pixelX, y: pixelY });
+          }
+        }
+        
+        // Left edge
+        for (let y = 2; y < levelData.height - 2; y++) {
+          const pixelX = 1 * gridSize;
+          const pixelY = y * gridSize;
+          if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+            edgePositions.push({ x: pixelX, y: pixelY });
+          }
+        }
+        
+        // Right edge
+        for (let y = 2; y < levelData.height - 2; y++) {
+          const pixelX = (levelData.width - 2) * gridSize;
+          const pixelY = y * gridSize;
+          if (this.isPositionSafe(pixelX, pixelY, 32, 32)) {
+            edgePositions.push({ x: pixelX, y: pixelY });
+          }
+        }
+        
+        return edgePositions;
+      }
+    };
+    
+    // Calculate enemy count based on level (3 to 25 enemies)
+    const enemyCount = Math.min(3 + (index * 2), 25);
+    
+    // Generate edge spawns
+    const edgePositions = tempLevel.getEdgeSpawnPositions();
+    const playerCenter = tempLevel.getMapCenter();
+    const enemyTypes = ['panther', 'primate', 'bear'] as const;
+    const minDistanceFromPlayer = 128;
+    
+    // Filter positions that are far enough from player spawn
+    const validPositions = edgePositions.filter(pos => {
+      const distance = Math.sqrt(
+        Math.pow(pos.x - playerCenter.x, 2) + 
+        Math.pow(pos.y - playerCenter.y, 2)
+      );
+      return distance >= minDistanceFromPlayer;
+    });
+    
+    const spawns: Array<{pos: {x: number, y: number}, type: 'panther' | 'primate' | 'bear'}> = [];
+    const usedPositions = new Set<string>();
+    
+    for (let i = 0; i < enemyCount && spawns.length < validPositions.length; i++) {
+      let attempts = 0;
+      let selectedPosition: {x: number, y: number} | null = null;
+      
+      while (attempts < 50 && !selectedPosition) {
+        const randomIndex = Math.floor(Math.random() * validPositions.length);
+        const candidate = validPositions[randomIndex];
+        const posKey = `${candidate.x},${candidate.y}`;
+        
+        if (!usedPositions.has(posKey)) {
+          selectedPosition = candidate;
+          usedPositions.add(posKey);
+        }
+        attempts++;
+      }
+      
+      if (selectedPosition) {
+        const randomType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+        spawns.push({
+          pos: { ...selectedPosition },
+          type: randomType
+        });
+      }
+    }
+    
+    console.log(`Level ${index + 1}: Generated ${spawns.length} edge enemy spawns`);
+    
+    return {
+      ...levelData,
+      enemySpawns: spawns
+    };
+  });
+}

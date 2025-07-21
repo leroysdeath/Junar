@@ -6,7 +6,7 @@ import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { GameState, GameCallbacks, Vector2 } from './types';
-import { levels } from './levels';
+import { initializeLevels } from './levels';
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -21,6 +21,7 @@ export class Game {
   private callbacks: GameCallbacks;
   
   private gameState: GameState = 'menu';
+  private initializedLevels = initializeLevels();
   private currentLevelIndex = 0;
   private score = 0;
   private lastTime = 0;
@@ -43,7 +44,7 @@ export class Game {
     this.soundManager = new SoundManager(callbacks.soundEnabled);
     this.collisionManager = new CollisionManager();
     
-    this.level = new Level(levels[0]);
+    this.level = new Level(this.initializedLevels[0]);
     this.player = new Player(this.level.getPlayerSpawn());
     
     this.setupEventListeners();
@@ -71,7 +72,7 @@ export class Game {
 
   private startLevel() {
     this.gameState = 'playing';
-    this.level = new Level(levels[this.currentLevelIndex]);
+    this.level = new Level(this.initializedLevels[this.currentLevelIndex]);
     this.player = new Player(this.level.getSafePlayerSpawn());
     this.enemies = this.level.getEnemySpawns().map((spawn, index) => 
       new Enemy(spawn.pos, spawn.type, index, this.level)
@@ -219,7 +220,7 @@ export class Game {
     this.score += 100 * (this.currentLevelIndex + 1);
     this.callbacks.onScoreChange(this.score);
     
-    if (this.currentLevelIndex >= levels.length - 1) {
+    if (this.currentLevelIndex >= this.initializedLevels.length - 1) {
       this.victory();
     } else {
       this.gameState = 'levelComplete';
