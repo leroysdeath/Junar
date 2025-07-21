@@ -72,9 +72,9 @@ export class Game {
   private startLevel() {
     this.gameState = 'playing';
     this.level = new Level(levels[this.currentLevelIndex]);
-    this.player = new Player(this.level.getPlayerSpawn());
+    this.player = new Player(this.level.getSafePlayerSpawn());
     this.enemies = this.level.getEnemySpawns().map((spawn, index) => 
-      new Enemy(spawn.pos, spawn.type, index)
+      new Enemy(spawn.pos, spawn.type, index, this.level)
     );
     this.arrows = [];
     this.lastArrowTime = 0;

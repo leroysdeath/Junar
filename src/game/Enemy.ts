@@ -10,8 +10,13 @@ export class Enemy {
   private lastPathfindTime = 0;
   private targetPosition: Vector2;
 
-  constructor(startPosition: Vector2, type: EnemyType, id: number) {
-    this.position = { ...startPosition };
+  constructor(startPosition: Vector2, type: EnemyType, id: number, level?: Level) {
+    // Validate spawn position for enemies too
+    if (level) {
+      this.position = level.findSafeSpawnPosition(startPosition, this.size);
+    } else {
+      this.position = { ...startPosition };
+    }
     this.type = type;
     this.id = id;
     this.targetPosition = { ...startPosition };

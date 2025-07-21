@@ -36,4 +36,87 @@ export class Level {
   getWalls(): boolean[][] {
     return this.data.walls;
   }
+
+  // Check if a position is safe for player spawning (no collision with walls/trees)
+  isPositionSafe(x: number, y: number, width: number = 32, height: number = 32): boolean {
+    // Convert pixel coordinates to grid coordinates
+    const gridX1 = Math.floor(x / 32);
+    const gridY1 = Math.floor(y / 32);
+    const gridX2 = Math.floor((x + width - 1) / 32);
+    const gridY2 = Math.floor((y + height - 1) / 32);
+    
+    // Check all grid cells that the player would occupy
+    for (let gridY = gridY1; gridY <= gridY2; gridY++) {
+      for (let gridX = gridX1; gridX <= gridX2; gridX++) {
+        if (this.isWall(gridX, gridY)) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+
+  // Find a safe spawn position near the intended position
+  findSafeSpawnPosition(intendedPosition: Vector2, playerSize: number = 32): Vector2 {
+    // First check if the intended position is already safe
+    if (this.isPositionSafe(intendedPosition.x, intendedPosition.y, playerSize, playerSize)) {
+      return { ...intendedPosition };
+    }
+    
+    // Search in a spiral pattern around the intended position
+    const maxSearchRadius = 5; // Maximum 5 grid cells away
+    const gridSize = 32;
+    
+    for (let radius = 1; radius <= maxSearchRadius; radius++) {
+      // Check positions in a square pattern around the center
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          // Only check the perimeter of the current radius
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
+            continue;
+          }
+          
+          const testX = intendedPosition.x + (dx * gridSize);
+          const testY = intendedPosition.y + (dy * gridSize);
+          
+          // Check if position is within game boundaries
+          if (testX >= 0 && testY >= 0 && 
+              testX + playerSize <= this.data.width * gridSize && 
+              testY + playerSize <= this.data.height * gridSize) {
+            
+            if (this.isPositionSafe(testX, testY, playerSize, playerSize)) {
+              console.log(`Found safe spawn position at (${testX}, ${testY}) after collision detected at intended position (${intendedPosition.x}, ${intendedPosition.y})`);
+              return { x: testX, y: testY };
+            }
+          }
+        }
+      }
+    }
+    
+    // Fallback: try predefined safe zones (corners and center areas)
+    const fallbackPositions = [
+      { x: 64, y: 64 },     // Top-left safe area
+      { x: 64, y: 544 },    // Bottom-left safe area
+      { x: 704, y: 64 },    // Top-right safe area
+      { x: 704, y: 544 },   // Bottom-right safe area
+      { x: 384, y: 288 }    // Center area
+    ];
+    
+    for (const fallback of fallbackPositions) {
+      if (this.isPositionSafe(fallback.x, fallback.y, playerSize, playerSize)) {
+        console.warn(`Using fallback spawn position at (${fallback.x}, ${fallback.y}) - original position (${intendedPosition.x}, ${intendedPosition.y}) was unsafe`);
+        return { ...fallback };
+      }
+    }
+    
+    // Last resort: return intended position with warning
+    console.error(`Could not find safe spawn position! Using intended position (${intendedPosition.x}, ${intendedPosition.y}) - player may spawn in wall`);
+    return { ...intendedPosition };
+  }
+
+  // Get a validated safe player spawn position
+  getSafePlayerSpawn(): Vector2 {
+    return this.findSafeSpawnPosition(this.data.playerSpawn);
+  }
 }
