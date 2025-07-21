@@ -339,20 +339,35 @@ export class Game {
       return Math.abs(enemyX - playerX);
     } else {
       // Vertical direction - use Y distance
-      // Calculate direction to enemy
+      return Math.abs(enemyY - playerY);
     }
   }
+
   private checkCollisions() {
+    // Check enemy-player collisions
+    const playerPos = this.player.getPosition();
+    const playerCenterX = playerPos.x + 16;
+    const playerCenterY = playerPos.y + 16;
+    
+    this.enemies.forEach(enemy => {
+      const enemyPos = enemy.getPosition();
+      const enemyCenterX = enemyPos.x + 16;
+      const enemyCenterY = enemyPos.y + 16;
+      
+      // Calculate direction to enemy
+      const dx = enemyCenterX - playerCenterX;
+      const dy = enemyCenterY - playerCenterY;
+      
       // Get cardinal direction
       const cardinalDirection = this.getCardinalDirection(dx, dy);
-      if (!cardinalDirection) continue;
+      if (!cardinalDirection) return;
       
       // Calculate cardinal distance
       const distance = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
       
       // Skip if enemy is beyond detection range
-      if (distance > this.maxDetectionRange) continue;
-    // Check enemy-player collisions
+      if (distance > this.maxDetectionRange) return;
+      
       // Check if there's a clear cardinal line of sight
       if (this.hasCardinalLineOfSight(
         { x: playerCenterX, y: playerCenterY },
