@@ -85,14 +85,14 @@ export class Game {
     this.lastTime = currentTime;
 
     if (this.gameState === 'playing') {
-      this.update(deltaTime);
+      this.update(deltaTime, currentTime);
     }
     
     this.render();
     this.animationId = requestAnimationFrame((time) => this.gameLoop(time));
   }
 
-  private update(deltaTime: number) {
+  private update(deltaTime: number, currentTime: number) {
     // Update player
     const input = this.inputManager.getInput();
     this.player.update(deltaTime, input, this.level);
