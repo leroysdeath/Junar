@@ -1,4 +1,4 @@
-import { Vector2, EnemySpawn, LevelData } from './types';
+import { Vector2, EnemySpawn, EnemyType, LevelData } from './types';
 
 export class Level {
   private data: LevelData;
@@ -56,12 +56,9 @@ export class Level {
     
     // First, try the exact center
     if (this.isPositionSafe(mapCenter.x, mapCenter.y, 32, 32)) {
-      console.log(`Player spawning at exact map center: (${mapCenter.x}, ${mapCenter.y})`);
       return mapCenter;
     }
-    
-    console.log(`Map center (${mapCenter.x}, ${mapCenter.y}) is blocked, searching for nearest safe position...`);
-    
+
     // Fallback: Find nearest safe position to center using spiral search
     return this.findSafeSpawnPosition(mapCenter, 32);
   }
@@ -115,7 +112,6 @@ export class Level {
               testY + playerSize <= this.data.height * gridSize) {
             
             if (this.isPositionSafe(testX, testY, playerSize, playerSize)) {
-              console.log(`Found safe spawn position at (${testX}, ${testY}) after collision detected at intended position (${intendedPosition.x}, ${intendedPosition.y})`);
               return { x: testX, y: testY };
             }
           }
@@ -243,7 +239,6 @@ export class Level {
       }
     }
     
-    console.log(`Generated ${spawns.length} edge enemy spawns out of ${enemyCount} requested`);
     return spawns;
   }
 

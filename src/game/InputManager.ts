@@ -9,20 +9,19 @@ export class InputManager {
     right: false
   };
 
+  private readonly handleKeyDown = (e: KeyboardEvent) => {
+    this.keys.add(e.code);
+    this.updateInputState();
+  };
+
+  private readonly handleKeyUp = (e: KeyboardEvent) => {
+    this.keys.delete(e.code);
+    this.updateInputState();
+  };
+
   constructor() {
-    this.setupEventListeners();
-  }
-
-  private setupEventListeners() {
-    window.addEventListener('keydown', (e) => {
-      this.keys.add(e.code);
-      this.updateInputState();
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keys.delete(e.code);
-      this.updateInputState();
-    });
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
   }
 
   private updateInputState() {
@@ -34,5 +33,11 @@ export class InputManager {
 
   getInput(): InputState {
     return { ...this.inputState };
+  }
+
+  dispose() {
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    this.keys.clear();
   }
 }

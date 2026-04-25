@@ -16,7 +16,11 @@ export class SoundManager {
   }
 
   private createSound(name: string, frequency: number, duration: number, type: OscillatorType) {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtor) return;
+    const audioContext = new AudioCtor();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
     

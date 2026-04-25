@@ -430,8 +430,6 @@ export function initializeLevels(): LevelData[] {
       }
     }
     
-    console.log(`Level ${index + 1}: Generated ${spawns.length} edge enemy spawns`);
-    
     return {
       ...levelData,
       enemySpawns: spawns
