@@ -308,19 +308,26 @@ export class Game {
         return false; // Line of sight blocked by wall
       }
 
-      // Check if any enemy straddles this point on the cardinal ray
+      // Check if any enemy straddles this point on the cardinal ray.
+      // Both axes must be within half a tile: off-axis means the enemy is on
+      // the ray, on-axis means the step has actually reached it. Without the
+      // on-axis check, any enemy sharing the player's row/column reports a hit
+      // at step 1, before walls between them can block.
       for (const enemy of this.enemies) {
         const enemyPos = enemy.getPosition();
         const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
         const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
 
-        // Use the off-axis delta only (the on-axis delta is the ray itself).
         const offAxisDelta =
           direction.x !== 0
             ? Math.abs(checkY - enemyCenterY)
             : Math.abs(checkX - enemyCenterX);
+        const onAxisDelta =
+          direction.x !== 0
+            ? Math.abs(checkX - enemyCenterX)
+            : Math.abs(checkY - enemyCenterY);
 
-        if (offAxisDelta <= perpendicularTolerance) {
+        if (offAxisDelta <= perpendicularTolerance && onAxisDelta <= TILE_SIZE / 2) {
           return true;
         }
       }
