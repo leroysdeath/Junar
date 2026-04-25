@@ -8,7 +8,7 @@ This file is the source of truth for the game's vision, mechanics, and rules of 
 
 The player is a male indigenous (Adivasi-coded) archer surviving with his family in the Indian jungle. He auto-fires arrows at the nearest enemy in cardinal line of sight while hordes of crazed beasts — panthers, bears, primates, and others — pour through narrow paths cut between dense, untraversible trees. The family — wife, son, daughter — once lived in harmony with the jungle; now something is corrupting it. As the player advances, his family joins him as passive escorts, and protecting them becomes the central tension. The corruption traces back to a monstrous plant deep in the jungle that exudes black goo and infects the wildlife. In the final battle, the family stands and fights with the player to destroy the source and free the jungle.
 
-**Working title:** "Jungle X" (final). Repo codename: "Junar". Other in-engine menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian") are still placeholder copy and will be replaced in a dedicated pass.
+**Title:** "Jungle X" is the final release title. The entry screen currently shows **"Jungle Archer"** as the pre-release placeholder; swap to "Jungle X" closer to launch. Repo codename remains "Junar". Other in-engine menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) are placeholder and will be replaced in a dedicated copy pass.
 
 ## 2. Pillars
 
