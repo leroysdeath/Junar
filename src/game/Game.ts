@@ -5,6 +5,7 @@ import { InputManager } from './InputManager';
 import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
+import { CrashLogger, CrashSnapshot } from './Logger';
 import { GameState, GameCallbacks, Vector2 } from './types';
 import { initializeLevels } from './levels';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE } from './constants';
@@ -20,14 +21,16 @@ export class Game {
   private soundManager: SoundManager;
   private collisionManager: CollisionManager;
   private callbacks: GameCallbacks;
-  
+  private logger: CrashLogger;
+
   private gameState: GameState = 'menu';
   private initializedLevels = initializeLevels();
   private currentLevelIndex = 0;
   private score = 0;
   private lastTime = 0;
   private animationId: number | null = null;
-  
+  private frameCount = 0;
+
   private lastArrowTime = 0;
   private arrowCooldown = 500; // 0.5 seconds
   private maxDetectionRange = 300; // Maximum range for enemy detection
@@ -45,10 +48,16 @@ export class Game {
     this.renderer = new Renderer(this.ctx);
     this.soundManager = new SoundManager(callbacks.soundEnabled);
     this.collisionManager = new CollisionManager();
-    
+    this.logger = new CrashLogger({
+      snapshotProvider: () => this.snapshotState(),
+      frameProvider: () => this.frameCount,
+      onCrash: (snap) => this.handleCrash(snap),
+    });
+
     this.level = new Level(this.initializedLevels[0]);
     this.player = new Player(this.level.getPlayerSpawn());
-    
+
+    this.logger.log('lifecycle', 'game constructed');
     this.setupEventListeners();
   }
 
@@ -70,6 +79,7 @@ export class Game {
     this.score = 0;
     this.arrows = [];
     this.lastArrowTime = 0;
+    this.logger.log('lifecycle', 'restart');
     this.startLevel();
   }
 
@@ -77,29 +87,76 @@ export class Game {
     this.gameState = 'playing';
     this.level = new Level(this.initializedLevels[this.currentLevelIndex]);
     this.player = new Player(this.level.getSafePlayerSpawn());
-    this.enemies = this.level.getEnemySpawns().map((spawn, index) => 
+    this.enemies = this.level.getEnemySpawns().map((spawn, index) =>
       new Enemy(spawn.pos, spawn.type, index, this.level)
     );
     this.arrows = [];
     this.lastArrowTime = 0;
-    
+
     this.callbacks.onStateChange('playing');
     this.callbacks.onLevelChange(this.currentLevelIndex + 1);
     this.callbacks.onEnemiesChange(this.enemies.length);
     this.callbacks.onScoreChange(this.score);
     this.hasLineOfSight = false;
+    this.logger.log('level', 'startLevel', {
+      level: this.currentLevelIndex + 1,
+      enemies: this.enemies.length,
+    });
   }
 
   private gameLoop(currentTime: number) {
+    if (this.logger.hasCrashed()) return;
+
     const deltaTime = currentTime - this.lastTime;
     this.lastTime = currentTime;
+    this.frameCount++;
 
-    if (this.gameState === 'playing') {
-      this.update(deltaTime, currentTime);
+    try {
+      if (this.gameState === 'playing') {
+        this.update(deltaTime, currentTime);
+      }
+      this.render();
+    } catch (err) {
+      this.logger.captureCrash('gameLoop', err, { deltaTime });
+      return;
     }
-    
-    this.render();
+
     this.animationId = requestAnimationFrame((time) => this.gameLoop(time));
+  }
+
+  private snapshotState(): Record<string, unknown> {
+    let playerPos: Vector2 | undefined;
+    try {
+      playerPos = this.player?.getPosition();
+    } catch {
+      playerPos = undefined;
+    }
+    return {
+      gameState: this.gameState,
+      level: this.currentLevelIndex + 1,
+      score: this.score,
+      enemies: this.enemies.length,
+      arrows: this.arrows.length,
+      nextArrowId: this.nextArrowId,
+      hasLineOfSight: this.hasLineOfSight,
+      lastTime: Math.round(this.lastTime),
+      lastArrowTime: Math.round(this.lastArrowTime),
+      playerX: playerPos ? Math.round(playerPos.x) : undefined,
+      playerY: playerPos ? Math.round(playerPos.y) : undefined,
+    };
+  }
+
+  private handleCrash(snapshot: CrashSnapshot) {
+    if (this.animationId !== null) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+    this.clearLevelTransitionTimeout();
+    try {
+      this.logger.renderOverlay(this.ctx);
+    } catch (e) {
+      console.error('[Junar] failed to render crash overlay:', e, snapshot);
+    }
   }
 
   private update(deltaTime: number, currentTime: number) {
@@ -254,7 +311,8 @@ export class Game {
       dir: { x: bestDirection.x, y: bestDirection.y },
       id: this.nextArrowId++
     });
-    
+
+    this.logger.log('fire', 'arrow', { dx: bestDirection.x, dy: bestDirection.y });
     this.soundManager.play('arrow');
   }
 
@@ -366,6 +424,7 @@ export class Game {
       // cardinal direction is undefined. Always kill on overlap so the
       // zero-vector edge case can't leave the player invulnerable.
       if (Math.abs(dx) < TILE_SIZE / 2 && Math.abs(dy) < TILE_SIZE / 2) {
+        this.logger.log('collision', 'overlap-kill', { type: enemy.getType() });
         this.gameOver();
         return;
       }
@@ -385,6 +444,10 @@ export class Game {
         { x: playerCenterX, y: playerCenterY },
         cardinalDirection
       )) {
+        this.logger.log('collision', 'cardinal-kill', {
+          type: enemy.getType(),
+          dist: Math.round(distance),
+        });
         this.gameOver();
         return;
       }
@@ -398,10 +461,12 @@ export class Game {
           { x: arrow.pos.x, y: arrow.pos.y, width: 4, height: 4 },
           { x: enemy.getPosition().x, y: enemy.getPosition().y, width: 32, height: 32 }
         )) {
+          const enemyType = enemy.getType();
           this.enemies.splice(i, 1);
           this.score += 10;
           this.callbacks.onScoreChange(this.score);
           this.callbacks.onEnemiesChange(this.enemies.length);
+          this.logger.log('hit', 'arrow->enemy', { type: enemyType, remaining: this.enemies.length });
           this.soundManager.play('hit');
           return false; // Remove arrow
         }
@@ -413,7 +478,11 @@ export class Game {
   private completeLevel() {
     this.score += 100 * (this.currentLevelIndex + 1);
     this.callbacks.onScoreChange(this.score);
-    
+    this.logger.log('level', 'completeLevel', {
+      level: this.currentLevelIndex + 1,
+      score: this.score,
+    });
+
     if (this.currentLevelIndex >= this.initializedLevels.length - 1) {
       this.victory();
     } else {
@@ -441,12 +510,14 @@ export class Game {
   private gameOver() {
     this.gameState = 'gameOver';
     this.callbacks.onStateChange('gameOver');
+    this.logger.log('state', 'gameOver', { level: this.currentLevelIndex + 1, score: this.score });
     this.soundManager.play('gameOver');
   }
 
   private victory() {
     this.gameState = 'victory';
     this.callbacks.onStateChange('victory');
+    this.logger.log('state', 'victory', { score: this.score });
     this.soundManager.play('victory');
   }
 
@@ -487,5 +558,7 @@ export class Game {
     }
     this.clearLevelTransitionTimeout();
     this.inputManager.dispose();
+    this.logger.log('lifecycle', 'cleanup');
+    this.logger.dispose();
   }
 }
