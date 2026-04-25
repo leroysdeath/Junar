@@ -68,7 +68,7 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 
 **Setting** — the Indian jungle, pre-industrial / mythic time. Dense, mostly impassable forest; the playable space is the narrow paths and small clearings the family knows by heart. Aesthetic touchstone: *The Jungle Book* (visual style and bestiary inspiration only — no direct character references).
 
-**Protagonist** — Adivasi/tribal-Indian archer, husband and father. The current procedural sprite (feathered headdress, generic "tribal" silhouette) reads as Native American and is wrong for this setting; updating it is on the roadmap. Visual direction: dark skin, simple cloth garment (e.g. dhoti-coded), bow and quiver, no headdress. Keep cues abstract and dignified — avoid stereotype.
+**Protagonist** — Adivasi/tribal-Indian archer, husband and father. Visual direction (now in code, `Renderer.renderPlayer`): deep warm-brown skin, short black hair (no headdress), cream cotton tunic with a dark waist sash (dhoti-coded), bow held offhand on the left, leather quiver at the right hip with fletchings showing. Procedural rectangles only; readable at 32×32. Keep cues abstract and dignified — avoid stereotype.
 
 **Family** — wife, son (boy), daughter. They lived in harmony with the jungle and read it like a second language. They are the player's reason. In current scope they appear only on Level 10 alongside the player as active combatants in the boss fight; an earlier-level passive-escort intro is a possible future phase.
 
@@ -110,7 +110,7 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 **Ordered next steps:**
 1. ✅ Critical bug fixes (input leak, setTimeout race, cardinal edge cases) — done in commit `e8a224b`.
 2. ✅ In-engine title updated to "Jungle X" — done in commit alongside this update.
-3. **Protagonist visual update** — replace the feathered-headdress sprite with an Adivasi-coded archer in `Renderer.ts`. Keep procedural; keep readable at 32×32.
+3. ✅ Protagonist visual update — Adivasi-coded archer (deep skin tone, cream dhoti, dark sash, no headdress) live in `Renderer.renderPlayer`.
 4. **Infected-beast visual cue** — add black-goo accents (sheen/dripping/eye glow) to all three beast types so the corruption reads at a glance.
 5. **Level 10 boss** — corrupted plant (the "Ancient Tree Guardian" placeholder is roughly aligned). Family appears here as three active combatants; any family death = game over.
 6. **Family rendering & combat** — design the family member entity (movement, collision, rendering, death-triggers-game-over, simple combat behavior for the boss fight).

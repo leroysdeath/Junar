@@ -56,27 +56,35 @@ export class Renderer {
 
   renderPlayer(player: Player) {
     const pos = player.getPosition();
-    
-    // Player body
-    this.ctx.fillStyle = '#8B4513';
-    this.ctx.fillRect(pos.x + 8, pos.y + 8, 16, 20);
-    
-    // Player head
-    this.ctx.fillStyle = '#D2691E';
-    this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 12);
-    
-    // Bow
+
+    // Tunic / dhoti-coded cloth (cream cotton)
+    this.ctx.fillStyle = '#DCC59C';
+    this.ctx.fillRect(pos.x + 8, pos.y + 14, 16, 14);
+
+    // Waist sash (dark earth)
+    this.ctx.fillStyle = '#5D4037';
+    this.ctx.fillRect(pos.x + 8, pos.y + 20, 16, 2);
+
+    // Head (deep warm brown skin tone)
+    this.ctx.fillStyle = '#4E342E';
+    this.ctx.fillRect(pos.x + 10, pos.y + 6, 12, 10);
+
+    // Hair (short black cap, no headdress)
+    this.ctx.fillStyle = '#1A1A1A';
+    this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 3);
+
+    // Bow (dark wood, held in offhand, left side)
     this.ctx.fillStyle = '#654321';
     this.ctx.fillRect(pos.x + 2, pos.y + 6, 4, 16);
-    
-    // Arrow quiver
-    this.ctx.fillStyle = '#8B4513';
+
+    // Quiver (dark leather, slung at right hip)
+    this.ctx.fillStyle = '#4A3C28';
     this.ctx.fillRect(pos.x + 20, pos.y + 8, 6, 12);
-    
-    // Feathers in hair
-    this.ctx.fillStyle = '#FFD700';
-    this.ctx.fillRect(pos.x + 12, pos.y + 2, 2, 6);
-    this.ctx.fillRect(pos.x + 16, pos.y + 2, 2, 6);
+
+    // Arrow fletchings peeking from the quiver
+    this.ctx.fillStyle = '#FFEEAA';
+    this.ctx.fillRect(pos.x + 21, pos.y + 5, 2, 3);
+    this.ctx.fillRect(pos.x + 24, pos.y + 5, 2, 3);
   }
 
   renderEnemies(enemies: Enemy[]) {
