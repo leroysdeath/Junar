@@ -99,7 +99,7 @@ function App() {
           <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
             <div className="text-center text-white max-w-md mx-auto px-6">
               <h1 className="text-6xl font-bold text-amber-400 mb-2 font-serif">
-                Jungle X
+                Jungle Archer
               </h1>
               <p className="text-lg text-amber-200 mb-8 font-mono">
                 Survive the Ancient Forest
