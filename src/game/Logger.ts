@@ -1,6 +1,6 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 
-const MAX_EVENT_BUFFER = 200;
+const MAX_EVENT_BUFFER = 1000;
 const OVERLAY_PADDING = 16;
 const REPORT_ENDPOINT = '/api/crash';
 const REPORT_TIMEOUT_MS = 5000;
@@ -12,6 +12,9 @@ export type LogCategory =
   | 'fire'
   | 'hit'
   | 'collision'
+  | 'input'
+  | 'sample'
+  | 'wall'
   | 'warn'
   | 'error';
 
@@ -27,7 +30,9 @@ export type CrashPhase =
   | 'update'
   | 'render'
   | 'global'
-  | 'unhandledRejection';
+  | 'unhandledRejection'
+  | 'gameOver'
+  | 'suspicious';
 
 export interface CrashSnapshot {
   error: string;
@@ -76,6 +81,14 @@ export class CrashLogger {
     this.captureCrash('unhandledRejection', err);
   };
 
+  private readonly handleReloadKey = (e: KeyboardEvent) => {
+    if (!this.crash) return;
+    if (e.code === 'KeyR') {
+      e.preventDefault();
+      window.location.reload();
+    }
+  };
+
   constructor(opts: CrashLoggerOptions = {}) {
     this.snapshotProvider = opts.snapshotProvider;
     this.frameProvider = opts.frameProvider;
@@ -83,6 +96,7 @@ export class CrashLogger {
     this.reportEndpoint = opts.reportEndpoint === undefined ? REPORT_ENDPOINT : opts.reportEndpoint;
     window.addEventListener('error', this.handleError);
     window.addEventListener('unhandledrejection', this.handleRejection);
+    window.addEventListener('keydown', this.handleReloadKey);
   }
 
   log(cat: LogCategory, msg: string, data?: Record<string, unknown>) {
@@ -104,14 +118,42 @@ export class CrashLogger {
   ): CrashSnapshot {
     if (this.crash) return this.crash;
 
+    const snapshot = this.buildSnapshot(phase, error, extraState);
+    this.crash = snapshot;
+    window.__JUNGLE_CRASH__ = snapshot;
+    console.error('[Junar] crash captured:', snapshot);
+
+    this.report(snapshot);
+    this.onCrash?.(snapshot);
+    return snapshot;
+  }
+
+  // Snapshot + POST, but do NOT halt the game and do NOT show the overlay.
+  // Used for routine auto-reports (every gameOver) where we want a record
+  // in GitHub but the player should be able to keep playing.
+  reportNonHalting(
+    phase: CrashPhase,
+    error: unknown,
+    extraState?: Record<string, unknown>,
+  ): CrashSnapshot {
+    const snapshot = this.buildSnapshot(phase, error, extraState);
+    console.warn('[Junar] non-halting report:', phase, snapshot);
+    this.report(snapshot);
+    return snapshot;
+  }
+
+  private buildSnapshot(
+    phase: CrashPhase,
+    error: unknown,
+    extraState?: Record<string, unknown>,
+  ): CrashSnapshot {
     const err = error instanceof Error ? error : new Error(String(error));
     const providerState = this.snapshotProvider?.();
     const merged: Record<string, unknown> | undefined =
       providerState || extraState
         ? { ...(providerState ?? {}), ...(extraState ?? {}) }
         : undefined;
-
-    const snapshot: CrashSnapshot = {
+    return {
       error: err.message || String(err),
       stack: err.stack ?? '(no stack available)',
       phase,
@@ -123,14 +165,6 @@ export class CrashLogger {
       url: window.location.href,
       capturedAt: new Date().toISOString(),
     };
-
-    this.crash = snapshot;
-    window.__JUNGLE_CRASH__ = snapshot;
-    console.error('[Junar] crash captured:', snapshot);
-
-    this.report(snapshot);
-    this.onCrash?.(snapshot);
-    return snapshot;
   }
 
   hasCrashed(): boolean {
@@ -231,7 +265,7 @@ export class CrashLogger {
     ctx.fillStyle = '#888888';
     ctx.font = '10px monospace';
     ctx.fillText(
-      'Auto-reported. window.__JUNGLE_CRASH__ has the full snapshot. Reload to recover.',
+      'Auto-reported. window.__JUNGLE_CRASH__ has the full snapshot. Press R or reload to recover.',
       OVERLAY_PADDING,
       CANVAS_HEIGHT - OVERLAY_PADDING - 2,
     );
@@ -297,6 +331,7 @@ export class CrashLogger {
   dispose() {
     window.removeEventListener('error', this.handleError);
     window.removeEventListener('unhandledrejection', this.handleRejection);
+    window.removeEventListener('keydown', this.handleReloadKey);
     this.events = [];
   }
 }

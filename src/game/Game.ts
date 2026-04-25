@@ -6,9 +6,27 @@ import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
-import { GameState, GameCallbacks, Vector2 } from './types';
+import { GameState, GameCallbacks, Vector2, EnemyType, InputState } from './types';
 import { initializeLevels } from './levels';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE } from './constants';
+
+type GameOverReason =
+  | { kind: 'overlap'; enemyId: number; enemyType: EnemyType; dx: number; dy: number }
+  | { kind: 'cardinal'; enemyId: number; enemyType: EnemyType; dist: number; dirX: number; dirY: number }
+  | { kind: 'manual' };
+
+interface GameOverVerdict {
+  suspicious: boolean;
+  flags: string[];
+  nearestDist: number;
+  nearestType: EnemyType | null;
+  msSinceLevelStart: number;
+}
+
+const SAMPLE_EVERY_FRAMES = 10;
+const EARLY_DEATH_MS = 500;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -30,6 +48,8 @@ export class Game {
   private lastTime = 0;
   private animationId: number | null = null;
   private frameCount = 0;
+  private levelStartedAt = 0;
+  private lastSampleFrame = 0;
 
   private lastArrowTime = 0;
   private arrowCooldown = 500; // 0.5 seconds
@@ -43,16 +63,18 @@ export class Game {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.callbacks = callbacks;
-    
-    this.inputManager = new InputManager();
-    this.renderer = new Renderer(this.ctx);
-    this.soundManager = new SoundManager(callbacks.soundEnabled);
-    this.collisionManager = new CollisionManager();
+
     this.logger = new CrashLogger({
       snapshotProvider: () => this.snapshotState(),
       frameProvider: () => this.frameCount,
       onCrash: (snap) => this.handleCrash(snap),
     });
+    this.inputManager = new InputManager((cleared) => {
+      this.logger.log('input', 'blur-clear', { keys: cleared });
+    });
+    this.renderer = new Renderer(this.ctx);
+    this.soundManager = new SoundManager(callbacks.soundEnabled);
+    this.collisionManager = new CollisionManager();
 
     this.level = new Level(this.initializedLevels[0]);
     this.player = new Player(this.level.getPlayerSpawn());
@@ -98,9 +120,12 @@ export class Game {
     this.callbacks.onEnemiesChange(this.enemies.length);
     this.callbacks.onScoreChange(this.score);
     this.hasLineOfSight = false;
+    this.levelStartedAt = performance.now();
+    this.lastSampleFrame = this.frameCount;
     this.logger.log('level', 'startLevel', {
       level: this.currentLevelIndex + 1,
       enemies: this.enemies.length,
+      playerSpawn: this.player.getPosition(),
     });
   }
 
@@ -131,6 +156,26 @@ export class Game {
     } catch {
       playerPos = undefined;
     }
+    let pressedKeys: string[] = [];
+    try {
+      pressedKeys = this.inputManager?.getPressedKeys() ?? [];
+    } catch {
+      pressedKeys = [];
+    }
+    let enemyPositions: Array<Record<string, unknown>> = [];
+    try {
+      enemyPositions = this.enemies.slice(0, 12).map((e) => {
+        const p = e.getPosition();
+        return {
+          id: e.getId(),
+          type: e.getType(),
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+        };
+      });
+    } catch {
+      enemyPositions = [];
+    }
     return {
       gameState: this.gameState,
       level: this.currentLevelIndex + 1,
@@ -139,10 +184,16 @@ export class Game {
       arrows: this.arrows.length,
       nextArrowId: this.nextArrowId,
       hasLineOfSight: this.hasLineOfSight,
+      frameCount: this.frameCount,
       lastTime: Math.round(this.lastTime),
       lastArrowTime: Math.round(this.lastArrowTime),
-      playerX: playerPos ? Math.round(playerPos.x) : undefined,
-      playerY: playerPos ? Math.round(playerPos.y) : undefined,
+      msSinceLevelStart: this.levelStartedAt
+        ? Math.round(performance.now() - this.levelStartedAt)
+        : 0,
+      playerX: playerPos !== undefined ? round2(playerPos.x) : undefined,
+      playerY: playerPos !== undefined ? round2(playerPos.y) : undefined,
+      pressedKeys,
+      enemyPositions,
     };
   }
 
@@ -162,8 +213,21 @@ export class Game {
   private update(deltaTime: number, currentTime: number) {
     // Update player
     const input = this.inputManager.getInput();
-    this.player.update(deltaTime, input, this.level);
-    
+    this.player.update(deltaTime, input, this.level, (rej) => {
+      this.logger.log('wall', 'reject', {
+        axis: rej.axis,
+        from: round2(rej.from),
+        to: round2(rej.attempted),
+        cells: rej.cells,
+        in: input,
+      });
+    });
+
+    if (this.frameCount - this.lastSampleFrame >= SAMPLE_EVERY_FRAMES) {
+      this.lastSampleFrame = this.frameCount;
+      this.sampleTick(input, deltaTime);
+    }
+
     // Update line of sight detection
     this.hasLineOfSight = this.checkLineOfSightToEnemies();
     
@@ -410,13 +474,17 @@ export class Game {
     const playerPos = this.player.getPosition();
     const playerCenterX = playerPos.x + 16;
     const playerCenterY = playerPos.y + 16;
-    
-    this.enemies.forEach(enemy => {
+
+    for (const enemy of this.enemies) {
+      // Bail if a previous iteration already triggered gameOver. forEach
+      // would silently keep iterating; the for-of + early break stops
+      // multiple kill triggers from filing duplicate reports.
+      if (this.gameState !== 'playing') break;
+
       const enemyPos = enemy.getPosition();
       const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
       const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
 
-      // Calculate direction to enemy
       const dx = enemyCenterX - playerCenterX;
       const dy = enemyCenterY - playerCenterY;
 
@@ -424,34 +492,55 @@ export class Game {
       // cardinal direction is undefined. Always kill on overlap so the
       // zero-vector edge case can't leave the player invulnerable.
       if (Math.abs(dx) < TILE_SIZE / 2 && Math.abs(dy) < TILE_SIZE / 2) {
-        this.logger.log('collision', 'overlap-kill', { type: enemy.getType() });
-        this.gameOver();
-        return;
+        this.logger.log('collision', 'overlap-kill', {
+          type: enemy.getType(),
+          dx: round2(dx),
+          dy: round2(dy),
+        });
+        this.gameOver({
+          kind: 'overlap',
+          enemyId: enemy.getId(),
+          enemyType: enemy.getType(),
+          dx,
+          dy,
+        });
+        continue;
       }
 
-      // Get cardinal direction
       const cardinalDirection = this.getCardinalDirection(dx, dy);
-      if (!cardinalDirection) return;
+      if (!cardinalDirection) continue;
 
-      // Calculate cardinal distance
-      const distance = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
+      const distance = this.getCardinalDistance(
+        playerCenterX,
+        playerCenterY,
+        enemyCenterX,
+        enemyCenterY,
+        cardinalDirection,
+      );
 
-      // Skip if enemy is beyond detection range
-      if (distance > this.maxDetectionRange) return;
+      if (distance > this.maxDetectionRange) continue;
 
-      // Check if there's a clear cardinal line of sight
       if (this.hasCardinalLineOfSight(
         { x: playerCenterX, y: playerCenterY },
-        cardinalDirection
+        cardinalDirection,
       )) {
         this.logger.log('collision', 'cardinal-kill', {
           type: enemy.getType(),
           dist: Math.round(distance),
+          dirX: cardinalDirection.x,
+          dirY: cardinalDirection.y,
         });
-        this.gameOver();
-        return;
+        this.gameOver({
+          kind: 'cardinal',
+          enemyId: enemy.getId(),
+          enemyType: enemy.getType(),
+          dist: distance,
+          dirX: cardinalDirection.x,
+          dirY: cardinalDirection.y,
+        });
+        continue;
       }
-    });
+    }
     
     // Check arrow-enemy collisions
     this.arrows = this.arrows.filter(arrow => {
@@ -507,11 +596,100 @@ export class Game {
     }
   }
 
-  private gameOver() {
+  private gameOver(reason: GameOverReason = { kind: 'manual' }) {
+    if (this.gameState === 'gameOver') return;
     this.gameState = 'gameOver';
     this.callbacks.onStateChange('gameOver');
-    this.logger.log('state', 'gameOver', { level: this.currentLevelIndex + 1, score: this.score });
     this.soundManager.play('gameOver');
+
+    const verdict = this.classifyGameOver(reason);
+    this.logger.log('state', 'gameOver', {
+      level: this.currentLevelIndex + 1,
+      score: this.score,
+      reason: reason.kind,
+      flags: verdict.flags,
+      nearestDist: verdict.nearestDist,
+      nearestType: verdict.nearestType,
+      msSinceLevelStart: verdict.msSinceLevelStart,
+    });
+
+    const reasonLabel =
+      reason.kind === 'manual'
+        ? 'manual'
+        : `${reason.kind}-kill by ${reason.enemyType} #${reason.enemyId}`;
+
+    if (verdict.suspicious) {
+      const err = new Error(
+        `suspicious gameOver (${reasonLabel}): ${verdict.flags.join(', ')}`,
+      );
+      this.logger.captureCrash('suspicious', err, { reason, verdict });
+      // Throw so the gameLoop's try/catch halts the loop before render()
+      // overwrites the overlay handleCrash just painted.
+      throw err;
+    }
+
+    this.logger.reportNonHalting('gameOver', new Error(`gameOver: ${reasonLabel}`), {
+      reason,
+      verdict,
+    });
+  }
+
+  private classifyGameOver(reason: GameOverReason): GameOverVerdict {
+    const playerPos = this.player.getPosition();
+    const playerCx = playerPos.x + TILE_SIZE / 2;
+    const playerCy = playerPos.y + TILE_SIZE / 2;
+
+    let nearestDist = Infinity;
+    let nearestType: EnemyType | null = null;
+    for (const e of this.enemies) {
+      const ep = e.getPosition();
+      const d = Math.hypot(
+        ep.x + TILE_SIZE / 2 - playerCx,
+        ep.y + TILE_SIZE / 2 - playerCy,
+      );
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestType = e.getType();
+      }
+    }
+
+    const msSinceLevelStart = Math.round(performance.now() - this.levelStartedAt);
+    const flags: string[] = [];
+
+    if (reason.kind === 'manual') flags.push('manual-trigger');
+    if (this.enemies.length === 0) flags.push('no-enemies');
+    if (nearestDist === Infinity || nearestDist > this.maxDetectionRange) {
+      flags.push('no-enemy-in-range');
+    }
+    if (msSinceLevelStart < EARLY_DEATH_MS) flags.push('early-death');
+
+    return {
+      suspicious: flags.length > 0,
+      flags,
+      nearestDist: nearestDist === Infinity ? -1 : Math.round(nearestDist),
+      nearestType,
+      msSinceLevelStart,
+    };
+  }
+
+  private sampleTick(input: InputState, deltaTime: number) {
+    const playerPos = this.player.getPosition();
+    let nearestDist = Infinity;
+    for (const e of this.enemies) {
+      const ep = e.getPosition();
+      const d = Math.hypot(ep.x - playerPos.x, ep.y - playerPos.y);
+      if (d < nearestDist) nearestDist = d;
+    }
+    this.logger.log('sample', 'tick', {
+      pX: round2(playerPos.x),
+      pY: round2(playerPos.y),
+      in: input,
+      keys: this.inputManager.getPressedKeys(),
+      enemies: this.enemies.length,
+      nearestDist: nearestDist === Infinity ? -1 : Math.round(nearestDist),
+      dt: round2(deltaTime),
+      hasLOS: this.hasLineOfSight,
+    });
   }
 
   private victory() {

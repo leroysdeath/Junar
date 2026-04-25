@@ -14,8 +14,19 @@ export const config = { runtime: 'edge' };
 
 const DEFAULT_OWNER = 'leroysdeath';
 const DEFAULT_REPO = 'junar';
-const ISSUE_LABEL = 'crash';
-const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BODY_BYTES = 128 * 1024;
+
+// Phase from the browser-side CrashLogger -> GitHub label.
+// Unknown phases fall back to 'crash'.
+const PHASE_LABELS: Record<string, string> = {
+  gameLoop: 'crash',
+  update: 'crash',
+  render: 'crash',
+  global: 'crash',
+  unhandledRejection: 'crash',
+  suspicious: 'suspicious-death',
+  gameOver: 'death',
+};
 
 interface IncomingCrash {
   error?: string;
@@ -88,9 +99,10 @@ export default async function handler(request: Request): Promise<Response> {
 
   const title = `${titlePrefix} ${truncate(crash.error || 'unknown error', 100)}`;
   const body = renderIssueBody(crash, fingerprint);
+  const label = PHASE_LABELS[crash.phase ?? ''] ?? 'crash';
   const res = await gh(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     method: 'POST',
-    body: JSON.stringify({ title, body, labels: [ISSUE_LABEL] }),
+    body: JSON.stringify({ title, body, labels: [label] }),
   });
   if (!res.ok) {
     const text = await res.text();
