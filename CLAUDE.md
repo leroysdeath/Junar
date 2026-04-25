@@ -6,18 +6,19 @@ This file is the source of truth for the game's vision, mechanics, and rules of 
 
 ## 1. Vision
 
-> _**TO BE PROVIDED BY OWNER.** This section captures what the game is in one paragraph: the feeling, the fantasy, the one-line pitch. Do not draft features that conflict with the vision once it's filled in. Until then, treat any vision-dependent decision as a question for the owner._
+The player is a male indigenous (Adivasi-coded) archer surviving with his family in the Indian jungle. He auto-fires arrows at the nearest enemy in cardinal line of sight while hordes of crazed beasts — panthers, bears, primates, and others — pour through narrow paths cut between dense, untraversible trees. The family — wife, son, daughter — once lived in harmony with the jungle; now something is corrupting it. As the player advances, his family joins him as passive escorts, and protecting them becomes the central tension. The corruption traces back to a monstrous plant deep in the jungle that exudes black goo and infects the wildlife. In the final battle, the family stands and fights with the player to destroy the source and free the jungle.
 
-Working title shown in-game: **Jungle Archer — Survive the Ancient Forest**. The repo name "Junar" is the project's true name; its meaning in the world is owner-defined.
+**Working title:** "Jungle X" (placeholder, final title TBD). Repo codename: "Junar". The in-engine menu strings ("Jungle Archer — Survive the Ancient Forest", "Defeat the Ancient Tree Guardian") are placeholder copy and will be replaced when the final title and copy are approved.
 
 ## 2. Pillars
 
 Every change must serve at least one of these. If a proposed change weakens a pillar, push back before implementing.
 
-- **Tactical positioning over twitch.** The auto-fire-on-cardinal-LOS rule means combat is about *where you stand*, not *when you click*. Don't add manual fire, click-to-aim, or diagonal shots without explicit owner approval.
-- **Death is fast and fair.** One touch = game over. Hits should always feel like the player's mistake — no surprise spawns into the player, no offscreen instakills.
-- **The forest is the antagonist.** Walls are trees, enemies are wildlife. The level *is* the encounter design. Power comes from reading the maze.
-- **Readable at a glance.** Procedural pixel-rectangle rendering is a feature, not a limitation: every entity must be identifiable in one frame.
+- **Tactical positioning over twitch.** The auto-fire-on-cardinal-LOS rule means combat is about *where you stand*, not *when you click*. No manual fire, click-to-aim, or diagonal shots without explicit owner approval.
+- **Death is fast and fair — and weighted when family is present.** One enemy hit on the player ends solo levels; in family levels, any family member's death also ends the run. Deaths must always feel like the player's mistake.
+- **The corruption is the antagonist, not the beasts.** The beasts are victims of an infection. Tone is tragic, not bloodthirsty. The boss — a monstrous plant exuding black goo — is the real enemy.
+- **The jungle traps and channels.** Walls are dense trees; the playable space is narrow paths and small clearings. Power comes from reading the maze and forcing chokepoints.
+- **Readable at a glance.** Procedural pixel-rectangle rendering is a feature, not a limitation: every entity (player, family member, each beast type) must be identifiable in one frame.
 - **Short prototype, tight scope.** Ten levels, one boss arena. Resist scope creep until the prototype loop is solid.
 
 ## 3. Core loop (30 seconds of play)
@@ -35,18 +36,27 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 **Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no stamina; one hit kills.
 
-**Enemies** (`src/game/Enemy.ts`) — three types, fixed speeds:
-| Type    | Speed (px/s) | Notes |
-|---------|--------------|-------|
-| panther | 120          | Fastest |
-| primate | 80           | Mid    |
-| bear    | 60           | Slow, bulky |
+**Enemies** (`src/game/Enemy.ts`) — three approved types, fixed speeds. All are infected jungle wildlife, not generic monsters:
+| Type    | Speed (px/s) | In-world identity |
+|---------|--------------|-------------------|
+| panther | 120          | Black panther — fastest, *Jungle Book*-coded |
+| primate | 80           | Jungle-Book-style primate (langur troop / corrupted ape) |
+| bear    | 60           | Sloth bear — slow, bulky |
 
-Pathfinding repolls every 200 ms (`Date.now()`). Direct path if clear, else best cardinal step.
+Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal step.
 
-**Auto-fire** (`Game.ts:214-266`) — cooldown 500 ms, range 300 px, **cardinal directions only**. Picks the nearest cardinal-aligned enemy with clear LOS. Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit.
+**No new enemy type may be added without explicit owner approval.** Snakes, tigers, monkeys, crocodiles, wild dogs, etc. are *unapproved*; ask before implementing.
 
-**Cardinal LOS** (`Game.ts:292-333`) — steps along the cardinal ray every 16 px, returns true if any enemy center is within 20 px of a step before a wall blocks. (Note: the 20 px tolerance is loose against a 32 px grid — see `Roadmap`.)
+**Family NPCs** (planned, not yet implemented) — wife, son, daughter. Behavior:
+- Levels 1 → (mid-game cutoff TBD): solo, no family.
+- Family-escort levels: family follows the player passively, takes no actions, has no weapons. Any family member touched/killed by an enemy = game over (same death rules as the player).
+- Level 10 boss fight: all family members become active combatants alongside the player.
+
+The "any family death = game over" rule is the central tension of the family-escort phase — design accordingly.
+
+**Auto-fire** (`Game.ts`) — cooldown 500 ms, range 300 px, **cardinal directions only**. Picks the nearest cardinal-aligned enemy with clear LOS. Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit.
+
+**Cardinal LOS** (`Game.ts`) — steps along the cardinal ray every half-tile, returns true if any enemy center is within half a tile *perpendicular* to the ray before a wall blocks. (Tightened from a loose 20 px circle in commit `e8a224b`.)
 
 **Levels** (`src/game/levels.ts`) — hardcoded ASCII grids, 25×19 tiles at 32 px = 800×600 px. `#` = wall (tree), `.` = floor (dirt). Enemy count scales with level: `min(3 + level_index * 2, 25)`. Level 10 is an empty arena reserved for the boss.
 
@@ -54,50 +64,74 @@ Pathfinding repolls every 200 ms (`Date.now()`). Direct path if clear, else best
 
 ## 5. World & tone
 
-> _**TO BE PROVIDED BY OWNER.** Setting, lore, naming conventions, what "Junar" means in-world, what the forest is, what the enemies are at a deeper level than "panther/primate/bear", and the protagonist's identity. Owner has stated they have a specific vision._
+**Setting** — the Indian jungle, pre-industrial / mythic time. Dense, mostly impassable forest; the playable space is the narrow paths and small clearings the family knows by heart. Aesthetic touchstone: *The Jungle Book* (visual style and bestiary inspiration only — no direct character references).
 
-Until owner provides:
-- **Visual palette** in code: forest greens (#228B22, #32CD32), earth browns (#8B4513), dark canopy fills.
-- **Audio palette** in code: synthesized Web Audio tones — arrow (200 Hz square), hit (400 Hz square), gameOver (150 Hz sawtooth), victory (500 Hz sine).
-- **In-game flavor strings** currently present: "Jungle Archer", "Survive the Ancient Forest", "Defeat the Ancient Tree Guardian". Treat these as placeholder unless owner confirms.
+**Protagonist** — Adivasi/tribal-Indian archer, husband and father. The current procedural sprite (feathered headdress, generic "tribal" silhouette) reads as Native American and is wrong for this setting; updating it is on the roadmap. Visual direction: dark skin, simple cloth garment (e.g. dhoti-coded), bow and quiver, no headdress. Keep cues abstract and dignified — avoid stereotype.
+
+**Family** — wife, son (boy), daughter. They lived in harmony with the jungle and read it like a second language. They are the player's reason. They appear from a designated mid-game level onward (specific cutoff TBD) as passive escorts, and become active combatants only in the Level 10 boss fight.
+
+**Antagonist** — not the beasts. The beasts are victims of an infection: a black goo emanating from a monstrous plant deep in the jungle. The plant is the boss. Tone is tragic — the player is killing wildlife because there's no other choice, and the world is worth saving.
+
+**Bestiary status:**
+- Approved and implemented: black panther, sloth bear, *Jungle Book*-style primate.
+- Approved direction (visual cues): infected beasts should read as "wrong" — black streaks/sheen, glowing eyes, or similar. Keep visuals readable at a glance.
+- **Not yet approved (do not add without asking):** snakes, tigers, monkeys, crocodiles, wild dogs, jackals, anything else.
+
+**Visual palette** (current code) — forest greens (#228B22, #32CD32), earth browns (#8B4513), dark canopy fills. Roadmap: add a black-goo accent palette (deep oily black, sickly green/purple highlights) for infected beasts and the boss.
+
+**Audio palette** (current code) — synthesized Web Audio tones (arrow 200 Hz square, hit 400 Hz square, gameOver 150 Hz sawtooth, victory 500 Hz sine). Acceptable as placeholder; future direction is owner-led.
+
+**Working in-engine copy** — "Jungle Archer", "Survive the Ancient Forest", "Defeat the Ancient Tree Guardian" are placeholder strings. Replace once final title and tone are locked.
 
 ## 6. Scope & roadmap
 
 **In scope (prototype):**
-- Levels 1–10 with current mechanics.
-- Boss encounter on Level 10.
-- Polish pass: animation states, hit feedback, particles within Canvas 2D.
-- Visual & audio coherence with the (forthcoming) world/tone vision.
+- Levels 1–10 with current mechanics, evolved to fit the vision.
+- Family-escort system (passive followers, any-death-is-game-over) for mid-game levels.
+- Level 10 boss: corrupted plant exuding black goo; family becomes active combatants.
+- Visual update for the Adivasi-coded protagonist (and family).
+- Infected-beast visual treatment (black goo accents) within procedural rendering.
+- Hit feedback, screen shake, death pop — within Canvas 2D.
 
 **Out of scope until owner says otherwise:**
+- New enemy types beyond the three approved beasts. Ask first.
 - Sprite-sheet asset pipeline (staying procedural — see Pillars).
 - New input methods (gamepad, touch, mouse-aim).
 - Saves, accounts, leaderboards.
 - Multiplayer, online features.
 - Migration to Phaser, Godot, or any other engine.
 - New runtime dependencies. Ask before adding any package.
+- Direct *Jungle Book* character references (style inspiration only).
 
 **Ordered next steps:**
-1. **Critical bug fixes** (in progress) — input listener leak, untracked `setTimeout`, cardinal edge cases.
-2. **Constants module** — collapse hardcoded `800/600/32` into one place.
-3. **`SoundManager` rewrite** — single shared `AudioContext`, lazy-create on first user gesture.
-4. **Owner provides vision** → finalize sections 1 and 5.
-5. **Boss design** for Level 10 (Ancient Tree Guardian or replacement per vision).
-6. **Visual feedback pass** — hit flashes, enemy death pop, arrow trail, screen shake.
+1. ✅ Critical bug fixes (input leak, setTimeout race, cardinal edge cases) — done in commit `e8a224b`.
+2. **Protagonist visual update** — replace the feathered-headdress sprite with an Adivasi-coded archer in `Renderer.ts`. Keep procedural; keep readable at 32×32.
+3. **Infected-beast visual cue** — add black-goo accents (sheen/dripping/eye glow) to all three beast types so the corruption reads at a glance.
+4. **Family-escort system** — design the passive follower (movement, collision, rendering, death-triggers-game-over). Decide which levels they appear in.
+5. **Level 10 boss** — corrupted plant (the "Ancient Tree Guardian" placeholder is roughly aligned). Active family combatants in this fight only.
+6. **Final title + copy pass** — replace "Jungle Archer / Survive the Ancient Forest / Defeat the Ancient Tree Guardian" with vision-aligned strings once title is locked.
+7. **Polish** — `SoundManager` rewrite (single shared `AudioContext`, lazy-init on first gesture), broader sweep to push remaining hardcoded `32`s through `TILE_SIZE`, hit feedback, screen shake.
 
 ## 7. Guardrails for Claude
 
 When working in this repo:
 
+**Story / tone**
+- **Beasts are victims, not villains.** The corruption is the antagonist. Don't write copy or design enemy behavior that frames the wildlife as evil. Tragic, not bloodthirsty.
+- **Don't add new enemy types without owner approval.** The approved bestiary is black panther, sloth bear, and Jungle-Book-style primate. Snakes, tigers, monkeys, etc. require explicit go-ahead.
+- **Family NPCs are sacrosanct in family levels.** Their death = game over. Don't add behavior that undermines the "protect them" tension (no auto-fight, no respawn, no gimmicks).
+- **Cultural representation matters.** The protagonist and family are Adivasi/tribal-Indian. Avoid feathered-headdress imagery, generic "tribal" stereotypes, or *Jungle Book* character likenesses. Keep visual cues minimal, dignified, and abstract.
+
+**Technical**
 - **Don't add dependencies** without asking. The stack is React + TS + Vite + Tailwind + lucide-react + nothing else.
 - **Don't introduce a state library.** UI state stays in React; game state stays in plain TS classes mutated in place. The callback bridge in `App.tsx` is the contract — extend it, don't replace it.
 - **Don't break the cardinal-LOS contract.** No diagonal shooting, no manual aim, no targeted fire by clicking, unless explicitly approved.
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
 - **Don't add real sprite assets.** Procedural rendering is the chosen art direction. Improve `Renderer.ts` instead.
 - **Prefer extending existing modules** over adding new ones. The 10 files in `src/game/` cover the surface area; new concerns should fit in one of them.
-- **Pull magic numbers into named constants** when you touch them. Especially `800`, `600`, `32`, `16`, `20`, `300`, `400`, `500`.
-- **Always clean up listeners and timers.** The Bolt.new scaffold leaks both. Anything you add that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
-- **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc --noEmit` must be clean.
+- **Pull magic numbers into named constants** when you touch them. Especially `800`, `600`, `32`, `16`, `20`, `300`, `400`, `500`. Use `src/game/constants.ts`.
+- **Always clean up listeners and timers.** The Bolt.new scaffold leaked both — those are now fixed. Anything new that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
+- **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc -p tsconfig.app.json --noEmit` must be clean.
 - **Use `Date.now()` only for wall-clock things.** Game timing flows from the `gameLoop` `currentTime` (a `performance.now()` value passed by `requestAnimationFrame`). Mixing the two causes pause/resume bugs.
 
 ## 8. File map
