@@ -116,8 +116,21 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 6. **Family rendering & combat** — design the family member entity (movement, collision, rendering, death-triggers-game-over, simple combat behavior for the boss fight).
 7. **Copy pass** — replace remaining placeholder strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) with vision-aligned copy once tone is locked.
 8. **Polish** — `SoundManager` rewrite (single shared `AudioContext`, lazy-init on first gesture), broader sweep to push remaining hardcoded `32`s through `TILE_SIZE`, hit feedback, screen shake.
+9. **Tauri wrap for Steam** — once the prototype loop is solid, package the Vite build with Tauri for desktop. See section 7 for what this means for current development.
 
-## 7. Guardrails for Claude
+## 7. Distribution & target platform
+
+**End target: Steam** (Windows / macOS / Linux / Steam Deck). **Vercel is for testing only** — preview URLs for branches and quick mobile/tablet checks, not the publishing platform.
+
+**Planned packaging path: Tauri.** A small Rust shell that wraps the existing Vite/React/Canvas 2D build into a native desktop binary (~5–10 MB). This explicitly preserves the current stack — Tauri is a wrapper, not a game engine, so the "don't migrate to a game engine" guardrail still holds. Electron would also work but is heavier and not preferred. The Tauri integration itself is **out of scope until the prototype loop is solid**; it's the last step of the roadmap, not a near-term task.
+
+**Things to stay aware of so we don't paint into corners:**
+- **No browser-only APIs without a Tauri equivalent.** Web Audio, Canvas 2D, `requestAnimationFrame`, keyboard events — all fine. Storage, file system, fullscreen, and gamepad need Tauri-aware patterns when we get to them. Avoid service workers, Web Bluetooth, browser DRM, and pop-up windows.
+- **Canvas is fixed 800×600.** Steam users expect at least a fullscreen toggle with letterboxed scaling. Plan to address before any Steam build, not urgent for prototyping.
+- **Saves don't exist yet.** When they do, write through Tauri's app-data dir, not `localStorage` long-term.
+- **Steamworks SDK** (achievements, cloud save, leaderboards) integrates via a Tauri plugin or a small Rust crate. Post-prototype concern.
+
+## 8. Guardrails for Claude
 
 When working in this repo:
 
@@ -133,6 +146,7 @@ When working in this repo:
 - **Don't break the cardinal-LOS contract.** No diagonal shooting, no manual aim, no targeted fire by clicking, unless explicitly approved.
 - **No ranged enemy attacks.** Beasts threaten by contact only. A ranged enemy would invalidate the "where you stand" pillar; if asked to add one, push back unless the owner explicitly approves.
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
+- **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 7). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
 - **Don't add real sprite assets.** Procedural rendering is the chosen art direction. Improve `Renderer.ts` instead.
 - **Prefer extending existing modules** over adding new ones. The 10 files in `src/game/` cover the surface area; new concerns should fit in one of them.
 - **Pull magic numbers into named constants** when you touch them. Especially `800`, `600`, `32`, `16`, `20`, `300`, `400`, `500`. Use `src/game/constants.ts`.
@@ -140,7 +154,7 @@ When working in this repo:
 - **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc -p tsconfig.app.json --noEmit` must be clean.
 - **Use `Date.now()` only for wall-clock things.** Game timing flows from the `gameLoop` `currentTime` (a `performance.now()` value passed by `requestAnimationFrame`). Mixing the two causes pause/resume bugs.
 
-## 8. File map
+## 9. File map
 
 ```
 src/
