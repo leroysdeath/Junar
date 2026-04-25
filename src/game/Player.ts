@@ -1,5 +1,6 @@
 import { Vector2, InputState } from './types';
 import { Level } from './Level';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 
 export class Player {
   private position: Vector2;
@@ -22,8 +23,8 @@ export class Player {
     if (input.down) newY += moveDistance;
 
     // Check bounds
-    newX = Math.max(0, Math.min(newX, 800 - this.size));
-    newY = Math.max(0, Math.min(newY, 600 - this.size));
+    newX = Math.max(0, Math.min(newX, CANVAS_WIDTH - this.size));
+    newY = Math.max(0, Math.min(newY, CANVAS_HEIGHT - this.size));
 
     // Check collision with walls
     const gridX = Math.floor(newX / 32);

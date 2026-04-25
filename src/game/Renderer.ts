@@ -202,10 +202,7 @@ export class Renderer {
 
   renderLineOfSightIndicator(player: Player, hasLineOfSight: boolean) {
     const pos = player.getPosition();
-    const centerX = pos.x + 16;
-    const centerY = pos.y + 16;
-    
-    // Draw a subtle indicator around the player
+
     this.ctx.save();
     this.ctx.globalAlpha = 0.6;
     

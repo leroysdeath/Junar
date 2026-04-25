@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState } from './game/types';

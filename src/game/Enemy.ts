@@ -54,8 +54,8 @@ export class Enemy {
       const normalizedX = dx / distance;
       const normalizedY = dy / distance;
       
-      let newX = this.position.x + normalizedX * moveDistance;
-      let newY = this.position.y + normalizedY * moveDistance;
+      const newX = this.position.x + normalizedX * moveDistance;
+      const newY = this.position.y + normalizedY * moveDistance;
       
       // Collision detection with walls
       const gridX = Math.floor(newX / 32);

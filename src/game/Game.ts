@@ -7,6 +7,7 @@ import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { GameState, GameCallbacks, Vector2 } from './types';
 import { initializeLevels } from './levels';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE } from './constants';
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -29,12 +30,11 @@ export class Game {
   
   private lastArrowTime = 0;
   private arrowCooldown = 500; // 0.5 seconds
-  private arrowLength = 32; // Match player avatar height (32px)
-  private arrowSpacing = 8; // 25% of arrow length (32 * 0.25 = 8px)
   private maxDetectionRange = 300; // Maximum range for enemy detection
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
   private hasLineOfSight = false; // Track if player has line of sight to any enemy
+  private levelTransitionTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -65,6 +65,7 @@ export class Game {
   }
 
   restart() {
+    this.clearLevelTransitionTimeout();
     this.currentLevelIndex = 0;
     this.score = 0;
     this.arrows = [];
@@ -127,12 +128,12 @@ export class Game {
       arrow.pos.y += arrow.dir.y * arrowSpeed * (deltaTime / 1000);
       
       // Check bounds
-      if (arrow.pos.x < 0 || arrow.pos.x > 800 || arrow.pos.y < 0 || arrow.pos.y > 600) {
+      if (arrow.pos.x < 0 || arrow.pos.x > CANVAS_WIDTH || arrow.pos.y < 0 || arrow.pos.y > CANVAS_HEIGHT) {
         return false;
       }
-      
+
       // Check wall collision
-      if (this.level.isWall(Math.floor(arrow.pos.x / 32), Math.floor(arrow.pos.y / 32))) {
+      if (this.level.isWall(Math.floor(arrow.pos.x / TILE_SIZE), Math.floor(arrow.pos.y / TILE_SIZE))) {
         return false;
       }
       
@@ -219,43 +220,35 @@ export class Game {
     const playerCenterX = playerPos.x + 16;
     const playerCenterY = playerPos.y + 16;
     
-    let nearestEnemy = null;
     let nearestDistance = Infinity;
     let bestDirection: Vector2 | null = null;
-    
-    this.enemies.forEach(enemy => {
+
+    for (const enemy of this.enemies) {
       const enemyPos = enemy.getPosition();
-      const enemyCenterX = enemyPos.x + 16;
-      const enemyCenterY = enemyPos.y + 16;
-      
-      // Calculate direction to enemy
+      const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
+      const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
+
       const dx = enemyCenterX - playerCenterX;
       const dy = enemyCenterY - playerCenterY;
-      
-      // Determine which cardinal direction the enemy is in
+
       const cardinalDirection = this.getCardinalDirection(dx, dy);
-      if (!cardinalDirection) return; // Skip if not in a cardinal direction
-      
-      // Check if there's line of sight in this cardinal direction
+      if (!cardinalDirection) continue;
+
       if (!this.hasCardinalLineOfSight(
         { x: playerCenterX, y: playerCenterY },
         cardinalDirection
-      )) return;
-      
-      // Calculate distance using cardinal direction only
+      )) continue;
+
       const dist = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
-      
-      // Only consider enemies within range and with line of sight
+
       if (dist < nearestDistance && dist <= this.maxDetectionRange) {
         nearestDistance = dist;
-        nearestEnemy = enemy;
         bestDirection = cardinalDirection;
       }
-    });
-    
-    if (!nearestEnemy || !bestDirection) return; // No valid target found
-    
-    // Fire arrow in cardinal direction
+    }
+
+    if (!bestDirection) return;
+
     this.arrows.push({
       pos: { x: playerCenterX, y: playerCenterY },
       dir: { x: bestDirection.x, y: bestDirection.y },
@@ -290,45 +283,49 @@ export class Game {
   }
 
   private hasCardinalLineOfSight(start: Vector2, direction: Vector2): boolean {
-    const stepSize = 16; // Check every 16 pixels
+    const stepSize = TILE_SIZE / 2; // Check every half-tile
     const maxSteps = Math.floor(this.maxDetectionRange / stepSize);
-    
+    // Enemy counts as "on the cardinal line" if its center is within
+    // half a tile perpendicular to the ray. The ray is axis-aligned,
+    // so the perpendicular component is the off-axis delta.
+    const perpendicularTolerance = TILE_SIZE / 2;
+
     for (let step = 1; step <= maxSteps; step++) {
       const checkX = start.x + (direction.x * stepSize * step);
       const checkY = start.y + (direction.y * stepSize * step);
-      
+
       // Check bounds
-      if (checkX < 0 || checkX >= 800 || checkY < 0 || checkY >= 600) {
+      if (checkX < 0 || checkX >= CANVAS_WIDTH || checkY < 0 || checkY >= CANVAS_HEIGHT) {
         break; // Reached boundary
       }
-      
+
       // Convert to grid coordinates
-      const gridX = Math.floor(checkX / 32);
-      const gridY = Math.floor(checkY / 32);
-      
+      const gridX = Math.floor(checkX / TILE_SIZE);
+      const gridY = Math.floor(checkY / TILE_SIZE);
+
       // Check if this point hits a wall
       if (this.level.isWall(gridX, gridY)) {
         return false; // Line of sight blocked by wall
       }
-      
-      // Check if there's an enemy at this position
+
+      // Check if any enemy straddles this point on the cardinal ray
       for (const enemy of this.enemies) {
         const enemyPos = enemy.getPosition();
-        const enemyCenterX = enemyPos.x + 16;
-        const enemyCenterY = enemyPos.y + 16;
-        
-        // Check if enemy is close to this cardinal line position
-        const distanceToLine = Math.sqrt(
-          Math.pow(checkX - enemyCenterX, 2) + 
-          Math.pow(checkY - enemyCenterY, 2)
-        );
-        
-        if (distanceToLine <= 20) { // Enemy is close enough to the cardinal line
-          return true; // Found enemy in line of sight
+        const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
+        const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
+
+        // Use the off-axis delta only (the on-axis delta is the ray itself).
+        const offAxisDelta =
+          direction.x !== 0
+            ? Math.abs(checkY - enemyCenterY)
+            : Math.abs(checkX - enemyCenterX);
+
+        if (offAxisDelta <= perpendicularTolerance) {
+          return true;
         }
       }
     }
-    
+
     return false; // No enemy found in cardinal line of sight
   }
 
@@ -351,23 +348,31 @@ export class Game {
     
     this.enemies.forEach(enemy => {
       const enemyPos = enemy.getPosition();
-      const enemyCenterX = enemyPos.x + 16;
-      const enemyCenterY = enemyPos.y + 16;
-      
+      const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
+      const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
+
       // Calculate direction to enemy
       const dx = enemyCenterX - playerCenterX;
       const dy = enemyCenterY - playerCenterY;
-      
+
+      // Direct overlap kill: when enemy and player are co-located the
+      // cardinal direction is undefined. Always kill on overlap so the
+      // zero-vector edge case can't leave the player invulnerable.
+      if (Math.abs(dx) < TILE_SIZE / 2 && Math.abs(dy) < TILE_SIZE / 2) {
+        this.gameOver();
+        return;
+      }
+
       // Get cardinal direction
       const cardinalDirection = this.getCardinalDirection(dx, dy);
       if (!cardinalDirection) return;
-      
+
       // Calculate cardinal distance
       const distance = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
-      
+
       // Skip if enemy is beyond detection range
       if (distance > this.maxDetectionRange) return;
-      
+
       // Check if there's a clear cardinal line of sight
       if (this.hasCardinalLineOfSight(
         { x: playerCenterX, y: playerCenterY },
@@ -407,11 +412,22 @@ export class Game {
     } else {
       this.gameState = 'levelComplete';
       this.callbacks.onStateChange('levelComplete');
-      
-      setTimeout(() => {
+
+      this.clearLevelTransitionTimeout();
+      this.levelTransitionTimeoutId = setTimeout(() => {
+        this.levelTransitionTimeoutId = null;
+        // Guard: bail if the game state changed during the fade (restart, cleanup, gameOver)
+        if (this.gameState !== 'levelComplete') return;
         this.currentLevelIndex++;
         this.startLevel();
       }, 2000);
+    }
+  }
+
+  private clearLevelTransitionTimeout() {
+    if (this.levelTransitionTimeoutId !== null) {
+      clearTimeout(this.levelTransitionTimeoutId);
+      this.levelTransitionTimeoutId = null;
     }
   }
 
@@ -430,7 +446,7 @@ export class Game {
   private render() {
     // Clear canvas with dark green background
     this.ctx.fillStyle = '#1a4a3a';
-    this.ctx.fillRect(0, 0, 800, 600);
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
     // Always render the level, player, and enemies when they exist
     // This ensures we can see the game even in menu state for debugging
@@ -458,8 +474,11 @@ export class Game {
   }
 
   cleanup() {
-    if (this.animationId) {
+    if (this.animationId !== null) {
       cancelAnimationFrame(this.animationId);
+      this.animationId = null;
     }
+    this.clearLevelTransitionTimeout();
+    this.inputManager.dispose();
   }
 }
