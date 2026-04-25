@@ -355,10 +355,14 @@ export class Game {
       const cardinalDirection = this.getCardinalDirection(dx, dy);
       if (!cardinalDirection) continue;
 
-      if (!this.hasCardinalLineOfSight(
-        { x: playerCenterX, y: playerCenterY },
-        cardinalDirection
-      )) continue;
+      if (
+        this.findEnemyOnCardinalRay(
+          { x: playerCenterX, y: playerCenterY },
+          cardinalDirection,
+        ) === null
+      ) {
+        continue;
+      }
 
       const dist = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
 
@@ -404,37 +408,52 @@ export class Game {
     return null; // No movement
   }
 
-  private hasCardinalLineOfSight(start: Vector2, direction: Vector2): boolean {
-    const stepSize = TILE_SIZE / 2; // Check every half-tile
+  // Walk the cardinal ray from `start` in `direction`, returning the first
+  // enemy whose AABB straddles the ray, or null if a wall blocks the ray
+  // before any enemy is reached.
+  //
+  // The wall scan looks at the FULL perpendicular corridor that the enemy
+  // detection uses (a 32-wide band, since enemies count as on-the-ray when
+  // their center is within ±perpTolerance). Without this, a tree in the
+  // adjacent column could sit between the player and an enemy on that same
+  // column and the ray would falsely report a clear path.
+  private findEnemyOnCardinalRay(start: Vector2, direction: Vector2): Enemy | null {
+    const stepSize = TILE_SIZE / 2;
     const maxSteps = Math.floor(this.maxDetectionRange / stepSize);
-    // Enemy counts as "on the cardinal line" if its center is within
-    // half a tile perpendicular to the ray. The ray is axis-aligned,
-    // so the perpendicular component is the off-axis delta.
-    const perpendicularTolerance = TILE_SIZE / 2;
+    const perpTolerance = TILE_SIZE / 2;
 
     for (let step = 1; step <= maxSteps; step++) {
-      const checkX = start.x + (direction.x * stepSize * step);
-      const checkY = start.y + (direction.y * stepSize * step);
+      const checkX = start.x + direction.x * stepSize * step;
+      const checkY = start.y + direction.y * stepSize * step;
 
-      // Check bounds
       if (checkX < 0 || checkX >= CANVAS_WIDTH || checkY < 0 || checkY >= CANVAS_HEIGHT) {
-        break; // Reached boundary
+        break;
       }
 
-      // Convert to grid coordinates
-      const gridX = Math.floor(checkX / TILE_SIZE);
-      const gridY = Math.floor(checkY / TILE_SIZE);
+      // Wall corridor: along the on-axis the corridor is a single point,
+      // along the off-axis it spans ±perpTolerance (one tile wide). That
+      // can cover one or two adjacent grid cells.
+      const xMin = direction.x !== 0 ? checkX : checkX - perpTolerance;
+      const xMax = direction.x !== 0 ? checkX : checkX + perpTolerance - 1;
+      const yMin = direction.y !== 0 ? checkY : checkY - perpTolerance;
+      const yMax = direction.y !== 0 ? checkY : checkY + perpTolerance - 1;
+      const gxMin = Math.floor(xMin / TILE_SIZE);
+      const gxMax = Math.floor(xMax / TILE_SIZE);
+      const gyMin = Math.floor(yMin / TILE_SIZE);
+      const gyMax = Math.floor(yMax / TILE_SIZE);
 
-      // Check if this point hits a wall
-      if (this.level.isWall(gridX, gridY)) {
-        return false; // Line of sight blocked by wall
+      for (let gx = gxMin; gx <= gxMax; gx++) {
+        for (let gy = gyMin; gy <= gyMax; gy++) {
+          if (this.level.isWall(gx, gy)) {
+            return null;
+          }
+        }
       }
 
-      // Check if any enemy straddles this point on the cardinal ray.
-      // Both axes must be within half a tile: off-axis means the enemy is on
-      // the ray, on-axis means the step has actually reached it. Without the
-      // on-axis check, any enemy sharing the player's row/column reports a hit
-      // at step 1, before walls between them can block.
+      // Enemy hit: center within ±perpTolerance off-axis AND within
+      // ±half-tile on-axis (so the step has actually reached it; without
+      // the on-axis check, any enemy sharing the row/column would report
+      // a hit at step 1, before walls could block).
       for (const enemy of this.enemies) {
         const enemyPos = enemy.getPosition();
         const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
@@ -449,13 +468,13 @@ export class Game {
             ? Math.abs(checkX - enemyCenterX)
             : Math.abs(checkY - enemyCenterY);
 
-        if (offAxisDelta <= perpendicularTolerance && onAxisDelta <= TILE_SIZE / 2) {
-          return true;
+        if (offAxisDelta <= perpTolerance && onAxisDelta <= TILE_SIZE / 2) {
+          return enemy;
         }
       }
     }
 
-    return false; // No enemy found in cardinal line of sight
+    return null;
   }
 
   private getCardinalDistance(playerX: number, playerY: number, enemyX: number, enemyY: number, direction: Vector2): number {
@@ -470,27 +489,17 @@ export class Game {
   }
 
   private checkCollisions() {
-    // Check enemy-player collisions
     const playerPos = this.player.getPosition();
     const playerCenterX = playerPos.x + 16;
     const playerCenterY = playerPos.y + 16;
 
+    // Pass 1: AABB-overlap kill. Enemies that have moved on top of the
+    // player don't fit into the cardinal-direction model, so handle them
+    // first. Returns immediately on hit so we don't double-report.
     for (const enemy of this.enemies) {
-      // Bail if a previous iteration already triggered gameOver. forEach
-      // would silently keep iterating; the for-of + early break stops
-      // multiple kill triggers from filing duplicate reports.
-      if (this.gameState !== 'playing') break;
-
       const enemyPos = enemy.getPosition();
-      const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
-      const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
-
-      const dx = enemyCenterX - playerCenterX;
-      const dy = enemyCenterY - playerCenterY;
-
-      // Direct overlap kill: when enemy and player are co-located the
-      // cardinal direction is undefined. Always kill on overlap so the
-      // zero-vector edge case can't leave the player invulnerable.
+      const dx = enemyPos.x + TILE_SIZE / 2 - playerCenterX;
+      const dy = enemyPos.y + TILE_SIZE / 2 - playerCenterY;
       if (Math.abs(dx) < TILE_SIZE / 2 && Math.abs(dy) < TILE_SIZE / 2) {
         this.logger.log('collision', 'overlap-kill', {
           type: enemy.getType(),
@@ -504,44 +513,49 @@ export class Game {
           dx,
           dy,
         });
-        continue;
-      }
-
-      const cardinalDirection = this.getCardinalDirection(dx, dy);
-      if (!cardinalDirection) continue;
-
-      const distance = this.getCardinalDistance(
-        playerCenterX,
-        playerCenterY,
-        enemyCenterX,
-        enemyCenterY,
-        cardinalDirection,
-      );
-
-      if (distance > this.maxDetectionRange) continue;
-
-      if (this.hasCardinalLineOfSight(
-        { x: playerCenterX, y: playerCenterY },
-        cardinalDirection,
-      )) {
-        this.logger.log('collision', 'cardinal-kill', {
-          type: enemy.getType(),
-          dist: Math.round(distance),
-          dirX: cardinalDirection.x,
-          dirY: cardinalDirection.y,
-        });
-        this.gameOver({
-          kind: 'cardinal',
-          enemyId: enemy.getId(),
-          enemyType: enemy.getType(),
-          dist: distance,
-          dirX: cardinalDirection.x,
-          dirY: cardinalDirection.y,
-        });
-        continue;
+        return;
       }
     }
-    
+
+    // Pass 2: cardinal-LOS kill. Walk each of the 4 cardinal rays once and
+    // attribute the kill to the enemy actually on the ray (not whichever
+    // outer-loop iteration we happened to be in when the ray cleared).
+    const cardinalDirs: Vector2[] = [
+      { x: 0, y: -1 },
+      { x: 0, y: 1 },
+      { x: -1, y: 0 },
+      { x: 1, y: 0 },
+    ];
+    for (const dir of cardinalDirs) {
+      const hit = this.findEnemyOnCardinalRay(
+        { x: playerCenterX, y: playerCenterY },
+        dir,
+      );
+      if (!hit) continue;
+
+      const hitPos = hit.getPosition();
+      const dist =
+        dir.x !== 0
+          ? Math.abs(hitPos.x + TILE_SIZE / 2 - playerCenterX)
+          : Math.abs(hitPos.y + TILE_SIZE / 2 - playerCenterY);
+
+      this.logger.log('collision', 'cardinal-kill', {
+        type: hit.getType(),
+        dist: Math.round(dist),
+        dirX: dir.x,
+        dirY: dir.y,
+      });
+      this.gameOver({
+        kind: 'cardinal',
+        enemyId: hit.getId(),
+        enemyType: hit.getType(),
+        dist,
+        dirX: dir.x,
+        dirY: dir.y,
+      });
+      return;
+    }
+
     // Check arrow-enemy collisions
     this.arrows = this.arrows.filter(arrow => {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
