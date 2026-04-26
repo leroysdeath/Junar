@@ -1,6 +1,6 @@
 ---
 name: tile-grid-and-canvas-constants
-description: Junar's tile grid (25×19, TILE_SIZE=32, canvas 800×600) and the shared constants module. Use when editing files in src/game/ that contain raw 32 / 16 / 800 / 600 / 128 (or related arithmetic), when adding or tuning gameplay numbers (cooldowns, speeds, ranges), or when working in src/game/constants.ts. Promote raw values into named constants when you touch them.
+description: Junar's shared constants module (src/game/constants.ts) and the canvas/tile geometry it defines (TILE_SIZE=32, 25×19 grid, 800×600 canvas). Use when introducing a new shared constant, promoting a duplicated literal (especially 800/600/32/16/128) into constants.ts, or when grid/layout math is wrong because two modules disagree on a dimension. Not for tuning a single gameplay value as a design choice — those defer to the owning skill (cardinal-los-contract for cooldown/range, enemy-roster-and-tone for enemy speeds, game-loop-time-and-cleanup for timing-source choices).
 ---
 
 # Tile grid and canvas constants
