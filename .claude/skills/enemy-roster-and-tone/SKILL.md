@@ -1,6 +1,6 @@
 ---
 name: enemy-roster-and-tone
-description: Junar's enemy bestiary and tone constraints. The approved roster is panther, primate (Jungle-Book langur/ape), and sloth bear — adding any other beast (snake, tiger, monkey, crocodile, wolf, jackal, etc.) requires explicit owner approval. Beasts are infected wildlife — tragic victims, not villains — and contact-only (no ranged attacks). Use when adding or editing enemy types, drawing enemies in Renderer, or writing copy that describes the bestiary.
+description: Junar's approved enemy bestiary (panther, primate, sloth bear) and the tone framing that beasts are infected victims, not villains. Adding any other beast (snake, tiger, monkey, crocodile, wolf, jackal, etc.) requires explicit owner approval. Use when adding/removing enemy types in EnemyType, naming or describing beasts in copy, or judging whether a proposed creature needs owner sign-off. Not for: how enemies are drawn (see procedural-rendering), the cardinal-LOS combat contract that makes them contact-only (see cardinal-los-contract), or protagonist/family tone — that gap currently has no owner skill, fall back to CLAUDE.md §5/§8.
 ---
 
 # Enemy roster and tone
