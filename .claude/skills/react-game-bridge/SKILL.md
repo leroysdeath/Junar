@@ -1,6 +1,6 @@
 ---
 name: react-game-bridge
-description: The React ↔ game-state seam in Junar. UI state (menus, DOM overlays in App.tsx) lives in React; game state lives in plain TS classes in src/game/; the only bridge is the GameCallbacks object passed to Game's constructor. Use when adding React/DOM HUD overlays, wiring new game→UI signals via GameCallbacks, hoisting game state into React context/providers/stores, or whenever a request would pull React/hooks into src/game/ or introduce a state library (Redux/Zustand/Jotai/MobX/Recoil/etc.). Not for canvas-drawn HUD elements (health bars, damage numbers, on-canvas score) — those belong to procedural-rendering.
+description: The React ↔ game-state seam in Junar. UI state (menus, DOM overlays in App.tsx) lives in React; game state lives in plain TS classes in src/game/; the only bridge is the GameCallbacks object passed to Game's constructor. Use when adding React/DOM HUD overlays, wiring new game→UI signals via GameCallbacks, hoisting game state into React context/providers/stores, fixing useEffect / hook-lifecycle issues in App.tsx around the Game instance, or whenever a request would pull React/hooks into src/game/ or introduce a state library (Redux/Zustand/Jotai/MobX/Recoil/etc.). Not for canvas-drawn HUD elements (health bars, damage numbers, on-canvas score) — those belong to procedural-rendering.
 ---
 
 # React ↔ game-state bridge
