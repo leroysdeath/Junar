@@ -1,6 +1,6 @@
 ---
 name: game-loop-time-and-cleanup
-description: Game-loop time sources and cleanup discipline in Junar. Use when adding cooldowns, timers, animations, event listeners, or anything in src/game/ that uses Date.now / performance.now / setTimeout / setInterval / requestAnimationFrame. Game timing flows from the gameLoop's currentTime (a performance.now value passed by rAF); Date.now is for wall-clock things only; every window subscription or timer must be disposable from Game.cleanup().
+description: Time-source discipline and teardown safety inside src/game/. Use when code in src/game/ schedules work via setTimeout / setInterval / requestAnimationFrame, reads Date.now / performance.now, or attaches window/document listeners — and you need to pick the right clock or ensure Game.cleanup() can dispose it. Game timing flows from gameLoop's currentTime (a performance.now value passed by rAF); Date.now is wall-clock only. Not for: React useEffect cleanup (see react-game-bridge), promoting hardcoded ms values into constants (see tile-grid-and-canvas-constants), or tuning combat cadence as a design decision (see cardinal-los-contract).
 ---
 
 # Game-loop time and cleanup
