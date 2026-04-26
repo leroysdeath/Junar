@@ -1,6 +1,6 @@
 ---
 name: procedural-rendering
-description: Junar's canvas-2D rendering contract. Renderer.ts is the sole draw surface for the game world; entities are procedural pixel rectangles (no sprite sheets, no image imports, no WebGL/Pixi/Three.js). Use when adding or editing a visual entity drawn to the canvas (player, enemies, arrows, boss, family, particles), when proposing a renderer migration, or when a request would import an image asset for in-world rendering. (Doesn't apply to React/Tailwind UI overlays — those live outside the canvas.)
+description: Junar's canvas-2D rendering contract for the game world. Renderer.ts is the sole draw surface for in-world entities and effects (player, enemies, arrows, boss, family, particles, screen shake, hit flashes); all are procedural pixel rectangles — no sprite sheets, no image imports, no WebGL/Pixi/Three.js. Use when adding or editing how something is drawn on the canvas, when proposing a renderer migration, or when a request would import an image asset. Not for: React/Tailwind HUD overlays (see react-game-bridge), the crash logger's red overlay (see crash-logger-channel), the cardinal-LOS rule itself (see cardinal-los-contract — this skill only owns the visual indicator), or pulling magic numbers like 32/800/600 into constants (see tile-grid-and-canvas-constants, even inside Renderer.ts).
 ---
 
 # Procedural rendering
