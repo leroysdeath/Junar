@@ -1,6 +1,6 @@
 ---
 name: cardinal-los-contract
-description: Junar's combat pillar — auto-fire on cardinal line-of-sight, contact-only enemies, one-hit deaths. Use when changes touch arrow firing, line-of-sight, projectile direction, or enemy-player collision; or when a request would introduce manual aim, click-to-shoot, diagonal shots, ranged enemy attacks, enemy AoE, or player health. These break the "where you stand, not when you click" pillar — push back before implementing.
+description: Junar's combat pillar — auto-fire on cardinal line-of-sight, contact-only enemies and bosses, one-hit deaths. Use when changes touch arrow firing, line-of-sight, projectile direction, auto-fire cooldown/range, or player↔enemy contact damage; or when a request would introduce manual aim, click-to-shoot, diagonal shots, any ranged attack by an enemy or boss, AoE, or player health/iframes. These break the "where you stand, not when you click" pillar — push back before implementing.
 ---
 
 # Cardinal LOS contract
