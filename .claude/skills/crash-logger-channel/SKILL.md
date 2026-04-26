@@ -1,6 +1,6 @@
 ---
 name: crash-logger-channel
-description: Junar's structured crash + event logger. Game events flow through CrashLogger.log(category, msg, data) with a closed LogCategory union; the logger also catches window errors/unhandled rejections and POSTs a CrashSnapshot to /api/crash, which opens or comments on a fingerprinted GitHub issue. Use when adding console.log in src/game/, when introducing new event categories or signals, when changing the CrashSnapshot shape, or when editing Logger.ts or api/crash.ts.
+description: Junar's structured crash + event logger (src/game/Logger.ts) and its /api/crash Vercel Edge sink. Owns the closed LogCategory and CrashPhase unions, the ring-buffer event log via CrashLogger.log(category, msg, data), suspicious-death classification, the non-halting gameOver auto-report, the halting red canvas crash overlay, and the CrashSnapshot payload that fingerprints into a GitHub issue. Use when adding console.log inside src/game/, adding a LogCategory or CrashPhase variant, changing CrashSnapshot or its fingerprint, editing the crash overlay, or touching Logger.ts / api/crash.ts. Not for UI-facing React callbacks (see react-game-bridge) or general listener cleanup (see game-loop-time-and-cleanup).
 ---
 
 # Crash logger and event channel
