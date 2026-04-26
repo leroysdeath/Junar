@@ -10,7 +10,16 @@ The player is a male indigenous (Adivasi-coded) archer surviving with his family
 
 **Title:** "Jungle X" is the final release title. The entry screen currently shows **"Jungle Archer"** as the pre-release placeholder; swap to "Jungle X" closer to launch. Repo codename remains "Junar". Other in-engine menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) are placeholder and will be replaced in a dedicated copy pass.
 
-## 2. Pillars
+## 2. Prototype goals
+
+What "good" looks like for the prototype, above and beyond the pillars. Pillars (§3) are concrete rules every change is filtered against; goals are the higher-level intent those rules serve.
+
+- **Build a fun, addictive gameplay loop.** The 30-second loop in §4 should pull the player into a "one more run" rhythm — readable threats, clean feedback, satisfying clears. If a change makes the loop more correct but less compelling, it's not done.
+- **Evoke an emotional journey through visual storytelling and interactivity.** The corruption arc — harmony → infection → loss → confrontation — is told *without dialogue*. Two channels carry it:
+  - **Short, dialogueless cut-scenes between stages.** Procedural-rectangle vignettes, a few seconds each, transitioning between levels. Text bubbles are allowed only as "…" — no written dialogue, no VO. Skippable; never block the loop.
+  - **Mechanics and level design as story.** What the player is *forced to contend with* — chokepoints, family escort tension on Level 10, the boss arena — is the narrative. The level layout is the script.
+
+## 3. Pillars
 
 Every change must serve at least one of these. If a proposed change weakens a pillar, push back before implementing.
 
@@ -21,7 +30,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 - **Readable at a glance.** Procedural pixel-rectangle rendering is a feature, not a limitation: every entity (player, family member, each beast type) must be identifiable in one frame.
 - **Short prototype, tight scope.** Ten levels, one boss arena. Resist scope creep until the prototype loop is solid.
 
-## 3. Core loop (30 seconds of play)
+## 4. Core loop (30 seconds of play)
 
 1. Spawn into a maze; enemies appear from the edges.
 2. Move (WASD/arrows) to line up an enemy in a cardinal direction.
@@ -30,7 +39,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 5. Clear all enemies → 2-second "Level Complete" → next level.
 6. Survive Levels 1–9 (mazes scaling in density), then Level 10 (open arena, boss intended but unimplemented).
 
-## 4. Mechanics reference
+## 5. Mechanics reference
 
 **Controls** — WASD or arrow keys (movement only). Click canvas from menu to start. Sound toggle is a UI button.
 
@@ -64,7 +73,7 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 
 **Scoring** — +10 per kill, +100 × (level_index + 1) on level complete.
 
-## 5. World & tone
+## 6. World & tone
 
 **Setting** — the Indian jungle, pre-industrial / mythic time. Dense, mostly impassable forest; the playable space is the narrow paths and small clearings the family knows by heart. Aesthetic touchstone: *The Jungle Book* (visual style and bestiary inspiration only — no direct character references).
 
@@ -85,7 +94,7 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 
 **Working in-engine copy** — title "Jungle X" is final. The other menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", "You have conquered the jungle!") are still placeholder and will be replaced in a dedicated copy pass once tone is locked.
 
-## 6. Scope & roadmap
+## 7. Scope & roadmap
 
 **In scope (prototype):**
 - Levels 1–10 with current mechanics, evolved to fit the vision. (Code already contains all 10 level definitions; Level 10 is an empty arena reserved for the boss.)
@@ -116,9 +125,10 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 6. **Family rendering & combat** — design the family member entity (movement, collision, rendering, death-triggers-game-over, simple combat behavior for the boss fight).
 7. **Copy pass** — replace remaining placeholder strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) with vision-aligned copy once tone is locked.
 8. **Polish** — `SoundManager` rewrite (single shared `AudioContext`, lazy-init on first gesture), broader sweep to push remaining hardcoded `32`s through `TILE_SIZE`, hit feedback, screen shake.
-9. **Tauri wrap for Steam** — once the prototype loop is solid, package the Vite build with Tauri for desktop. See section 7 for what this means for current development.
+9. **Inter-stage cut-scenes** — short dialogueless procedural-rectangle vignettes between levels carrying the corruption arc. "…" bubbles only, skippable, out of scope until the loop is solid (§2 Prototype goals).
+10. **Tauri wrap for Steam** — once the prototype loop is solid, package the Vite build with Tauri for desktop. See section 8 for what this means for current development.
 
-## 7. Distribution & target platform
+## 8. Distribution & target platform
 
 **End target: Steam** (Windows / macOS / Linux / Steam Deck). **Vercel is for testing only** — preview URLs for branches and quick mobile/tablet checks, not the publishing platform.
 
@@ -130,7 +140,7 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 - **Saves don't exist yet.** When they do, write through Tauri's app-data dir, not `localStorage` long-term.
 - **Steamworks SDK** (achievements, cloud save, leaderboards) integrates via a Tauri plugin or a small Rust crate. Post-prototype concern.
 
-## 8. Guardrails for Claude
+## 9. Guardrails for Claude
 
 When working in this repo:
 
@@ -139,6 +149,7 @@ When working in this repo:
 - **Don't add new enemy types without owner approval.** The approved bestiary is black panther, sloth bear, and Jungle-Book-style primate. Snakes, tigers, monkeys, etc. require explicit go-ahead.
 - **Family NPCs are sacrosanct in family levels.** Their death = game over. Don't add behavior that undermines the "protect them" tension (no auto-fight, no respawn, no gimmicks).
 - **Cultural representation matters.** The protagonist and family are Adivasi/tribal-Indian. Avoid feathered-headdress imagery, generic "tribal" stereotypes, or *Jungle Book* character likenesses. Keep visual cues minimal, dignified, and abstract.
+- **No written dialogue or VO.** Story is told through visuals, mechanics, and level design (§2). Cut-scenes are dialogueless; "…" text bubbles are the only allowed copy. Don't draft scripts, captions, or voice-line stand-ins.
 
 **Technical**
 - **Don't add dependencies** without asking. The stack is React + TS + Vite + Tailwind + lucide-react + nothing else.
@@ -146,7 +157,7 @@ When working in this repo:
 - **Don't break the cardinal-LOS contract.** No diagonal shooting, no manual aim, no targeted fire by clicking, unless explicitly approved.
 - **No ranged enemy attacks.** Beasts threaten by contact only. A ranged enemy would invalidate the "where you stand" pillar; if asked to add one, push back unless the owner explicitly approves.
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
-- **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 7). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
+- **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 8). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
 - **Don't add real sprite assets.** Procedural rendering is the chosen art direction. Improve `Renderer.ts` instead.
 - **Prefer extending existing modules** over adding new ones. The 10 files in `src/game/` cover the surface area; new concerns should fit in one of them.
 - **Pull magic numbers into named constants** when you touch them. Especially `800`, `600`, `32`, `16`, `20`, `300`, `400`, `500`. Use `src/game/constants.ts`.
@@ -154,7 +165,7 @@ When working in this repo:
 - **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc -p tsconfig.app.json --noEmit` must be clean.
 - **Use `Date.now()` only for wall-clock things.** Game timing flows from the `gameLoop` `currentTime` (a `performance.now()` value passed by `requestAnimationFrame`). Mixing the two causes pause/resume bugs.
 
-## 9. File map
+## 10. File map
 
 ```
 src/
