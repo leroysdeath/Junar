@@ -54,7 +54,15 @@ Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal
 - Level 10 (final boss): all three family members are present and fight alongside the player as active combatants. Any family member's death = game over.
 - An earlier-level intro and passive-escort phase may come after testing — not in current scope.
 
-The "any family death = game over" rule on Level 10 is the central tension of the boss fight.
+The "any family death = game over" rule on Level 10 is the central tension of the boss fight (prototype shape).
+
+**Future direction — multiple-endings system (not in current scope; do not implement without owner sign-off).** The prototype's any-family-death-ends-the-run rule is the simplest shape; the eventual target is a multi-ending system. Sketch:
+- A **hut-attack event** earlier in the run can destroy the family's home. If destroyed, the family never appears in subsequent levels (one ending branch).
+- If the hut survives, the family appears on the level(s) the design calls for.
+- Once family members are present in a level, they can die individually. Each dead family member does not appear in subsequent levels.
+- Different endings flow from how many family members survive to the boss arena.
+
+Until that system is designed and approved, stay on the prototype rule. Don't structure family code in a way that locks the branches out (e.g., hardcoding "family always survives", or coupling family identity to a single boolean). See the `protagonist-and-family-tone` skill.
 
 **Auto-fire** (`Game.ts`) — cooldown 500 ms, range 300 px, **cardinal directions only**. Picks the nearest cardinal-aligned enemy with clear LOS. Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit.
 
@@ -99,6 +107,7 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 - New enemy types beyond the three approved beasts. Ask first.
 - Ranged enemy attacks. Touch-only is the design.
 - A passive family-escort intro on a mid-game level. Possible future phase, not now.
+- Multiple-endings system (hut-attack branch, family-survival carryover into later levels). Documented direction; do not implement without owner sign-off. See §4 and the `protagonist-and-family-tone` skill.
 - Sprite-sheet asset pipeline (staying procedural — see Pillars).
 - New input methods (gamepad, touch, mouse-aim).
 - Saves, accounts, leaderboards.
