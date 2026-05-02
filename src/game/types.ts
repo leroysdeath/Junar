@@ -40,4 +40,6 @@ export interface LevelData {
   walls: boolean[][];
   playerSpawn: Vector2;
   enemySpawns: EnemySpawn[];
+  npcPositions: Vector2[];
+  hutPositions: Vector2[];
 }

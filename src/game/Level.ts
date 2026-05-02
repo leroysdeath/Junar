@@ -37,6 +37,14 @@ export class Level {
     return this.data.walls;
   }
 
+  getNpcPositions(): Vector2[] {
+    return this.data.npcPositions.map(pos => ({ ...pos }));
+  }
+
+  getHutPositions(): Vector2[] {
+    return this.data.hutPositions.map(pos => ({ ...pos }));
+  }
+
   // Calculate the exact center coordinates of the map
   getMapCenter(): Vector2 {
     // Calculate center in grid coordinates
@@ -120,12 +128,13 @@ export class Level {
     }
     
     // Fallback: try predefined safe zones (corners and center areas)
+    // Coordinates assume the 29×17 grid at TILE_SIZE=32 (canvas 928×544).
     const fallbackPositions = [
       { x: 64, y: 64 },     // Top-left safe area
-      { x: 64, y: 544 },    // Bottom-left safe area
-      { x: 704, y: 64 },    // Top-right safe area
-      { x: 704, y: 544 },   // Bottom-right safe area
-      { x: 384, y: 288 }    // Center area
+      { x: 64, y: 480 },    // Bottom-left safe area
+      { x: 832, y: 64 },    // Top-right safe area
+      { x: 832, y: 480 },   // Bottom-right safe area
+      { x: 448, y: 256 }    // Map center
     ];
     
     for (const fallback of fallbackPositions) {

@@ -169,6 +169,56 @@ export class Renderer {
     this.ctx.fillRect(pos.x + 15, pos.y + 12, 2, 2);
   }
 
+  // Placeholder family-NPC marker. Translucent so it reads as "not final art."
+  // Visual shorthand for a generic family member; behavior is unwired.
+  renderNpcs(positions: Vector2[]) {
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.7;
+    positions.forEach(pos => {
+      // Tunic
+      this.ctx.fillStyle = '#E8D7B0';
+      this.ctx.fillRect(pos.x + 9, pos.y + 14, 14, 14);
+      // Head
+      this.ctx.fillStyle = '#5D4037';
+      this.ctx.fillRect(pos.x + 11, pos.y + 6, 10, 10);
+      // Hair
+      this.ctx.fillStyle = '#1A1A1A';
+      this.ctx.fillRect(pos.x + 11, pos.y + 4, 10, 3);
+      // Placeholder marker dot (signals "not final")
+      this.ctx.fillStyle = '#FF6F00';
+      this.ctx.fillRect(pos.x + 14, pos.y + 1, 4, 2);
+    });
+    this.ctx.restore();
+  }
+
+  // Placeholder hut marker. Translucent peaked-roof shape.
+  renderHuts(positions: Vector2[]) {
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.7;
+    positions.forEach(pos => {
+      // Hut base (woven walls)
+      this.ctx.fillStyle = '#8B6F47';
+      this.ctx.fillRect(pos.x + 4, pos.y + 14, 24, 16);
+      // Base highlight
+      this.ctx.fillStyle = '#A0825A';
+      this.ctx.fillRect(pos.x + 6, pos.y + 16, 20, 2);
+      // Door
+      this.ctx.fillStyle = '#3E2723';
+      this.ctx.fillRect(pos.x + 13, pos.y + 22, 6, 8);
+      // Thatched roof (triangle approximated with trapezoid stack)
+      this.ctx.fillStyle = '#5D4037';
+      this.ctx.fillRect(pos.x + 2, pos.y + 12, 28, 2);
+      this.ctx.fillRect(pos.x + 4, pos.y + 10, 24, 2);
+      this.ctx.fillRect(pos.x + 6, pos.y + 8, 20, 2);
+      this.ctx.fillRect(pos.x + 9, pos.y + 6, 14, 2);
+      this.ctx.fillRect(pos.x + 12, pos.y + 4, 8, 2);
+      // Placeholder marker dot
+      this.ctx.fillStyle = '#FF6F00';
+      this.ctx.fillRect(pos.x + 14, pos.y + 1, 4, 2);
+    });
+    this.ctx.restore();
+  }
+
   renderArrows(arrows: Array<{ pos: Vector2; dir: Vector2; id: number }>) {
     arrows.forEach(arrow => {
       const arrowLength = 24; // Slightly smaller for cardinal directions

@@ -722,12 +722,14 @@ export class Game {
     // This ensures we can see the game even in menu state for debugging
     if (this.level && this.player) {
       this.renderer.renderLevel(this.level);
+      this.renderer.renderHuts(this.level.getHutPositions());
+      this.renderer.renderNpcs(this.level.getNpcPositions());
       this.renderer.renderPlayer(this.player);
-      
+
       if (this.enemies.length > 0) {
         this.renderer.renderEnemies(this.enemies);
       }
-      
+
       if (this.arrows.length > 0) {
         this.renderer.renderArrows(this.arrows);
       }

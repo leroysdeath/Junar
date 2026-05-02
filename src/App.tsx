@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState } from './game/types';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from './game/constants';
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -59,8 +60,8 @@ function App() {
       <div className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden">
         <canvas
           ref={canvasRef}
-          width={800}
-          height={600}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
           className="block"
           style={{ imageRendering: 'pixelated' }}
         />

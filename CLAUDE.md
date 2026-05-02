@@ -77,7 +77,7 @@ Until that system is designed and approved, stay on the prototype rule. Don't st
 
 **Cardinal LOS** (`Game.ts`) — steps along the cardinal ray every half-tile, returns true if any enemy center is within half a tile *perpendicular* to the ray before a wall blocks. (Tightened from a loose 20 px circle in commit `e8a224b`.)
 
-**Levels** (`src/game/levels.ts`) — hardcoded ASCII grids, 25×19 tiles at 32 px = 800×600 px. `#` = wall (tree), `.` = floor (dirt). Enemy count scales with level: `min(3 + level_index * 2, 25)`. Level 10 is an empty arena reserved for the boss.
+**Levels** (`src/game/levels.ts`) — hardcoded ASCII grids, 29×17 tiles at 32 px = 928×544 px. Tile chars: `#` = wall (tree), `.` = floor (dirt), `N` = family-NPC placeholder (renderer draws translucent marker; behavior unwired), `H` = hut placeholder (translucent marker; mechanics deferred to the multiple-endings system per §4). `N` and `H` tiles count as floor for collision/pathfinding. Enemy count scales with level: `min(3 + level_index * 2, 25)` and is capped by `validPositions.length` for narrow corridors. Level 10 is an empty arena reserved for the boss.
 
 **Scoring** — +10 per kill, +100 × (level_index + 1) on level complete.
 
@@ -145,7 +145,7 @@ Until that system is designed and approved, stay on the prototype rule. Don't st
 
 **Things to stay aware of so we don't paint into corners:**
 - **No browser-only APIs without a Tauri equivalent.** Web Audio, Canvas 2D, `requestAnimationFrame`, keyboard events — all fine. Storage, file system, fullscreen, and gamepad need Tauri-aware patterns when we get to them. Avoid service workers, Web Bluetooth, browser DRM, and pop-up windows.
-- **Canvas is fixed 800×600.** Steam users expect at least a fullscreen toggle with letterboxed scaling. Plan to address before any Steam build, not urgent for prototyping.
+- **Canvas is fixed 928×544** (≈17:10 aspect; chosen for an odd column count of 29 so every level has a true center column at col 14). Scales near 1080p at ×2 (1856×1088 — 32 px horizontal black bars and 8 px vertical bars on a 16:9 1080p monitor). Plan to add a fullscreen toggle with letterboxed scaling before any Steam build, not urgent for prototyping.
 - **Saves don't exist yet.** When they do, write through Tauri's app-data dir, not `localStorage` long-term.
 - **Steamworks SDK** (achievements, cloud save, leaderboards) integrates via a Tauri plugin or a small Rust crate. Post-prototype concern.
 
@@ -169,7 +169,7 @@ When working in this repo:
 - **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 8). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
 - **Don't add real sprite assets.** Procedural rendering is the chosen art direction. Improve `Renderer.ts` instead.
 - **Prefer extending existing modules** over adding new ones. The 10 files in `src/game/` cover the surface area; new concerns should fit in one of them.
-- **Pull magic numbers into named constants** when you touch them. Especially `800`, `600`, `32`, `16`, `20`, `300`, `400`, `500`. Use `src/game/constants.ts`.
+- **Pull magic numbers into named constants** when you touch them. Especially `928`, `544`, `32`, `16`, `20`, `300`, `400`, `500`. Use `src/game/constants.ts`.
 - **Always clean up listeners and timers.** The Bolt.new scaffold leaked both — those are now fixed. Anything new that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
 - **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc -p tsconfig.app.json --noEmit` must be clean.
 - **Use `Date.now()` only for wall-clock things.** Game timing flows from the `gameLoop` `currentTime` (a `performance.now()` value passed by `requestAnimationFrame`). Mixing the two causes pause/resume bugs.

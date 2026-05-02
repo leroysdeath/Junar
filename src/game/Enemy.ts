@@ -1,5 +1,6 @@
 import { Vector2, EnemyType } from './types';
 import { Level } from './Level';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 
 export class Enemy {
   private position: Vector2;
@@ -127,7 +128,7 @@ export class Enemy {
       const gridX = Math.floor(newX / 32);
       const gridY = Math.floor(newY / 32);
       
-      if (!level.isWall(gridX, gridY) && newX >= 0 && newX < 800 && newY >= 0 && newY < 600) {
+      if (!level.isWall(gridX, gridY) && newX >= 0 && newX < CANVAS_WIDTH && newY >= 0 && newY < CANVAS_HEIGHT) {
         const distanceToPlayer = Math.sqrt(
           Math.pow(newX - playerPosition.x, 2) + 
           Math.pow(newY - playerPosition.y, 2)
