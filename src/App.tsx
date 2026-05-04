@@ -2,7 +2,29 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState } from './game/types';
+import { Direction } from './game/InputManager';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './game/constants';
+import { MobileControls } from './MobileControls';
+
+// Detect touch-primary devices via the (pointer: coarse) media query.
+// Matches phones and tablets; spares desktop touchscreens (which have a
+// fine pointer alongside their touch screen).
+function useIsMobile(): boolean {
+  const query = '(pointer: coarse)';
+  const get = () =>
+    typeof window !== 'undefined' && window.matchMedia(query).matches;
+  const [isMobile, setIsMobile] = useState<boolean>(get);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  return isMobile;
+}
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -13,6 +35,14 @@ function App() {
   const [enemiesRemaining, setEnemiesRemaining] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
+  const isMobile = useIsMobile();
+
+  const handleMobilePress = useCallback((dir: Direction) => {
+    gameRef.current?.setVirtualInput(dir, true);
+  }, []);
+  const handleMobileRelease = useCallback((dir: Direction) => {
+    gameRef.current?.setVirtualInput(dir, false);
+  }, []);
 
   const initGame = useCallback(() => {
     if (canvasRef.current && !gameRef.current) {
@@ -56,13 +86,13 @@ function App() {
   }, [initGame]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex items-center justify-center p-4">
-      <div className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4">
+      <div className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden w-full max-w-[936px]">
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="block"
+          className="block w-full h-auto"
           style={{ imageRendering: 'pixelated' }}
         />
         
@@ -127,7 +157,10 @@ function App() {
                 <div className="mt-6 bg-black/80 p-6 rounded-lg border border-amber-500 text-left">
                   <h3 className="text-amber-400 font-bold mb-3 text-center">Instructions</h3>
                   <ul className="text-sm space-y-2 text-amber-100">
-                    <li><strong>Movement:</strong> Use WASD or Arrow Keys</li>
+                    <li>
+                      <strong>Movement:</strong>{' '}
+                      {isMobile ? 'Use the on-screen D-pad' : 'Use WASD or Arrow Keys'}
+                    </li>
                     <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
                     <li><strong>Objective:</strong> Eliminate all enemies to advance</li>
                     <li><strong>Strategy:</strong> Position for clear line of sight</li>
@@ -217,6 +250,13 @@ function App() {
           </div>
         )}
       </div>
+
+      {isMobile && gameState === 'playing' && (
+        <MobileControls
+          onPress={handleMobilePress}
+          onRelease={handleMobileRelease}
+        />
+      )}
     </div>
   );
 }

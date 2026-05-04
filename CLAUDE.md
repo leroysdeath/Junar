@@ -118,7 +118,7 @@ Until that system is designed and approved, stay on the prototype rule. Don't st
 - A passive family-escort intro on a mid-game level. Possible future phase, not now.
 - Multiple-endings system (hut-attack branch, family-survival carryover into later levels). Documented direction; do not implement without owner sign-off. See §4 and the `protagonist-and-family-tone` skill.
 - Sprite-sheet asset pipeline (staying procedural — see Pillars).
-- New input methods (gamepad, touch, mouse-aim).
+- New input methods (gamepad, mouse-aim). Touch input is now supported for mobile testing — phones and tablets get an on-screen D-pad via `src/MobileControls.tsx`. Detection uses `(pointer: coarse)` so desktop touchscreens stay on keyboard. Don't add additional input methods without owner sign-off.
 - Saves, accounts, leaderboards.
 - Multiplayer, online features.
 - Migration to Phaser, Godot, or any other engine.
@@ -178,7 +178,8 @@ When working in this repo:
 
 ```
 src/
-├── App.tsx                       React shell: canvas + HUD overlays + menu/game-over/victory/levelComplete
+├── App.tsx                       React shell: canvas + HUD overlays + menu/game-over/victory/levelComplete; useIsMobile hook
+├── MobileControls.tsx            On-screen D-pad rendered when (pointer: coarse) matches; pointer-capture press/release tracking
 ├── main.tsx                      React entry point
 ├── index.css                     Global styles (Tailwind)
 └── game/                         All game logic — pure TS, no React

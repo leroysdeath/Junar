@@ -1,7 +1,7 @@
 import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
-import { InputManager } from './InputManager';
+import { InputManager, Direction } from './InputManager';
 import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
@@ -787,6 +787,12 @@ export class Game {
 
   setSoundEnabled(enabled: boolean) {
     this.soundManager.setEnabled(enabled);
+  }
+
+  // Bridge for on-screen mobile controls. Touch handlers in App.tsx call
+  // this on pointer down/up to drive movement without keyboard events.
+  setVirtualInput(direction: Direction, pressed: boolean) {
+    this.inputManager.setVirtualInput(direction, pressed);
   }
 
   cleanup() {
