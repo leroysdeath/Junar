@@ -309,12 +309,13 @@ export class Game {
       }
     }
 
-    // Update line of sight detection
-    this.hasLineOfSight = this.checkLineOfSightToEnemies();
-    
-    // Auto-fire arrows
-    if (currentTime - this.lastArrowTime >= this.arrowCooldown && this.hasLineOfSight) {
-      this.fireArrow();
+    // Pick the nearest enemy with clear LOS at any angle. Drives both
+    // auto-fire targeting and the on-screen LOS indicator.
+    const visibleTarget = this.findNearestVisibleEnemy();
+    this.hasLineOfSight = visibleTarget !== null;
+
+    if (visibleTarget && currentTime - this.lastArrowTime >= this.arrowCooldown) {
+      this.fireArrow(visibleTarget);
       this.lastArrowTime = currentTime;
     }
     
@@ -353,37 +354,42 @@ export class Game {
     }
   }
 
-  private checkLineOfSightToEnemies(): boolean {
-    if (this.enemies.length === 0) return false;
-    
+  // Scan all enemies and return the nearest one within MAX_DETECTION_RANGE
+  // whose center is reachable from the player center by an unobstructed
+  // raycast. Single source of truth for both auto-fire targeting and the
+  // on-screen LOS indicator.
+  private findNearestVisibleEnemy(): Enemy | null {
+    if (this.enemies.length === 0) return null;
+
     const playerPos = this.player.getPosition();
-    const playerCenterX = playerPos.x + 16; // Player center
-    const playerCenterY = playerPos.y + 16;
-    
-    // Check line of sight to each enemy
+    const playerCenter: Vector2 = {
+      x: playerPos.x + TILE_SIZE / 2,
+      y: playerPos.y + TILE_SIZE / 2,
+    };
+
+    let nearest: Enemy | null = null;
+    let nearestDistance = Infinity;
+
     for (const enemy of this.enemies) {
       const enemyPos = enemy.getPosition();
-      const enemyCenterX = enemyPos.x + 16; // Enemy center
-      const enemyCenterY = enemyPos.y + 16;
-      
-      // Calculate distance to enemy
-      const dx = enemyCenterX - playerCenterX;
-      const dy = enemyCenterY - playerCenterY;
+      const enemyCenter: Vector2 = {
+        x: enemyPos.x + TILE_SIZE / 2,
+        y: enemyPos.y + TILE_SIZE / 2,
+      };
+
+      const dx = enemyCenter.x - playerCenter.x;
+      const dy = enemyCenter.y - playerCenter.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Skip if enemy is beyond detection range
+
       if (distance > this.maxDetectionRange) continue;
-      
-      // Check if there's a clear line of sight
-      if (this.hasDirectLineOfSight(
-        { x: playerCenterX, y: playerCenterY },
-        { x: enemyCenterX, y: enemyCenterY }
-      )) {
-        return true; // Found at least one enemy with clear line of sight
-      }
+      if (distance >= nearestDistance) continue;
+      if (!this.hasDirectLineOfSight(playerCenter, enemyCenter)) continue;
+
+      nearestDistance = distance;
+      nearest = enemy;
     }
-    
-    return false; // No enemies in line of sight
+
+    return nearest;
   }
 
   private hasDirectLineOfSight(start: Vector2, end: Vector2): boolean {
@@ -416,164 +422,30 @@ export class Game {
     return true; // Clear line of sight
   }
 
-  private fireArrow() {
-    if (this.enemies.length === 0 || !this.hasLineOfSight) return;
-
-    // Find nearest enemy with line of sight along one of 8 lanes
-    // (4 cardinals + 4 diagonals).
+  private fireArrow(target: Enemy) {
     const playerPos = this.player.getPosition();
-    const playerCenterX = playerPos.x + 16;
-    const playerCenterY = playerPos.y + 16;
+    const playerCenterX = playerPos.x + TILE_SIZE / 2;
+    const playerCenterY = playerPos.y + TILE_SIZE / 2;
 
-    let nearestDistance = Infinity;
-    let bestDirection: Vector2 | null = null;
+    const enemyPos = target.getPosition();
+    const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
+    const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
 
-    for (const enemy of this.enemies) {
-      const enemyPos = enemy.getPosition();
-      const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
-      const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
+    const dx = enemyCenterX - playerCenterX;
+    const dy = enemyCenterY - playerCenterY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance === 0) return;
 
-      const dx = enemyCenterX - playerCenterX;
-      const dy = enemyCenterY - playerCenterY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist > this.maxDetectionRange) continue;
-
-      const direction = this.getOctaDirection(dx, dy);
-      if (!direction) continue;
-
-      if (
-        this.findEnemyOnRay(
-          { x: playerCenterX, y: playerCenterY },
-          direction,
-        ) === null
-      ) {
-        continue;
-      }
-
-      if (dist < nearestDistance) {
-        nearestDistance = dist;
-        bestDirection = direction;
-      }
-    }
-
-    if (!bestDirection) return;
+    const dir: Vector2 = { x: dx / distance, y: dy / distance };
 
     this.arrows.push({
       pos: { x: playerCenterX, y: playerCenterY },
-      dir: { x: bestDirection.x, y: bestDirection.y },
-      id: this.nextArrowId++
+      dir,
+      id: this.nextArrowId++,
     });
 
-    this.logger.log('fire', 'arrow', { dx: bestDirection.x, dy: bestDirection.y });
+    this.logger.log('fire', 'arrow', { dx: round2(dir.x), dy: round2(dir.y) });
     this.soundManager.play('arrow');
-  }
-
-  // Snap (dx, dy) to one of 8 unit vectors using 45°-wide sectors.
-  // Cardinals come out as exact {±1, 0} / {0, ±1}; diagonals as
-  // {±√½, ±√½} ≈ {±0.7071, ±0.7071}.
-  private getOctaDirection(dx: number, dy: number): Vector2 | null {
-    if (dx === 0 && dy === 0) return null;
-    const angle = Math.atan2(dy, dx);
-    const sector = Math.round(angle / (Math.PI / 4));
-    const snapped = sector * (Math.PI / 4);
-    const round = (v: number) => (Math.abs(v) < 1e-9 ? 0 : v);
-    return { x: round(Math.cos(snapped)), y: round(Math.sin(snapped)) };
-  }
-
-  // Walk a ray from `start` in `direction`, returning the first enemy whose
-  // center sits on the ray, or null if a wall blocks the ray first.
-  //
-  // Cardinal direction: uses the original axis-aligned corridor — wall scan
-  // covers a 32-wide perpendicular band so a tree in the adjacent column
-  // can't sit between the player and an enemy on the same column.
-  //
-  // Diagonal direction: walks tile-by-tile along the diagonal. The corner-cut
-  // guard prevents shots from squeezing through the corner where two adjacent
-  // walls meet (i.e. when both axes change tiles in one step, the ray is
-  // blocked if either elbow tile is a wall — both is the strict version, but
-  // either is the correct game-feel choice since the corner is a tree).
-  private findEnemyOnRay(start: Vector2, direction: Vector2): Enemy | null {
-    const stepSize = TILE_SIZE / 2;
-    const maxSteps = Math.floor(this.maxDetectionRange / stepSize);
-    const perpTolerance = TILE_SIZE / 2;
-    const isDiagonal = direction.x !== 0 && direction.y !== 0;
-
-    let prevTileX = Math.floor(start.x / TILE_SIZE);
-    let prevTileY = Math.floor(start.y / TILE_SIZE);
-
-    for (let step = 1; step <= maxSteps; step++) {
-      const checkX = start.x + direction.x * stepSize * step;
-      const checkY = start.y + direction.y * stepSize * step;
-
-      if (checkX < 0 || checkX >= CANVAS_WIDTH || checkY < 0 || checkY >= CANVAS_HEIGHT) {
-        break;
-      }
-
-      if (isDiagonal) {
-        const tileX = Math.floor(checkX / TILE_SIZE);
-        const tileY = Math.floor(checkY / TILE_SIZE);
-
-        if (this.level.isWall(tileX, tileY)) {
-          return null;
-        }
-
-        // Corner-cut guard: when both axes advanced into a new tile, the
-        // ray crossed a tile corner. If either elbow is a wall, treat the
-        // diagonal as blocked (you can't shoot through a tree's corner).
-        if (tileX !== prevTileX && tileY !== prevTileY) {
-          if (
-            this.level.isWall(prevTileX, tileY) ||
-            this.level.isWall(tileX, prevTileY)
-          ) {
-            return null;
-          }
-        }
-
-        prevTileX = tileX;
-        prevTileY = tileY;
-      } else {
-        // Cardinal corridor — keep the original axis-aligned wall scan.
-        const xMin = direction.x !== 0 ? checkX : checkX - perpTolerance;
-        const xMax = direction.x !== 0 ? checkX : checkX + perpTolerance - 1;
-        const yMin = direction.y !== 0 ? checkY : checkY - perpTolerance;
-        const yMax = direction.y !== 0 ? checkY : checkY + perpTolerance - 1;
-        const gxMin = Math.floor(xMin / TILE_SIZE);
-        const gxMax = Math.floor(xMax / TILE_SIZE);
-        const gyMin = Math.floor(yMin / TILE_SIZE);
-        const gyMax = Math.floor(yMax / TILE_SIZE);
-
-        for (let gx = gxMin; gx <= gxMax; gx++) {
-          for (let gy = gyMin; gy <= gyMax; gy++) {
-            if (this.level.isWall(gx, gy)) {
-              return null;
-            }
-          }
-        }
-      }
-
-      // Enemy hit: project (enemyCenter - checkPoint) onto the ray's
-      // perpendicular and parallel axes. Hit when off-axis ≤ ±perpTolerance
-      // AND on-axis ≤ ±half-tile (ensures the step has reached it).
-      for (const enemy of this.enemies) {
-        const enemyPos = enemy.getPosition();
-        const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
-        const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
-
-        const ex = enemyCenterX - checkX;
-        const ey = enemyCenterY - checkY;
-        // Perpendicular component = |ex * dirY - ey * dirX| (rejection).
-        // Parallel component     = |ex * dirX + ey * dirY| (projection).
-        const offAxisDelta = Math.abs(ex * direction.y - ey * direction.x);
-        const onAxisDelta = Math.abs(ex * direction.x + ey * direction.y);
-
-        if (offAxisDelta <= perpTolerance && onAxisDelta <= TILE_SIZE / 2) {
-          return enemy;
-        }
-      }
-    }
-
-    return null;
   }
 
   private checkCollisions() {
@@ -581,9 +453,8 @@ export class Game {
     const playerCenterX = playerPos.x + 16;
     const playerCenterY = playerPos.y + 16;
 
-    // Pass 1: AABB-overlap kill. Enemies that have moved on top of the
-    // player don't fit into the cardinal-direction model, so handle them
-    // first. Returns immediately on hit so we don't double-report.
+    // Pass 1: AABB-overlap kill. Contact-only enemies on top of the player
+    // end the run immediately; return on hit so we don't double-report.
     for (const enemy of this.enemies) {
       const enemyPos = enemy.getPosition();
       const dx = enemyPos.x + TILE_SIZE / 2 - playerCenterX;

@@ -6,7 +6,7 @@ This file is the source of truth for the game's vision, mechanics, and rules of 
 
 ## 1. Vision
 
-The player is a male indigenous (Adivasi-coded) archer surviving with his family in the Indian jungle. He auto-fires arrows at the nearest enemy in cardinal line of sight while hordes of crazed beasts — panthers, bears, primates, and others — pour through narrow paths cut between dense, untraversible trees. The family — wife, son, daughter — once lived in harmony with the jungle; now something is corrupting it. As the player advances, his family joins him as passive escorts, and protecting them becomes the central tension. The corruption traces back to a monstrous plant deep in the jungle that exudes black goo and infects the wildlife. In the final battle, the family stands and fights with the player to destroy the source and free the jungle.
+The player is a male indigenous (Adivasi-coded) archer surviving with his family in the Indian jungle. He auto-fires arrows at the nearest enemy in line of sight (any angle, walls block) while hordes of crazed beasts — panthers, bears, primates, and others — pour through narrow paths cut between dense, untraversible trees. The family — wife, son, daughter — once lived in harmony with the jungle; now something is corrupting it. As the player advances, his family joins him as passive escorts, and protecting them becomes the central tension. The corruption traces back to a monstrous plant deep in the jungle that exudes black goo and infects the wildlife. In the final battle, the family stands and fights with the player to destroy the source and free the jungle.
 
 **Title:** "Jungle X" is the final release title. The entry screen currently shows **"Jungle Archer"** as the pre-release placeholder; swap to "Jungle X" closer to launch. Repo codename remains "Junar". Other in-engine menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) are placeholder and will be replaced in a dedicated copy pass.
 
@@ -23,7 +23,7 @@ What "good" looks like for the prototype, above and beyond the pillars. Pillars 
 
 Every change must serve at least one of these. If a proposed change weakens a pillar, push back before implementing.
 
-- **Tactical positioning over twitch.** The auto-fire-on-cardinal-LOS rule means combat is about *where you stand*, not *when you click*. No manual fire, click-to-aim, or diagonal shots without explicit owner approval.
+- **Tactical positioning over twitch.** Auto-fire targets the nearest enemy with a clear sightline at any angle (full 360°). Combat is still about *where you stand*, not *when you click* — walls block raycasts, so positioning around chokepoints, corners, and corridors is what creates and denies shots. No manual fire or click-to-aim without explicit owner approval.
 - **Death is fast and fair — and weighted when family is present.** One enemy hit on the player ends solo levels; in family levels, any family member's death also ends the run. Deaths must always feel like the player's mistake.
 - **The corruption is the antagonist, not the beasts.** The beasts are victims of an infection. Tone is tragic, not bloodthirsty. The boss — a monstrous plant exuding black goo — is the real enemy.
 - **The jungle traps and channels.** Walls are dense trees; the playable space is narrow paths and small clearings. Power comes from reading the maze and forcing chokepoints.
@@ -33,8 +33,8 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 ## 4. Core loop (30 seconds of play)
 
 1. Spawn into a maze; enemies appear from the edges.
-2. Move (WASD/arrows) to line up an enemy in a cardinal direction.
-3. Arrows auto-fire every 500ms whenever a cardinal-LOS target exists within 300px.
+2. Move (WASD/arrows) to expose targets through corridor gaps and to break LOS on threats you can't safely engage.
+3. Arrows auto-fire every 500ms at the nearest enemy within 450px with an unobstructed center-to-center raycast (any angle).
 4. Avoid contact — every enemy is melee, and any AABB overlap with the player is instant death.
 5. Clear all enemies → 2-second "Level Complete" → next level.
 6. Survive Levels 1–9 (mazes scaling in density), then Level 10 (open arena, boss intended but unimplemented).
@@ -43,7 +43,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 **Controls** — WASD or arrow keys (movement only). Click canvas from menu to start. Sound toggle is a UI button.
 
-**Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no stamina; one hit kills. Death is **AABB-overlap only** — an enemy must physically touch the player to kill them. Cardinal LOS is the *player's* auto-fire mechanic, not an enemy attack.
+**Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no stamina; one hit kills. Death is **AABB-overlap only** — an enemy must physically touch the player to kill them. The 360° LOS check is the *player's* auto-fire mechanic, not an enemy attack.
 
 **Enemies** (`src/game/Enemy.ts`) — three approved types, fixed speeds. All are infected jungle wildlife, not generic monsters:
 | Type    | Speed (px/s) | In-world identity |
@@ -56,7 +56,7 @@ Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal
 
 **No new enemy type may be added without explicit owner approval.** Snakes, tigers, monkeys, crocodiles, wild dogs, etc. are *unapproved*; ask before implementing.
 
-**No ranged attacks.** Every beast threatens by contact only — there are no projectile-throwing or AoE infected variants. Don't add a ranged enemy without explicit owner approval; it would change the cardinal-LOS contract from "where you stand" to "what you can react to."
+**No ranged attacks.** Every beast threatens by contact only — there are no projectile-throwing or AoE infected variants. Don't add a ranged enemy without explicit owner approval; it would change the LOS-based combat contract from "where you stand" to "what you can react to."
 
 **Family NPCs** (planned, not yet implemented) — wife, son, daughter. Current scope:
 - Levels 1–9: solo, no family.
@@ -73,9 +73,9 @@ The "any family death = game over" rule on Level 10 is the central tension of th
 
 Until that system is designed and approved, stay on the prototype rule. Don't structure family code in a way that locks the branches out (e.g., hardcoding "family always survives", or coupling family identity to a single boolean). See the `protagonist-and-family-tone` skill.
 
-**Auto-fire** (`Game.ts`) — cooldown 500 ms, range 300 px, **cardinal directions only**. Picks the nearest cardinal-aligned enemy with clear LOS. Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit.
+**Auto-fire** (`Game.ts`) — cooldown 500 ms, range 450 px, **full 360° at any angle**. Each frame, picks the nearest enemy within range whose center is reachable from the player center by an unobstructed wall raycast; fires an arrow on the raw unit vector to that enemy (no angle snapping). Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit.
 
-**Cardinal LOS** (`Game.ts`) — steps along the cardinal ray every half-tile, returns true if any enemy center is within half a tile *perpendicular* to the ray before a wall blocks. (Tightened from a loose 20 px circle in commit `e8a224b`.)
+**Line of sight** (`Game.ts` → `hasDirectLineOfSight`) — generic point-to-point raycast from player center to enemy center, sampled every 8 px; LOS is blocked if any sampled tile is a wall. Center-to-center is intentional: an enemy peeking out from behind a wall column doesn't qualify until the player steps to clear the line.
 
 **Levels** (`src/game/levels.ts`) — hardcoded ASCII grids, 29×17 tiles at 32 px = 928×544 px. Tile chars: `#` = wall (tree), `.` = floor (dirt), `N` = family-NPC placeholder (renderer draws translucent marker; behavior unwired), `H` = hut placeholder (translucent marker; mechanics deferred to the multiple-endings system per §4). `N` and `H` tiles count as floor for collision/pathfinding. Enemy count scales with level: `min(3 + level_index * 2, 25)` and is capped by `validPositions.length` for narrow corridors. Level 10 is an empty arena reserved for the boss.
 
@@ -163,13 +163,13 @@ When working in this repo:
 **Technical**
 - **Don't add dependencies** without asking. The stack is React + TS + Vite + Tailwind + lucide-react + nothing else.
 - **Don't introduce a state library.** UI state stays in React; game state stays in plain TS classes mutated in place. The callback bridge in `App.tsx` is the contract — extend it, don't replace it.
-- **Don't break the cardinal-LOS contract.** No diagonal shooting, no manual aim, no targeted fire by clicking, unless explicitly approved.
+- **Don't break the 360-LOS auto-fire contract.** Auto-fire targets the nearest enemy with clear LOS at any angle, gated only by walls. No manual aim, click-to-fire, target-selection UI, lane snapping, or other input-driven targeting without explicit owner approval.
 - **No ranged enemy attacks.** Beasts threaten by contact only. A ranged enemy would invalidate the "where you stand" pillar; if asked to add one, push back unless the owner explicitly approves.
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
 - **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 8). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
 - **Don't add real sprite assets.** Procedural rendering is the chosen art direction. Improve `Renderer.ts` instead.
 - **Prefer extending existing modules** over adding new ones. The 10 files in `src/game/` cover the surface area; new concerns should fit in one of them.
-- **Pull magic numbers into named constants** when you touch them. Especially `928`, `544`, `32`, `16`, `20`, `300`, `400`, `500`. Use `src/game/constants.ts`.
+- **Pull magic numbers into named constants** when you touch them. Especially `928`, `544`, `32`, `16`, `400`, `450`, `500`. Use `src/game/constants.ts`.
 - **Always clean up listeners and timers.** The Bolt.new scaffold leaked both — those are now fixed. Anything new that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
 - **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc -p tsconfig.app.json --noEmit` must be clean.
 - **Use `Date.now()` only for wall-clock things.** Game timing flows from the `gameLoop` `currentTime` (a `performance.now()` value passed by `requestAnimationFrame`). Mixing the two causes pause/resume bugs.
