@@ -85,8 +85,112 @@ function App() {
     };
   }, [initGame]);
 
+  const renderHud = () => (
+    <div className="flex justify-between items-start text-white font-mono gap-2">
+      <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
+        <div className="flex items-center gap-2 text-sm">
+          <Target size={16} className="text-amber-400" />
+          <span>Level {currentLevel}/10</span>
+        </div>
+        <div className="text-xs text-amber-300 mt-1">
+          Enemies: {enemiesRemaining}
+        </div>
+      </div>
+
+      <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
+        <div className="flex items-center gap-2 text-sm">
+          <Trophy size={16} className="text-yellow-400" />
+          <span>Score: {score}</span>
+        </div>
+      </div>
+
+      <button
+        onClick={toggleSound}
+        className="bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors"
+      >
+        {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+      </button>
+    </div>
+  );
+
+  const renderGameOverContent = () => (
+    <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
+      <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">Game Over</h2>
+      <p className="text-lg text-amber-200 mb-2 drop-shadow">
+        You reached Level {currentLevel}
+      </p>
+      <p className="text-base text-amber-300 mb-8 drop-shadow">
+        Final Score: {score}
+      </p>
+
+      <div className="space-y-4">
+        <button
+          onClick={restartGame}
+          className="w-full bg-gradient-to-r from-red-600/90 to-red-700/90 hover:from-red-500 hover:to-red-600 text-white font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-red-500"
+        >
+          <RotateCcw size={24} />
+          Try Again
+        </button>
+
+        <button
+          onClick={() => setGameState('menu')}
+          className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+        >
+          Main Menu
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderVictoryContent = () => (
+    <div className="text-center text-white max-w-md mx-auto px-6">
+      <h2 className="text-4xl font-bold text-yellow-400 mb-4">Victory!</h2>
+      <p className="text-lg text-amber-200 mb-2">
+        You have conquered the jungle!
+      </p>
+      <p className="text-base text-yellow-300 mb-8">
+        Final Score: {score}
+      </p>
+
+      <div className="space-y-4">
+        <button
+          onClick={startGame}
+          className="w-full bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-black font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-yellow-500"
+        >
+          <Play size={24} />
+          Play Again
+        </button>
+
+        <button
+          onClick={() => setGameState('menu')}
+          className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+        >
+          Main Menu
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderLevelCompleteContent = () => (
+    <div className="text-center text-white">
+      <h2 className="text-3xl font-bold text-green-400 mb-4">Level Complete!</h2>
+      <p className="text-lg text-amber-200">
+        Preparing Level {currentLevel + 1}...
+      </p>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4">
+      {isMobile && gameState !== 'menu' && (
+        <div className="w-full max-w-[936px]">
+          {gameState === 'playing' && renderHud()}
+          {gameState === 'gameOver' && renderGameOverContent()}
+          {gameState === 'victory' && renderVictoryContent()}
+          {gameState === 'levelComplete' && renderLevelCompleteContent()}
+        </div>
+      )}
+
       <div className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden w-full max-w-[936px]">
         <canvas
           ref={canvasRef}
@@ -95,37 +199,15 @@ function App() {
           className="block w-full h-auto"
           style={{ imageRendering: 'pixelated' }}
         />
-        
-        {/* Game UI Overlay */}
-        {gameState === 'playing' && (
-          <div className="absolute top-4 left-4 right-4 flex justify-between items-start text-white font-mono">
-            <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-              <div className="flex items-center gap-2 text-sm">
-                <Target size={16} className="text-amber-400" />
-                <span>Level {currentLevel}/10</span>
-              </div>
-              <div className="text-xs text-amber-300 mt-1">
-                Enemies: {enemiesRemaining}
-              </div>
-            </div>
-            
-            <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-              <div className="flex items-center gap-2 text-sm">
-                <Trophy size={16} className="text-yellow-400" />
-                <span>Score: {score}</span>
-              </div>
-            </div>
-            
-            <button
-              onClick={toggleSound}
-              className="bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors"
-            >
-              {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-            </button>
+
+        {/* Game UI Overlay (desktop only — mobile renders above the canvas) */}
+        {!isMobile && gameState === 'playing' && (
+          <div className="absolute top-4 left-4 right-4">
+            {renderHud()}
           </div>
         )}
 
-        {/* Main Menu */}
+        {/* Main Menu (overlays canvas on both mobile and desktop) */}
         {gameState === 'menu' && (
           <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
             <div className="text-center text-white max-w-md mx-auto px-6">
@@ -135,7 +217,7 @@ function App() {
               <p className="text-lg text-amber-200 mb-8 font-mono">
                 Survive the Ancient Forest
               </p>
-              
+
               <div className="space-y-4">
                 <button
                   onClick={startGame}
@@ -144,7 +226,7 @@ function App() {
                   <Play size={24} />
                   Start Adventure
                 </button>
-                
+
                 <button
                   onClick={() => setShowInstructions(!showInstructions)}
                   className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
@@ -174,84 +256,29 @@ function App() {
           </div>
         )}
 
-        {/* Game Over Screen */}
-        {gameState === 'gameOver' && (
+        {/* Game Over Screen (desktop only — mobile renders above the canvas) */}
+        {!isMobile && gameState === 'gameOver' && (
           <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
-            <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
-              <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">Game Over</h2>
-              <p className="text-lg text-amber-200 mb-2 drop-shadow">
-                You reached Level {currentLevel}
-              </p>
-              <p className="text-base text-amber-300 mb-8 drop-shadow">
-                Final Score: {score}
-              </p>
-
-              <div className="space-y-4">
-                <button
-                  onClick={restartGame}
-                  className="w-full bg-gradient-to-r from-red-600/90 to-red-700/90 hover:from-red-500 hover:to-red-600 text-white font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-red-500"
-                >
-                  <RotateCcw size={24} />
-                  Try Again
-                </button>
-
-                <button
-                  onClick={() => setGameState('menu')}
-                  className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
-                >
-                  Main Menu
-                </button>
-              </div>
-            </div>
+            {renderGameOverContent()}
           </div>
         )}
 
-        {/* Victory Screen */}
-        {gameState === 'victory' && (
+        {/* Victory Screen (desktop only — mobile renders above the canvas) */}
+        {!isMobile && gameState === 'victory' && (
           <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
-            <div className="text-center text-white max-w-md mx-auto px-6">
-              <h2 className="text-4xl font-bold text-yellow-400 mb-4">Victory!</h2>
-              <p className="text-lg text-amber-200 mb-2">
-                You have conquered the jungle!
-              </p>
-              <p className="text-base text-yellow-300 mb-8">
-                Final Score: {score}
-              </p>
-              
-              <div className="space-y-4">
-                <button
-                  onClick={startGame}
-                  className="w-full bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-black font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-yellow-500"
-                >
-                  <Play size={24} />
-                  Play Again
-                </button>
-                
-                <button
-                  onClick={() => setGameState('menu')}
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
-                >
-                  Main Menu
-                </button>
-              </div>
-            </div>
+            {renderVictoryContent()}
           </div>
         )}
 
-        {/* Level Complete Transition */}
-        {gameState === 'levelComplete' && (
+        {/* Level Complete Transition (desktop only — mobile renders above the canvas) */}
+        {!isMobile && gameState === 'levelComplete' && (
           <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
-            <div className="text-center text-white">
-              <h2 className="text-3xl font-bold text-green-400 mb-4">Level Complete!</h2>
-              <p className="text-lg text-amber-200">
-                Preparing Level {currentLevel + 1}...
-              </p>
-            </div>
+            {renderLevelCompleteContent()}
           </div>
         )}
       </div>
 
-      {isMobile && gameState === 'playing' && (
+      {isMobile && (
         <MobileControls
           onPress={handleMobilePress}
           onRelease={handleMobileRelease}
