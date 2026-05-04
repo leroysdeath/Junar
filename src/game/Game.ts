@@ -6,13 +6,12 @@ import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
-import { GameState, GameCallbacks, Vector2, EnemyType, InputState } from './types';
+import { GameState, GameCallbacks, Vector2, EnemyType, InputState, SpawnEntryway } from './types';
 import { initializeLevels } from './levels';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, MAX_DETECTION_RANGE } from './constants';
 
 type GameOverReason =
   | { kind: 'overlap'; enemyId: number; enemyType: EnemyType; dx: number; dy: number }
-  | { kind: 'cardinal'; enemyId: number; enemyType: EnemyType; dist: number; dirX: number; dirY: number }
   | { kind: 'manual' };
 
 interface GameOverVerdict {
@@ -58,6 +57,12 @@ export class Game {
   private nextArrowId = 0;
   private hasLineOfSight = false; // Track if player has line of sight to any enemy
   private levelTransitionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private pendingSpawns: Array<{
+    spawnAtMs: number; // ms relative to levelStartedAt
+    entryway: SpawnEntryway;
+    entryDirection: Vector2;
+  }> = [];
+  private nextEnemyId = 0;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -112,12 +117,27 @@ export class Game {
     this.enemies = this.level.getEnemySpawns().map((spawn, index) =>
       new Enemy(spawn.pos, spawn.type, index, this.level)
     );
+    this.nextEnemyId = this.enemies.length;
     this.arrows = [];
     this.lastArrowTime = 0;
 
+    // Schedule any delayed (entryway) spawns. Levels using this path have
+    // an empty enemySpawns list; all enemies are runtime-instantiated.
+    this.pendingSpawns = [];
+    const dc = this.level.getDelayedSpawnConfig();
+    if (dc) {
+      for (let i = 0; i < dc.count; i++) {
+        this.pendingSpawns.push({
+          spawnAtMs: dc.initialDelayMs + i * dc.intervalMs,
+          entryway: dc.entryway,
+          entryDirection: { ...dc.entryDirection },
+        });
+      }
+    }
+
     this.callbacks.onStateChange('playing');
     this.callbacks.onLevelChange(this.currentLevelIndex + 1);
-    this.callbacks.onEnemiesChange(this.enemies.length);
+    this.callbacks.onEnemiesChange(this.enemies.length + this.pendingSpawns.length);
     this.callbacks.onScoreChange(this.score);
     this.hasLineOfSight = false;
     this.levelStartedAt = performance.now();
@@ -125,8 +145,38 @@ export class Game {
     this.logger.log('level', 'startLevel', {
       level: this.currentLevelIndex + 1,
       enemies: this.enemies.length,
+      pendingSpawns: this.pendingSpawns.length,
       playerSpawn: this.player.getPosition(),
     });
+  }
+
+  // Runtime entryway spawning. Picks a random pixel position within the
+  // entryway band and a random enemy type. Spawned enemies start in
+  // 'entering' mode; they walk freely along entryDirection until their
+  // AABB is fully inside the canvas, then collision/AI takes over.
+  private spawnFromEntryway(
+    entryway: SpawnEntryway,
+    entryDirection: Vector2,
+  ): Enemy {
+    // Constrain spawn to grid-aligned tiles within the band so the AABB
+    // doesn't straddle a side wall once the enemy enters.
+    const tileCols = Math.max(1, Math.floor(entryway.width / TILE_SIZE));
+    const tileRows = Math.max(1, Math.floor(entryway.height / TILE_SIZE));
+    const colOffset = Math.floor(Math.random() * tileCols);
+    const rowOffset = Math.floor(Math.random() * tileRows);
+    const spawnPos: Vector2 = {
+      x: entryway.x + colOffset * TILE_SIZE,
+      y: entryway.y + rowOffset * TILE_SIZE,
+    };
+    const types: EnemyType[] = ['panther', 'primate', 'bear'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    return new Enemy(
+      spawnPos,
+      type,
+      this.nextEnemyId++,
+      undefined,
+      { direction: { ...entryDirection } },
+    );
   }
 
   private gameLoop(currentTime: number) {
@@ -228,6 +278,30 @@ export class Game {
       this.sampleTick(input, deltaTime);
     }
 
+    // Process delayed entryway spawns. Pending spawns are sorted by
+    // spawnAtMs (since startLevel pushes them in order); pop while their
+    // scheduled time has elapsed.
+    if (this.pendingSpawns.length > 0) {
+      const elapsed = currentTime - this.levelStartedAt;
+      while (
+        this.pendingSpawns.length > 0 &&
+        this.pendingSpawns[0].spawnAtMs <= elapsed
+      ) {
+        const next = this.pendingSpawns.shift()!;
+        const enemy = this.spawnFromEntryway(next.entryway, next.entryDirection);
+        this.enemies.push(enemy);
+        this.logger.log('spawn', 'entryway', {
+          id: enemy.getId(),
+          type: enemy.getType(),
+          atMs: Math.round(elapsed),
+          pos: enemy.getPosition(),
+        });
+        this.callbacks.onEnemiesChange(
+          this.enemies.length + this.pendingSpawns.length,
+        );
+      }
+    }
+
     // Update line of sight detection
     this.hasLineOfSight = this.checkLineOfSightToEnemies();
     
@@ -264,8 +338,11 @@ export class Game {
     // Check collisions
     this.checkCollisions();
     
-    // Check level completion
-    if (this.enemies.length === 0) {
+    // Check level completion. Only complete when no enemies remain AND
+    // no pending entryway spawns are still queued — otherwise a level
+    // with delayed spawns would complete instantly during the initial
+    // grace period.
+    if (this.enemies.length === 0 && this.pendingSpawns.length === 0) {
       this.completeLevel();
     }
   }
@@ -517,45 +594,6 @@ export class Game {
       }
     }
 
-    // Pass 2: cardinal-LOS kill. Walk each of the 4 cardinal rays once and
-    // attribute the kill to the enemy actually on the ray (not whichever
-    // outer-loop iteration we happened to be in when the ray cleared).
-    const cardinalDirs: Vector2[] = [
-      { x: 0, y: -1 },
-      { x: 0, y: 1 },
-      { x: -1, y: 0 },
-      { x: 1, y: 0 },
-    ];
-    for (const dir of cardinalDirs) {
-      const hit = this.findEnemyOnCardinalRay(
-        { x: playerCenterX, y: playerCenterY },
-        dir,
-      );
-      if (!hit) continue;
-
-      const hitPos = hit.getPosition();
-      const dist =
-        dir.x !== 0
-          ? Math.abs(hitPos.x + TILE_SIZE / 2 - playerCenterX)
-          : Math.abs(hitPos.y + TILE_SIZE / 2 - playerCenterY);
-
-      this.logger.log('collision', 'cardinal-kill', {
-        type: hit.getType(),
-        dist: Math.round(dist),
-        dirX: dir.x,
-        dirY: dir.y,
-      });
-      this.gameOver({
-        kind: 'cardinal',
-        enemyId: hit.getId(),
-        enemyType: hit.getType(),
-        dist,
-        dirX: dir.x,
-        dirY: dir.y,
-      });
-      return;
-    }
-
     // Check arrow-enemy collisions
     this.arrows = this.arrows.filter(arrow => {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -568,8 +606,14 @@ export class Game {
           this.enemies.splice(i, 1);
           this.score += 10;
           this.callbacks.onScoreChange(this.score);
-          this.callbacks.onEnemiesChange(this.enemies.length);
-          this.logger.log('hit', 'arrow->enemy', { type: enemyType, remaining: this.enemies.length });
+          this.callbacks.onEnemiesChange(
+            this.enemies.length + this.pendingSpawns.length,
+          );
+          this.logger.log('hit', 'arrow->enemy', {
+            type: enemyType,
+            remaining: this.enemies.length,
+            pending: this.pendingSpawns.length,
+          });
           this.soundManager.play('hit');
           return false; // Remove arrow
         }

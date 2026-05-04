@@ -14,6 +14,7 @@ export type LogCategory =
   | 'collision'
   | 'input'
   | 'sample'
+  | 'spawn'
   | 'wall'
   | 'warn'
   | 'error';

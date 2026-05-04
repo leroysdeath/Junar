@@ -1,4 +1,4 @@
-import { Vector2, EnemySpawn, EnemyType, LevelData } from './types';
+import { Vector2, EnemySpawn, EnemyType, LevelData, DelayedSpawnConfig } from './types';
 
 export class Level {
   private data: LevelData;
@@ -43,6 +43,10 @@ export class Level {
 
   getHutPositions(): Vector2[] {
     return this.data.hutPositions.map(pos => ({ ...pos }));
+  }
+
+  getDelayedSpawnConfig(): DelayedSpawnConfig | undefined {
+    return this.data.delayedSpawns;
   }
 
   // Calculate the exact center coordinates of the map

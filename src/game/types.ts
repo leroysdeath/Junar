@@ -34,6 +34,28 @@ export interface EnemySpawn {
   type: EnemyType;
 }
 
+// A rectangular band, in world-space pixels, where enemies can appear.
+// Typically positioned just outside the canvas so they walk in.
+export interface SpawnEntryway {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Runtime-driven enemy spawning: enemies appear over time at the entryway
+// rather than all at once at level start. Used in place of static
+// enemySpawns when set on a level.
+export interface DelayedSpawnConfig {
+  entryway: SpawnEntryway;
+  // Direction enemies walk while still partially outside the canvas
+  // (cardinal unit vector — e.g. {x:0, y:1} for top-down entry).
+  entryDirection: Vector2;
+  count: number;
+  initialDelayMs: number;
+  intervalMs: number;
+}
+
 export interface LevelData {
   width: number;
   height: number;
@@ -42,4 +64,5 @@ export interface LevelData {
   enemySpawns: EnemySpawn[];
   npcPositions: Vector2[];
   hutPositions: Vector2[];
+  delayedSpawns?: DelayedSpawnConfig;
 }

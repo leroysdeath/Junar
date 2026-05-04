@@ -10,10 +10,24 @@ export class Enemy {
   private size = 32;
   private lastPathfindTime = 0;
   private targetPosition: Vector2;
+  // While entering from outside the canvas, the AABB straddles an OOB
+  // grid row (which counts as wall) and normal collision blocks all
+  // movement. We bypass collision until the enemy is fully inside.
+  private entering: boolean;
+  private entryDirection: Vector2;
 
-  constructor(startPosition: Vector2, type: EnemyType, id: number, level?: Level) {
-    // Validate spawn position for enemies too
-    if (level) {
+  constructor(
+    startPosition: Vector2,
+    type: EnemyType,
+    id: number,
+    level?: Level,
+    entry?: { direction: Vector2 },
+  ) {
+    // Entering enemies spawn at world coords outside the canvas; they
+    // shouldn't be snapped to a "safe" tile. Skip findSafeSpawnPosition.
+    if (entry) {
+      this.position = { ...startPosition };
+    } else if (level) {
       this.position = level.findSafeSpawnPosition(startPosition, this.size);
     } else {
       this.position = { ...startPosition };
@@ -21,7 +35,9 @@ export class Enemy {
     this.type = type;
     this.id = id;
     this.targetPosition = { ...startPosition };
-    
+    this.entering = !!entry;
+    this.entryDirection = entry?.direction ?? { x: 0, y: 0 };
+
     // Different speeds for different enemy types
     switch (type) {
       case 'panther':
@@ -36,7 +52,32 @@ export class Enemy {
     }
   }
 
+  isFullyInside(): boolean {
+    return (
+      this.position.x >= 0 &&
+      this.position.x + this.size <= CANVAS_WIDTH &&
+      this.position.y >= 0 &&
+      this.position.y + this.size <= CANVAS_HEIGHT
+    );
+  }
+
   update(deltaTime: number, playerPosition: Vector2, level: Level) {
+    if (this.entering) {
+      // Free movement along the entry vector while AABB straddles OOB.
+      const dist = this.speed * (deltaTime / 1000);
+      this.position.x += this.entryDirection.x * dist;
+      this.position.y += this.entryDirection.y * dist;
+      if (this.isFullyInside()) {
+        // Snap to grid edge to ensure clean handoff into wall collision.
+        if (this.entryDirection.y > 0 && this.position.y < 0) this.position.y = 0;
+        if (this.entryDirection.x > 0 && this.position.x < 0) this.position.x = 0;
+        if (this.entryDirection.y < 0 && this.position.y + this.size > CANVAS_HEIGHT) this.position.y = CANVAS_HEIGHT - this.size;
+        if (this.entryDirection.x < 0 && this.position.x + this.size > CANVAS_WIDTH) this.position.x = CANVAS_WIDTH - this.size;
+        this.entering = false;
+      }
+      return;
+    }
+
     const currentTime = Date.now();
     
     // Update pathfinding target every 200ms

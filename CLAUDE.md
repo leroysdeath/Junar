@@ -35,7 +35,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 1. Spawn into a maze; enemies appear from the edges.
 2. Move (WASD/arrows) to line up an enemy in a cardinal direction.
 3. Arrows auto-fire every 500ms whenever a cardinal-LOS target exists within 300px.
-4. Avoid contact (cardinal-LOS-to-player = death).
+4. Avoid contact — every enemy is melee, and any AABB overlap with the player is instant death.
 5. Clear all enemies → 2-second "Level Complete" → next level.
 6. Survive Levels 1–9 (mazes scaling in density), then Level 10 (open arena, boss intended but unimplemented).
 
@@ -43,7 +43,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 **Controls** — WASD or arrow keys (movement only). Click canvas from menu to start. Sound toggle is a UI button.
 
-**Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no stamina; one hit kills.
+**Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no stamina; one hit kills. Death is **AABB-overlap only** — an enemy must physically touch the player to kill them. Cardinal LOS is the *player's* auto-fire mechanic, not an enemy attack.
 
 **Enemies** (`src/game/Enemy.ts`) — three approved types, fixed speeds. All are infected jungle wildlife, not generic monsters:
 | Type    | Speed (px/s) | In-world identity |

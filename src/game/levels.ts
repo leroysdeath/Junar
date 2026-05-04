@@ -1,5 +1,5 @@
-import { LevelData, Vector2 } from './types';
-import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, MAX_DETECTION_RANGE } from './constants';
+import { LevelData, Vector2, DelayedSpawnConfig } from './types';
+import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE } from './constants';
 
 interface ParsedLevel {
   walls: boolean[][];
@@ -54,7 +54,11 @@ function parseLevel(grid: string[]): ParsedLevel {
 // (col 14 × 32, row 8 × 32) = (448, 256)
 const CENTER_SPAWN: Vector2 = { x: 448, y: 256 };
 
-function buildLevel(grid: string[]): LevelData {
+interface BuildLevelOptions {
+  delayedSpawns?: DelayedSpawnConfig;
+}
+
+function buildLevel(grid: string[], opts: BuildLevelOptions = {}): LevelData {
   const parsed = parseLevel(grid);
   return {
     width: GRID_WIDTH,
@@ -64,30 +68,47 @@ function buildLevel(grid: string[]): LevelData {
     enemySpawns: [],
     npcPositions: parsed.npcPositions,
     hutPositions: parsed.hutPositions,
+    delayedSpawns: opts.delayedSpawns,
   };
 }
 
+// Level 1 entryway: top-middle, 3 tiles wide (cols 13-15), positioned
+// one tile above the canvas so enemies visually slide in from outside.
+// All 3 enemies enter from this band; first one appears 5s after the
+// level loads, then 2s between each.
+const L1_TOP_MIDDLE_ENTRY: DelayedSpawnConfig = {
+  entryway: { x: 13 * TILE_SIZE, y: -TILE_SIZE, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  entryDirection: { x: 0, y: 1 },
+  count: 3,
+  initialDelayMs: 5000,
+  intervalMs: 2000,
+};
+
 export const levels: LevelData[] = [
-  // Level 1 — L-shaped path through the forest
-  buildLevel([
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '................#############',
-    '................#############',
-    '................#############',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-  ]),
+  // Level 1 — L-shaped path through the forest. Enemies enter the
+  // corridor from the top-middle opening (see L1_TOP_MIDDLE_ENTRY).
+  buildLevel(
+    [
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '................#############',
+      '................#############',
+      '................#############',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+    ],
+    { delayedSpawns: L1_TOP_MIDDLE_ENTRY },
+  ),
 
   // Level 2 — T-shape: vertical entry meeting a horizontal corridor
   buildLevel([
@@ -285,6 +306,11 @@ export const levels: LevelData[] = [
 // 128px from the player center are considered.
 export function initializeLevels(): LevelData[] {
   return levels.map((levelData, index) => {
+    // Levels with delayed-spawn entryways don't use the perimeter spawner;
+    // their enemies are scheduled at runtime by Game.startLevel().
+    if (levelData.delayedSpawns) {
+      return levelData;
+    }
     const tempLevel = {
       isWall(x: number, y: number): boolean {
         if (x < 0 || x >= levelData.width || y < 0 || y >= levelData.height) {
@@ -340,25 +366,13 @@ export function initializeLevels(): LevelData[] {
     const playerCenter = tempLevel.getMapCenter();
     const enemyTypes = ['panther', 'primate', 'bear'] as const;
     const minDistanceFromPlayer = 128;
-    const cardinalTolerance = TILE_SIZE / 2;
 
-    // Exclude positions that would cause an instant cardinal-LOS death at
-    // level start: cardinally aligned with the player (same row/column within
-    // ±half-tile perpendicular) AND inside MAX_DETECTION_RANGE on the other
-    // axis. Without this filter, a center spawn (448, 256) plus a perimeter
-    // spawn at (448, 32) puts a bear directly above the player on frame 1.
     const validPositions = tempLevel
       .getEdgeSpawnPositions()
       .filter((pos) => {
         const dx = pos.x - playerCenter.x;
         const dy = pos.y - playerCenter.y;
-        if (Math.sqrt(dx * dx + dy * dy) < minDistanceFromPlayer) return false;
-        const verticallyAligned =
-          Math.abs(dx) < cardinalTolerance && Math.abs(dy) < MAX_DETECTION_RANGE;
-        const horizontallyAligned =
-          Math.abs(dy) < cardinalTolerance && Math.abs(dx) < MAX_DETECTION_RANGE;
-        if (verticallyAligned || horizontallyAligned) return false;
-        return true;
+        return Math.sqrt(dx * dx + dy * dy) >= minDistanceFromPlayer;
       });
 
     const spawns: Array<{

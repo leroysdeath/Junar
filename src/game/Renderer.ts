@@ -22,33 +22,20 @@ export class Renderer {
           // Render tree (green blocks with collision)
           this.ctx.fillStyle = '#228B22';
           this.ctx.fillRect(pixelX, pixelY, 32, 32);
-          
+
           // Add tree texture
           this.ctx.fillStyle = '#32CD32';
           this.ctx.fillRect(pixelX + 2, pixelY + 2, 28, 28);
-          
+
           // Add tree highlights
           this.ctx.fillStyle = '#90EE90';
           this.ctx.fillRect(pixelX + 4, pixelY + 4, 4, 4);
           this.ctx.fillRect(pixelX + 24, pixelY + 12, 4, 4);
           this.ctx.fillRect(pixelX + 12, pixelY + 24, 4, 4);
         } else {
-          // Render dirt/brown floor (no collision)
-          this.ctx.fillStyle = '#8B4513';
+          // Solid pathway tile — single tan fill, no accents.
+          this.ctx.fillStyle = '#D2B48C';
           this.ctx.fillRect(pixelX, pixelY, 32, 32);
-          
-          // Add dirt texture
-          this.ctx.fillStyle = '#A0522D';
-          if ((x + y) % 2 === 0) {
-            this.ctx.fillRect(pixelX + 8, pixelY + 8, 16, 16);
-          }
-          
-          // Add small dirt details
-          this.ctx.fillStyle = '#654321';
-          if ((x + y) % 3 === 0) {
-            this.ctx.fillRect(pixelX + 4, pixelY + 4, 2, 2);
-            this.ctx.fillRect(pixelX + 26, pixelY + 26, 2, 2);
-          }
         }
       }
     }
