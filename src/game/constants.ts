@@ -4,3 +4,5 @@ export const TILE_SIZE = 32;
 export const PLAYER_SIZE = 32;
 export const GRID_WIDTH = 29;
 export const GRID_HEIGHT = 17;
+// Cardinal LOS detection range (auto-fire and contact-death share this radius).
+export const MAX_DETECTION_RANGE = 300;

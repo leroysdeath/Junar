@@ -143,28 +143,28 @@ function App() {
 
         {/* Game Over Screen */}
         {gameState === 'gameOver' && (
-          <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
-            <div className="text-center text-white max-w-md mx-auto px-6">
-              <h2 className="text-4xl font-bold text-red-400 mb-4">Game Over</h2>
-              <p className="text-lg text-amber-200 mb-2">
+          <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+            <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
+              <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">Game Over</h2>
+              <p className="text-lg text-amber-200 mb-2 drop-shadow">
                 You reached Level {currentLevel}
               </p>
-              <p className="text-base text-amber-300 mb-8">
+              <p className="text-base text-amber-300 mb-8 drop-shadow">
                 Final Score: {score}
               </p>
-              
+
               <div className="space-y-4">
                 <button
                   onClick={restartGame}
-                  className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-red-500"
+                  className="w-full bg-gradient-to-r from-red-600/90 to-red-700/90 hover:from-red-500 hover:to-red-600 text-white font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-red-500"
                 >
                   <RotateCcw size={24} />
                   Try Again
                 </button>
-                
+
                 <button
                   onClick={() => setGameState('menu')}
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+                  className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
                 >
                   Main Menu
                 </button>

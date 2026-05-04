@@ -1,5 +1,5 @@
 import { LevelData, Vector2 } from './types';
-import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE } from './constants';
+import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, MAX_DETECTION_RANGE } from './constants';
 
 interface ParsedLevel {
   walls: boolean[][];
@@ -340,13 +340,25 @@ export function initializeLevels(): LevelData[] {
     const playerCenter = tempLevel.getMapCenter();
     const enemyTypes = ['panther', 'primate', 'bear'] as const;
     const minDistanceFromPlayer = 128;
+    const cardinalTolerance = TILE_SIZE / 2;
 
+    // Exclude positions that would cause an instant cardinal-LOS death at
+    // level start: cardinally aligned with the player (same row/column within
+    // ±half-tile perpendicular) AND inside MAX_DETECTION_RANGE on the other
+    // axis. Without this filter, a center spawn (448, 256) plus a perimeter
+    // spawn at (448, 32) puts a bear directly above the player on frame 1.
     const validPositions = tempLevel
       .getEdgeSpawnPositions()
       .filter((pos) => {
         const dx = pos.x - playerCenter.x;
         const dy = pos.y - playerCenter.y;
-        return Math.sqrt(dx * dx + dy * dy) >= minDistanceFromPlayer;
+        if (Math.sqrt(dx * dx + dy * dy) < minDistanceFromPlayer) return false;
+        const verticallyAligned =
+          Math.abs(dx) < cardinalTolerance && Math.abs(dy) < MAX_DETECTION_RANGE;
+        const horizontallyAligned =
+          Math.abs(dy) < cardinalTolerance && Math.abs(dx) < MAX_DETECTION_RANGE;
+        if (verticallyAligned || horizontallyAligned) return false;
+        return true;
       });
 
     const spawns: Array<{

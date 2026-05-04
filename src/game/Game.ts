@@ -8,7 +8,7 @@ import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
 import { GameState, GameCallbacks, Vector2, EnemyType, InputState } from './types';
 import { initializeLevels } from './levels';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE } from './constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, MAX_DETECTION_RANGE } from './constants';
 
 type GameOverReason =
   | { kind: 'overlap'; enemyId: number; enemyType: EnemyType; dx: number; dy: number }
@@ -53,7 +53,7 @@ export class Game {
 
   private lastArrowTime = 0;
   private arrowCooldown = 500; // 0.5 seconds
-  private maxDetectionRange = 300; // Maximum range for enemy detection
+  private maxDetectionRange = MAX_DETECTION_RANGE;
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
   private hasLineOfSight = false; // Track if player has line of sight to any enemy
