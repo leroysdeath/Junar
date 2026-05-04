@@ -208,18 +208,13 @@ export class Renderer {
 
   renderArrows(arrows: Array<{ pos: Vector2; dir: Vector2; id: number }>) {
     arrows.forEach(arrow => {
-      const arrowLength = 24; // Slightly smaller for cardinal directions
-      const arrowWidth = 4; // Thinner shaft for cleaner look
-      const headLength = 6; // Smaller arrow head
-      const headWidth = 8; // Narrower arrow head
-      
-      // Determine cardinal direction and set angle accordingly
-      let angle = 0;
-      if (arrow.dir.x === 1) angle = 0; // Right
-      else if (arrow.dir.x === -1) angle = Math.PI; // Left
-      else if (arrow.dir.y === 1) angle = Math.PI / 2; // Down
-      else if (arrow.dir.y === -1) angle = -Math.PI / 2; // Up
-      
+      const arrowLength = 24;
+      const arrowWidth = 4;
+      const headLength = 6;
+      const headWidth = 8;
+
+      const angle = Math.atan2(arrow.dir.y, arrow.dir.x);
+
       this.ctx.save();
       this.ctx.translate(arrow.pos.x, arrow.pos.y);
       this.ctx.rotate(angle);

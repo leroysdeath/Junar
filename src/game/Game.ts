@@ -8,7 +8,14 @@ import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
 import { GameState, GameCallbacks, Vector2, EnemyType, InputState, SpawnEntryway } from './types';
 import { initializeLevels } from './levels';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, MAX_DETECTION_RANGE } from './constants';
+import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  TILE_SIZE,
+  MAX_DETECTION_RANGE,
+  ARROW_SPEED,
+  ARROW_COOLDOWN_MS,
+} from './constants';
 
 type GameOverReason =
   | { kind: 'overlap'; enemyId: number; enemyType: EnemyType; dx: number; dy: number }
@@ -51,7 +58,7 @@ export class Game {
   private lastSampleFrame = 0;
 
   private lastArrowTime = 0;
-  private arrowCooldown = 500; // 0.5 seconds
+  private arrowCooldown = ARROW_COOLDOWN_MS;
   private maxDetectionRange = MAX_DETECTION_RANGE;
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
@@ -318,9 +325,8 @@ export class Game {
     
     // Update arrows
     this.arrows = this.arrows.filter(arrow => {
-      const arrowSpeed = 400; // pixels per second
-      arrow.pos.x += arrow.dir.x * arrowSpeed * (deltaTime / 1000);
-      arrow.pos.y += arrow.dir.y * arrowSpeed * (deltaTime / 1000);
+      arrow.pos.x += arrow.dir.x * ARROW_SPEED * (deltaTime / 1000);
+      arrow.pos.y += arrow.dir.y * ARROW_SPEED * (deltaTime / 1000);
       
       // Check bounds
       if (arrow.pos.x < 0 || arrow.pos.x > CANVAS_WIDTH || arrow.pos.y < 0 || arrow.pos.y > CANVAS_HEIGHT) {
@@ -412,12 +418,13 @@ export class Game {
 
   private fireArrow() {
     if (this.enemies.length === 0 || !this.hasLineOfSight) return;
-    
-    // Find nearest enemy with line of sight in cardinal directions only
+
+    // Find nearest enemy with line of sight along one of 8 lanes
+    // (4 cardinals + 4 diagonals).
     const playerPos = this.player.getPosition();
     const playerCenterX = playerPos.x + 16;
     const playerCenterY = playerPos.y + 16;
-    
+
     let nearestDistance = Infinity;
     let bestDirection: Vector2 | null = null;
 
@@ -428,24 +435,25 @@ export class Game {
 
       const dx = enemyCenterX - playerCenterX;
       const dy = enemyCenterY - playerCenterY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-      const cardinalDirection = this.getCardinalDirection(dx, dy);
-      if (!cardinalDirection) continue;
+      if (dist > this.maxDetectionRange) continue;
+
+      const direction = this.getOctaDirection(dx, dy);
+      if (!direction) continue;
 
       if (
-        this.findEnemyOnCardinalRay(
+        this.findEnemyOnRay(
           { x: playerCenterX, y: playerCenterY },
-          cardinalDirection,
+          direction,
         ) === null
       ) {
         continue;
       }
 
-      const dist = this.getCardinalDistance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY, cardinalDirection);
-
-      if (dist < nearestDistance && dist <= this.maxDetectionRange) {
+      if (dist < nearestDistance) {
         nearestDistance = dist;
-        bestDirection = cardinalDirection;
+        bestDirection = direction;
       }
     }
 
@@ -461,43 +469,38 @@ export class Game {
     this.soundManager.play('arrow');
   }
 
-  private getCardinalDirection(dx: number, dy: number): Vector2 | null {
-    const absDx = Math.abs(dx);
-    const absDy = Math.abs(dy);
-    
-    // Determine which cardinal direction is dominant
-    if (absDx > absDy) {
-      // Horizontal movement is dominant
-      if (dx > 0) return { x: 1, y: 0 }; // Right
-      else return { x: -1, y: 0 }; // Left
-    } else if (absDy > absDx) {
-      // Vertical movement is dominant
-      if (dy > 0) return { x: 0, y: 1 }; // Down
-      else return { x: 0, y: -1 }; // Up
-    }
-    
-    // If dx and dy are equal, prioritize horizontal movement
-    if (absDx > 0) {
-      if (dx > 0) return { x: 1, y: 0 }; // Right
-      else return { x: -1, y: 0 }; // Left
-    }
-    
-    return null; // No movement
+  // Snap (dx, dy) to one of 8 unit vectors using 45°-wide sectors.
+  // Cardinals come out as exact {±1, 0} / {0, ±1}; diagonals as
+  // {±√½, ±√½} ≈ {±0.7071, ±0.7071}.
+  private getOctaDirection(dx: number, dy: number): Vector2 | null {
+    if (dx === 0 && dy === 0) return null;
+    const angle = Math.atan2(dy, dx);
+    const sector = Math.round(angle / (Math.PI / 4));
+    const snapped = sector * (Math.PI / 4);
+    const round = (v: number) => (Math.abs(v) < 1e-9 ? 0 : v);
+    return { x: round(Math.cos(snapped)), y: round(Math.sin(snapped)) };
   }
 
-  // Walk the cardinal ray from `start` in `direction`, returning the first
-  // enemy whose AABB straddles the ray, or null if a wall blocks the ray
-  // before any enemy is reached.
+  // Walk a ray from `start` in `direction`, returning the first enemy whose
+  // center sits on the ray, or null if a wall blocks the ray first.
   //
-  // The wall scan looks at the FULL perpendicular corridor that the enemy
-  // detection uses (a 32-wide band, since enemies count as on-the-ray when
-  // their center is within ±perpTolerance). Without this, a tree in the
-  // adjacent column could sit between the player and an enemy on that same
-  // column and the ray would falsely report a clear path.
-  private findEnemyOnCardinalRay(start: Vector2, direction: Vector2): Enemy | null {
+  // Cardinal direction: uses the original axis-aligned corridor — wall scan
+  // covers a 32-wide perpendicular band so a tree in the adjacent column
+  // can't sit between the player and an enemy on the same column.
+  //
+  // Diagonal direction: walks tile-by-tile along the diagonal. The corner-cut
+  // guard prevents shots from squeezing through the corner where two adjacent
+  // walls meet (i.e. when both axes change tiles in one step, the ray is
+  // blocked if either elbow tile is a wall — both is the strict version, but
+  // either is the correct game-feel choice since the corner is a tree).
+  private findEnemyOnRay(start: Vector2, direction: Vector2): Enemy | null {
     const stepSize = TILE_SIZE / 2;
     const maxSteps = Math.floor(this.maxDetectionRange / stepSize);
     const perpTolerance = TILE_SIZE / 2;
+    const isDiagonal = direction.x !== 0 && direction.y !== 0;
+
+    let prevTileX = Math.floor(start.x / TILE_SIZE);
+    let prevTileY = Math.floor(start.y / TILE_SIZE);
 
     for (let step = 1; step <= maxSteps; step++) {
       const checkX = start.x + direction.x * stepSize * step;
@@ -507,43 +510,62 @@ export class Game {
         break;
       }
 
-      // Wall corridor: along the on-axis the corridor is a single point,
-      // along the off-axis it spans ±perpTolerance (one tile wide). That
-      // can cover one or two adjacent grid cells.
-      const xMin = direction.x !== 0 ? checkX : checkX - perpTolerance;
-      const xMax = direction.x !== 0 ? checkX : checkX + perpTolerance - 1;
-      const yMin = direction.y !== 0 ? checkY : checkY - perpTolerance;
-      const yMax = direction.y !== 0 ? checkY : checkY + perpTolerance - 1;
-      const gxMin = Math.floor(xMin / TILE_SIZE);
-      const gxMax = Math.floor(xMax / TILE_SIZE);
-      const gyMin = Math.floor(yMin / TILE_SIZE);
-      const gyMax = Math.floor(yMax / TILE_SIZE);
+      if (isDiagonal) {
+        const tileX = Math.floor(checkX / TILE_SIZE);
+        const tileY = Math.floor(checkY / TILE_SIZE);
 
-      for (let gx = gxMin; gx <= gxMax; gx++) {
-        for (let gy = gyMin; gy <= gyMax; gy++) {
-          if (this.level.isWall(gx, gy)) {
+        if (this.level.isWall(tileX, tileY)) {
+          return null;
+        }
+
+        // Corner-cut guard: when both axes advanced into a new tile, the
+        // ray crossed a tile corner. If either elbow is a wall, treat the
+        // diagonal as blocked (you can't shoot through a tree's corner).
+        if (tileX !== prevTileX && tileY !== prevTileY) {
+          if (
+            this.level.isWall(prevTileX, tileY) ||
+            this.level.isWall(tileX, prevTileY)
+          ) {
             return null;
+          }
+        }
+
+        prevTileX = tileX;
+        prevTileY = tileY;
+      } else {
+        // Cardinal corridor — keep the original axis-aligned wall scan.
+        const xMin = direction.x !== 0 ? checkX : checkX - perpTolerance;
+        const xMax = direction.x !== 0 ? checkX : checkX + perpTolerance - 1;
+        const yMin = direction.y !== 0 ? checkY : checkY - perpTolerance;
+        const yMax = direction.y !== 0 ? checkY : checkY + perpTolerance - 1;
+        const gxMin = Math.floor(xMin / TILE_SIZE);
+        const gxMax = Math.floor(xMax / TILE_SIZE);
+        const gyMin = Math.floor(yMin / TILE_SIZE);
+        const gyMax = Math.floor(yMax / TILE_SIZE);
+
+        for (let gx = gxMin; gx <= gxMax; gx++) {
+          for (let gy = gyMin; gy <= gyMax; gy++) {
+            if (this.level.isWall(gx, gy)) {
+              return null;
+            }
           }
         }
       }
 
-      // Enemy hit: center within ±perpTolerance off-axis AND within
-      // ±half-tile on-axis (so the step has actually reached it; without
-      // the on-axis check, any enemy sharing the row/column would report
-      // a hit at step 1, before walls could block).
+      // Enemy hit: project (enemyCenter - checkPoint) onto the ray's
+      // perpendicular and parallel axes. Hit when off-axis ≤ ±perpTolerance
+      // AND on-axis ≤ ±half-tile (ensures the step has reached it).
       for (const enemy of this.enemies) {
         const enemyPos = enemy.getPosition();
         const enemyCenterX = enemyPos.x + TILE_SIZE / 2;
         const enemyCenterY = enemyPos.y + TILE_SIZE / 2;
 
-        const offAxisDelta =
-          direction.x !== 0
-            ? Math.abs(checkY - enemyCenterY)
-            : Math.abs(checkX - enemyCenterX);
-        const onAxisDelta =
-          direction.x !== 0
-            ? Math.abs(checkX - enemyCenterX)
-            : Math.abs(checkY - enemyCenterY);
+        const ex = enemyCenterX - checkX;
+        const ey = enemyCenterY - checkY;
+        // Perpendicular component = |ex * dirY - ey * dirX| (rejection).
+        // Parallel component     = |ex * dirX + ey * dirY| (projection).
+        const offAxisDelta = Math.abs(ex * direction.y - ey * direction.x);
+        const onAxisDelta = Math.abs(ex * direction.x + ey * direction.y);
 
         if (offAxisDelta <= perpTolerance && onAxisDelta <= TILE_SIZE / 2) {
           return enemy;
@@ -552,17 +574,6 @@ export class Game {
     }
 
     return null;
-  }
-
-  private getCardinalDistance(playerX: number, playerY: number, enemyX: number, enemyY: number, direction: Vector2): number {
-    // Calculate distance along the cardinal direction only
-    if (direction.x !== 0) {
-      // Horizontal direction - use X distance
-      return Math.abs(enemyX - playerX);
-    } else {
-      // Vertical direction - use Y distance
-      return Math.abs(enemyY - playerY);
-    }
   }
 
   private checkCollisions() {
