@@ -1,5 +1,16 @@
-import { LevelData, Vector2, DelayedSpawnConfig } from './types';
-import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE } from './constants';
+import {
+  LevelData,
+  LevelWaveConfig,
+  Rectangle,
+  Vector2,
+  DelayedSpawnConfig,
+} from './types';
+import {
+  GRID_WIDTH,
+  GRID_HEIGHT,
+  TILE_SIZE,
+  DEFAULT_INTER_WAVE_LULL_MS,
+} from './constants';
 
 interface ParsedLevel {
   walls: boolean[][];
@@ -56,6 +67,7 @@ const CENTER_SPAWN: Vector2 = { x: 448, y: 256 };
 
 interface BuildLevelOptions {
   delayedSpawns?: DelayedSpawnConfig;
+  waveConfig?: LevelWaveConfig;
 }
 
 function buildLevel(grid: string[], opts: BuildLevelOptions = {}): LevelData {
@@ -69,24 +81,126 @@ function buildLevel(grid: string[], opts: BuildLevelOptions = {}): LevelData {
     npcPositions: parsed.npcPositions,
     hutPositions: parsed.hutPositions,
     delayedSpawns: opts.delayedSpawns,
+    waveConfig: opts.waveConfig,
   };
 }
 
 // Level 1 entryway: top-middle, 3 tiles wide (cols 13-15), positioned
 // one tile above the canvas so enemies visually slide in from outside.
-// All 3 enemies enter from this band; first one appears 5s after the
-// level loads, then 2s between each.
-const L1_TOP_MIDDLE_ENTRY: DelayedSpawnConfig = {
-  entryway: { x: 13 * TILE_SIZE, y: -TILE_SIZE, width: 3 * TILE_SIZE, height: TILE_SIZE },
-  entryDirection: { x: 0, y: 1 },
-  count: 3,
-  initialDelayMs: 5000,
-  intervalMs: 2000,
+// Wave-driven from this band — see L1_WAVE_CONFIG.
+const L1_ENTRYWAY: Rectangle = {
+  x: 13 * TILE_SIZE,
+  y: -TILE_SIZE,
+  width: 3 * TILE_SIZE,
+  height: TILE_SIZE,
+};
+const L1_ENTRY_DIR: Vector2 = { x: 0, y: 1 };
+
+// Level 1 — three waves trickling from the top-middle entryway. Setup →
+// add (gibbons join) → test (faster cadence). Per-wave numbers are
+// indicative; tune in playtesting.
+const L1_WAVE_CONFIG: LevelWaveConfig = {
+  interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+  waves: [
+    {
+      id: 'l1-w1-setup',
+      beatRole: 'setup',
+      durationMs: 30000,
+      enemyPool: ['snake'],
+      populationFloor: 2,
+      spawnIntervalMs: 2500,
+      spawnZone: L1_ENTRYWAY,
+      entryDirection: L1_ENTRY_DIR,
+    },
+    {
+      id: 'l1-w2-add',
+      beatRole: 'add',
+      durationMs: 30000,
+      enemyPool: ['snake', 'gibbon'],
+      populationFloor: 3,
+      spawnIntervalMs: 2000,
+      spawnZone: L1_ENTRYWAY,
+      entryDirection: L1_ENTRY_DIR,
+    },
+    {
+      id: 'l1-w3-test',
+      beatRole: 'test',
+      durationMs: 30000,
+      enemyPool: ['snake', 'gibbon'],
+      populationFloor: 4,
+      spawnIntervalMs: 1500,
+      spawnZone: L1_ENTRYWAY,
+      entryDirection: L1_ENTRY_DIR,
+    },
+  ],
+};
+
+// Level 2 — perimeter spawns, three waves. Adds bear in wave 2.
+const L2_WAVE_CONFIG: LevelWaveConfig = {
+  interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+  waves: [
+    {
+      id: 'l2-w1-setup',
+      beatRole: 'setup',
+      durationMs: 30000,
+      enemyPool: ['snake', 'gibbon'],
+      populationFloor: 3,
+      spawnIntervalMs: 2000,
+    },
+    {
+      id: 'l2-w2-add',
+      beatRole: 'add',
+      durationMs: 30000,
+      enemyPool: ['snake', 'gibbon', 'bear'],
+      populationFloor: 4,
+      spawnIntervalMs: 1700,
+    },
+    {
+      id: 'l2-w3-test',
+      beatRole: 'test',
+      durationMs: 30000,
+      enemyPool: ['gibbon', 'bear'],
+      populationFloor: 5,
+      spawnIntervalMs: 1400,
+    },
+  ],
+};
+
+// Level 3 — perimeter spawns, three waves. Panther enters in wave 2 as
+// the last new-type beat for this slice.
+const L3_WAVE_CONFIG: LevelWaveConfig = {
+  interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+  waves: [
+    {
+      id: 'l3-w1-setup',
+      beatRole: 'setup',
+      durationMs: 30000,
+      enemyPool: ['gibbon', 'bear'],
+      populationFloor: 4,
+      spawnIntervalMs: 1700,
+    },
+    {
+      id: 'l3-w2-add',
+      beatRole: 'add',
+      durationMs: 30000,
+      enemyPool: ['gibbon', 'bear', 'panther'],
+      populationFloor: 5,
+      spawnIntervalMs: 1400,
+    },
+    {
+      id: 'l3-w3-test',
+      beatRole: 'test',
+      durationMs: 30000,
+      enemyPool: ['bear', 'panther'],
+      populationFloor: 5,
+      spawnIntervalMs: 1300,
+    },
+  ],
 };
 
 export const levels: LevelData[] = [
-  // Level 1 — L-shaped path through the forest. Enemies enter the
-  // corridor from the top-middle opening (see L1_TOP_MIDDLE_ENTRY).
+  // Level 1 — L-shaped path. Wave-driven trickle from the top-middle
+  // entryway (see L1_WAVE_CONFIG).
   buildLevel(
     [
       '#############...#############',
@@ -107,50 +221,58 @@ export const levels: LevelData[] = [
       '#############################',
       '#############################',
     ],
-    { delayedSpawns: L1_TOP_MIDDLE_ENTRY },
+    { waveConfig: L1_WAVE_CONFIG },
   ),
 
-  // Level 2 — T-shape: vertical entry meeting a horizontal corridor
-  buildLevel([
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '.............................',
-    '.............................',
-    '.............................',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-    '#############################',
-  ]),
+  // Level 2 — T-shape: vertical entry meeting a horizontal corridor.
+  // Wave-driven from the level perimeter (see L2_WAVE_CONFIG).
+  buildLevel(
+    [
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+      '#############################',
+    ],
+    { waveConfig: L2_WAVE_CONFIG },
+  ),
 
-  // Level 3 — Plus/cross-shape: vertical full + horizontal full
-  buildLevel([
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '.............................',
-    '.............................',
-    '.............................',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-    '#############...#############',
-  ]),
+  // Level 3 — Plus/cross-shape: vertical full + horizontal full.
+  // Wave-driven from the level perimeter (see L3_WAVE_CONFIG).
+  buildLevel(
+    [
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+    ],
+    { waveConfig: L3_WAVE_CONFIG },
+  ),
 
   // Level 4 — T-shape with hut
   buildLevel([
