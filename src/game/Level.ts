@@ -1,4 +1,11 @@
-import { Vector2, EnemySpawn, EnemyType, LevelData, DelayedSpawnConfig } from './types';
+import {
+  Vector2,
+  EnemySpawn,
+  EnemyType,
+  LevelData,
+  DelayedSpawnConfig,
+  LevelWaveConfig,
+} from './types';
 
 export class Level {
   private data: LevelData;
@@ -47,6 +54,10 @@ export class Level {
 
   getDelayedSpawnConfig(): DelayedSpawnConfig | undefined {
     return this.data.delayedSpawns;
+  }
+
+  getWaveConfig(): LevelWaveConfig | undefined {
+    return this.data.waveConfig;
   }
 
   // Calculate the exact center coordinates of the map
