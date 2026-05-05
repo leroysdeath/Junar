@@ -48,9 +48,10 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 **Enemies** (`src/game/Enemy.ts`) — three approved types, fixed speeds. All are infected jungle wildlife, not generic monsters:
 | Type    | Speed (px/s) | In-world identity |
 |---------|--------------|-------------------|
-| panther | 120          | Black panther — fastest, *Jungle Book*-coded |
-| primate | 80           | Jungle-Book-style primate (langur troop / corrupted ape) |
-| bear    | 60           | Sloth bear — slow, bulky |
+| panther | 395          | Black panther — apex pursuer; outruns the player (2.6× player speed) |
+| bear    | 218          | Sloth bear — heavy chaser; also outruns the player (1.45×) |
+| snake   | 68           | Forest serpent — easy to outrun (0.45× player); thin slither sprite |
+| gibbon  | 34           | Long-armed jungle primate (replaces older `primate` slot); near-stationary creeper (0.23×) |
 
 Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal step.
 
@@ -92,9 +93,9 @@ Until that system is designed and approved, stay on the prototype rule. Don't st
 **Antagonist** — not the beasts. The beasts are victims of an infection: a black goo emanating from a monstrous plant deep in the jungle. The plant is the boss. Tone is tragic — the player is killing wildlife because there's no other choice, and the world is worth saving.
 
 **Bestiary status:**
-- Approved and implemented: black panther, sloth bear, *Jungle Book*-style primate.
+- Approved and implemented: black panther, sloth bear, snake (forest serpent), gibbon (long-armed primate). Speed tuned so panther/bear outrun the player while snake/gibbon are slower — combat depends on chokepoints, not foot races.
 - Approved direction (visual cues): infected beasts should read as "wrong" — black streaks/sheen, glowing eyes, or similar. Keep visuals readable at a glance.
-- **Not yet approved (do not add without asking):** snakes, tigers, monkeys, crocodiles, wild dogs, jackals, anything else.
+- **Not yet approved (do not add without asking):** tigers, monkeys, crocodiles, wild dogs, jackals, anything else.
 
 **Visual palette** (current code) — forest greens (#228B22, #32CD32), earth browns (#8B4513), dark canopy fills. Roadmap: add a black-goo accent palette (deep oily black, sickly green/purple highlights) for infected beasts and the boss.
 
@@ -155,7 +156,7 @@ When working in this repo:
 
 **Story / tone**
 - **Beasts are victims, not villains.** The corruption is the antagonist. Don't write copy or design enemy behavior that frames the wildlife as evil. Tragic, not bloodthirsty.
-- **Don't add new enemy types without owner approval.** The approved bestiary is black panther, sloth bear, and Jungle-Book-style primate. Snakes, tigers, monkeys, etc. require explicit go-ahead.
+- **Don't add new enemy types without owner approval.** The approved bestiary is black panther, sloth bear, snake, and gibbon. Tigers, monkeys, crocodiles, etc. require explicit go-ahead.
 - **Family NPCs are sacrosanct in family levels.** Their death = game over. Don't add behavior that undermines the "protect them" tension (no auto-fight, no respawn, no gimmicks).
 - **Cultural representation matters.** The protagonist and family are Adivasi/tribal-Indian. Avoid feathered-headdress imagery, generic "tribal" stereotypes, or *Jungle Book* character likenesses. Keep visual cues minimal, dignified, and abstract.
 - **No written dialogue or VO.** Story is told through visuals, mechanics, and level design (§2). Cut-scenes are dialogueless; "…" text bubbles are the only allowed copy. Don't draft scripts, captions, or voice-line stand-ins.

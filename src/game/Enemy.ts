@@ -38,16 +38,22 @@ export class Enemy {
     this.entering = !!entry;
     this.entryDirection = entry?.direction ?? { x: 0, y: 0 };
 
-    // Different speeds for different enemy types
+    // Speeds in px/s. Calibrated relative to player at 150 px/s:
+    //   panther ~2.6x player, bear ~1.45x, snake ~0.45x, gibbon ~0.23x.
+    // Panthers and bears outrun the player in open space; snakes and
+    // gibbons are easy to outpace. Combat depends on chokepoints.
     switch (type) {
       case 'panther':
-        this.speed = 120;
-        break;
-      case 'primate':
-        this.speed = 80;
+        this.speed = 395;
         break;
       case 'bear':
-        this.speed = 60;
+        this.speed = 218;
+        break;
+      case 'snake':
+        this.speed = 68;
+        break;
+      case 'gibbon':
+        this.speed = 34;
         break;
     }
   }

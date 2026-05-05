@@ -175,7 +175,7 @@ export class Game {
       x: entryway.x + colOffset * TILE_SIZE,
       y: entryway.y + rowOffset * TILE_SIZE,
     };
-    const types: EnemyType[] = ['panther', 'primate', 'bear'];
+    const types: EnemyType[] = ['panther', 'snake', 'gibbon', 'bear'];
     const type = types[Math.floor(Math.random() * types.length)];
     return new Enemy(
       spawnPos,

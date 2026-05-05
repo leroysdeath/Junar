@@ -27,7 +27,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type EnemyType = 'panther' | 'primate' | 'bear';
+export type EnemyType = 'panther' | 'snake' | 'gibbon' | 'bear';
 
 export interface EnemySpawn {
   pos: Vector2;

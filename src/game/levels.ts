@@ -364,7 +364,7 @@ export function initializeLevels(): LevelData[] {
 
     const enemyCount = Math.min(3 + index * 2, 25);
     const playerCenter = tempLevel.getMapCenter();
-    const enemyTypes = ['panther', 'primate', 'bear'] as const;
+    const enemyTypes = ['panther', 'snake', 'gibbon', 'bear'] as const;
     const minDistanceFromPlayer = 128;
 
     const validPositions = tempLevel
@@ -377,7 +377,7 @@ export function initializeLevels(): LevelData[] {
 
     const spawns: Array<{
       pos: Vector2;
-      type: 'panther' | 'primate' | 'bear';
+      type: 'panther' | 'snake' | 'gibbon' | 'bear';
     }> = [];
     const usedPositions = new Set<string>();
 

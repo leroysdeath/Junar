@@ -78,13 +78,16 @@ export class Renderer {
     enemies.forEach(enemy => {
       const pos = enemy.getPosition();
       const type = enemy.getType();
-      
+
       switch (type) {
         case 'panther':
           this.renderPanther(pos);
           break;
-        case 'primate':
-          this.renderPrimate(pos);
+        case 'snake':
+          this.renderSnake(pos);
+          break;
+        case 'gibbon':
+          this.renderGibbon(pos);
           break;
         case 'bear':
           this.renderBear(pos);
@@ -93,67 +96,96 @@ export class Renderer {
     });
   }
 
+  // Panther — sleek, low-slung, ~23 px visible width.
   private renderPanther(pos: Vector2) {
-    // Panther body
+    // Body
     this.ctx.fillStyle = '#1a1a1a';
-    this.ctx.fillRect(pos.x + 4, pos.y + 12, 24, 12);
-    
-    // Panther head
+    this.ctx.fillRect(pos.x + 5, pos.y + 13, 22, 11);
+
+    // Head
     this.ctx.fillStyle = '#2a2a2a';
-    this.ctx.fillRect(pos.x + 8, pos.y + 8, 16, 12);
-    
+    this.ctx.fillRect(pos.x + 9, pos.y + 8, 14, 11);
+
     // Eyes
     this.ctx.fillStyle = '#FFD700';
     this.ctx.fillRect(pos.x + 12, pos.y + 10, 2, 2);
     this.ctx.fillRect(pos.x + 18, pos.y + 10, 2, 2);
-    
+
     // Tail
     this.ctx.fillStyle = '#1a1a1a';
-    this.ctx.fillRect(pos.x + 26, pos.y + 16, 4, 8);
+    this.ctx.fillRect(pos.x + 24, pos.y + 16, 4, 8);
   }
 
-  private renderPrimate(pos: Vector2) {
-    // Primate body
-    this.ctx.fillStyle = '#8B4513';
-    this.ctx.fillRect(pos.x + 8, pos.y + 12, 16, 16);
-    
-    // Primate head
-    this.ctx.fillStyle = '#D2691E';
-    this.ctx.fillRect(pos.x + 10, pos.y + 6, 12, 12);
-    
-    // Arms
-    this.ctx.fillStyle = '#8B4513';
-    this.ctx.fillRect(pos.x + 4, pos.y + 14, 8, 6);
-    this.ctx.fillRect(pos.x + 20, pos.y + 14, 8, 6);
-    
+  // Gibbon — long-armed jungle primate; ~20 px visible width with arms.
+  // Lanky arms hang prominently. Sandy gold color distinguishes from
+  // panther/bear browns.
+  private renderGibbon(pos: Vector2) {
+    // Body (compact torso)
+    this.ctx.fillStyle = '#B8860B';
+    this.ctx.fillRect(pos.x + 11, pos.y + 14, 10, 12);
+
+    // Head
+    this.ctx.fillStyle = '#DAA520';
+    this.ctx.fillRect(pos.x + 12, pos.y + 6, 8, 9);
+
+    // Long arms (signature gibbon trait)
+    this.ctx.fillStyle = '#B8860B';
+    this.ctx.fillRect(pos.x + 6, pos.y + 12, 4, 14);
+    this.ctx.fillRect(pos.x + 22, pos.y + 12, 4, 14);
+
     // Eyes
     this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(pos.x + 12, pos.y + 8, 2, 2);
-    this.ctx.fillRect(pos.x + 18, pos.y + 8, 2, 2);
+    this.ctx.fillRect(pos.x + 13, pos.y + 9, 2, 2);
+    this.ctx.fillRect(pos.x + 17, pos.y + 9, 2, 2);
   }
 
+  // Bear — chunky, slightly fills the 32-px AABB; ~30 px visible width.
   private renderBear(pos: Vector2) {
-    // Bear body
+    // Body
     this.ctx.fillStyle = '#4a3c28';
-    this.ctx.fillRect(pos.x + 4, pos.y + 8, 24, 20);
-    
-    // Bear head
+    this.ctx.fillRect(pos.x + 1, pos.y + 7, 30, 24);
+
+    // Body shading / fur tone
     this.ctx.fillStyle = '#5a4c38';
-    this.ctx.fillRect(pos.x + 8, pos.y + 4, 16, 16);
-    
+    this.ctx.fillRect(pos.x + 3, pos.y + 9, 26, 20);
+
+    // Head
+    this.ctx.fillStyle = '#4a3c28';
+    this.ctx.fillRect(pos.x + 5, pos.y + 3, 22, 16);
+
     // Ears
     this.ctx.fillStyle = '#4a3c28';
-    this.ctx.fillRect(pos.x + 8, pos.y + 4, 4, 4);
-    this.ctx.fillRect(pos.x + 20, pos.y + 4, 4, 4);
-    
+    this.ctx.fillRect(pos.x + 4, pos.y + 2, 5, 5);
+    this.ctx.fillRect(pos.x + 23, pos.y + 2, 5, 5);
+
     // Eyes
     this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(pos.x + 12, pos.y + 8, 2, 2);
-    this.ctx.fillRect(pos.x + 18, pos.y + 8, 2, 2);
-    
+    this.ctx.fillRect(pos.x + 11, pos.y + 8, 2, 2);
+    this.ctx.fillRect(pos.x + 19, pos.y + 8, 2, 2);
+
     // Nose
     this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(pos.x + 15, pos.y + 12, 2, 2);
+    this.ctx.fillRect(pos.x + 14, pos.y + 13, 4, 3);
+  }
+
+  // Snake — thin slithering body, ~2-3 px tall, spans most of the AABB
+  // horizontally. AABB is still 32x32 (so arrows hit reliably) but the
+  // visible footprint is small. Serpentine zigzag suggests motion.
+  private renderSnake(pos: Vector2) {
+    // Body segments alternating high/low to suggest a slither
+    this.ctx.fillStyle = '#2F4F2F';
+    this.ctx.fillRect(pos.x + 3, pos.y + 17, 6, 2);
+    this.ctx.fillRect(pos.x + 9, pos.y + 15, 6, 2);
+    this.ctx.fillRect(pos.x + 15, pos.y + 17, 6, 2);
+    this.ctx.fillRect(pos.x + 21, pos.y + 15, 6, 2);
+
+    // Head (slightly larger, lighter color)
+    this.ctx.fillStyle = '#556B2F';
+    this.ctx.fillRect(pos.x + 26, pos.y + 14, 4, 3);
+
+    // Eye — orange-red hint of corruption
+    this.ctx.fillStyle = '#FF6F00';
+    this.ctx.fillRect(pos.x + 29, pos.y + 14, 1, 1);
   }
 
   // Placeholder family-NPC marker. Translucent so it reads as "not final art."

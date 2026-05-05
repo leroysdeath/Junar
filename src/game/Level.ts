@@ -207,7 +207,7 @@ export class Level {
   generateEdgeEnemySpawns(enemyCount: number, minDistanceFromPlayer: number = 128): EnemySpawn[] {
     const edgePositions = this.getEdgeSpawnPositions();
     const playerCenter = this.getMapCenter();
-    const enemyTypes: EnemyType[] = ['panther', 'primate', 'bear'];
+    const enemyTypes: EnemyType[] = ['panther', 'snake', 'gibbon', 'bear'];
     
     // Filter positions that are far enough from player spawn
     const validPositions = edgePositions.filter(pos => {
