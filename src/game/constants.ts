@@ -4,6 +4,10 @@ export const TILE_SIZE = 32;
 export const PLAYER_SIZE = 32;
 export const GRID_WIDTH = 29;
 export const GRID_HEIGHT = 17;
+// Real-world scale: 1 tile (32 px) ≈ 5.5 ft (adult male archer height)
+export const FEET_PER_TILE = 5.5;
+export const MAP_WIDTH_FEET = GRID_WIDTH * FEET_PER_TILE;   // 159.5 ft
+export const MAP_HEIGHT_FEET = GRID_HEIGHT * FEET_PER_TILE; // 93.5 ft
 // 360-degree LOS detection range (auto-fire and contact-death share this radius).
 export const MAX_DETECTION_RANGE = 450;
 export const ARROW_SPEED = 400; // pixels per second
