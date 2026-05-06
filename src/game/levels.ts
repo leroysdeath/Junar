@@ -1,11 +1,14 @@
 import {
+  BandSpec,
   LevelData,
   LevelWaveConfig,
-  Rectangle,
+  SpawnTemplate,
   Vector2,
   DelayedSpawnConfig,
 } from './types';
 import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
   GRID_WIDTH,
   GRID_HEIGHT,
   TILE_SIZE,
@@ -85,105 +88,179 @@ function buildLevel(grid: string[], opts: BuildLevelOptions = {}): LevelData {
   };
 }
 
-// Level 1 entryway: top-middle, 3 tiles wide (cols 13-15), positioned
-// one tile above the canvas so enemies visually slide in from outside.
-// Wave-driven from this band — see L1_WAVE_CONFIG.
-const L1_ENTRYWAY: Rectangle = {
-  x: 13 * TILE_SIZE,
-  y: -TILE_SIZE,
-  width: 3 * TILE_SIZE,
-  height: TILE_SIZE,
+// Spawn bands sit one tile outside the canvas. Each is 3 tiles wide along
+// its band axis × 1 tile deep along the entry axis. `entryDirection`
+// points inward — group rows beyond the front row stack at one-tile
+// spacing in the reverse direction.
+const TOP_BAND: BandSpec = {
+  rect: { x: 13 * TILE_SIZE, y: -TILE_SIZE, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  entryDirection: { x: 0, y: 1 },
 };
-const L1_ENTRY_DIR: Vector2 = { x: 0, y: 1 };
+const BOTTOM_BAND: BandSpec = {
+  rect: { x: 13 * TILE_SIZE, y: CANVAS_HEIGHT, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  entryDirection: { x: 0, y: -1 },
+};
+const LEFT_BAND: BandSpec = {
+  rect: { x: -TILE_SIZE, y: 7 * TILE_SIZE, width: TILE_SIZE, height: 3 * TILE_SIZE },
+  entryDirection: { x: 1, y: 0 },
+};
+const RIGHT_BAND: BandSpec = {
+  rect: { x: CANVAS_WIDTH, y: 7 * TILE_SIZE, width: TILE_SIZE, height: 3 * TILE_SIZE },
+  entryDirection: { x: -1, y: 0 },
+};
 
-// Level 1 — three waves trickling from the top-middle entryway. Setup →
-// add (gibbons join) → test (faster cadence). Counts are indicative; tune
-// in playtesting.
+// 8 pre-designed templates. Cells are [row][col] with col length 3
+// (outside-left, middle, outside-right). Row 0 enters first; trailing
+// rows arrive at the leading row's clearance cadence (one tile at the
+// row's slowest unit speed).
+const T_1PANTHER: SpawnTemplate = {
+  id: 'g-1panther',
+  cells: [[null, 'panther', null]],
+};
+const T_2PANTHER: SpawnTemplate = {
+  id: 'g-2panther',
+  cells: [['panther', null, 'panther']],
+};
+const T_1PANTHER_6SNAKE: SpawnTemplate = {
+  id: 'g-1panther-6snake',
+  cells: [
+    [null, 'panther', null],
+    ['snake', null, 'snake'],
+    ['snake', null, 'snake'],
+    ['snake', null, 'snake'],
+  ],
+};
+const T_9SNAKE: SpawnTemplate = {
+  id: 'g-9snake',
+  cells: [
+    ['snake', 'snake', 'snake'],
+    ['snake', 'snake', 'snake'],
+    ['snake', 'snake', 'snake'],
+  ],
+};
+const T_12SNAKE: SpawnTemplate = {
+  id: 'g-12snake',
+  cells: [
+    ['snake', 'snake', 'snake'],
+    ['snake', 'snake', 'snake'],
+    ['snake', 'snake', 'snake'],
+    ['snake', 'snake', 'snake'],
+  ],
+};
+const T_1BEAR: SpawnTemplate = {
+  id: 'g-1bear',
+  cells: [[null, 'bear', null]],
+};
+const T_1BEAR_4SNAKE: SpawnTemplate = {
+  id: 'g-1bear-4snake',
+  cells: [
+    [null, 'bear', null],
+    ['snake', null, 'snake'],
+    ['snake', null, 'snake'],
+  ],
+};
+const T_2PANTHER_1BEAR: SpawnTemplate = {
+  id: 'g-2panther-1bear',
+  cells: [['panther', 'bear', 'panther']],
+};
+
+// L1 forbids bear-bearing groups; L2/L3 unlock all 8.
+const L1_GROUP_POOL: SpawnTemplate[] = [
+  T_1PANTHER,
+  T_2PANTHER,
+  T_1PANTHER_6SNAKE,
+  T_9SNAKE,
+  T_12SNAKE,
+];
+const L2_3_GROUP_POOL: SpawnTemplate[] = [
+  ...L1_GROUP_POOL,
+  T_1BEAR,
+  T_1BEAR_4SNAKE,
+  T_2PANTHER_1BEAR,
+];
+
+// L1 wave 1's very first draw is restricted to a 2-option mini-pool so
+// the player always opens on a readable threat shape.
+const L1_W1_FIRST_SPAWN_POOL: SpawnTemplate[] = [T_1PANTHER, T_1PANTHER_6SNAKE];
+
+// Level 1 — single top-middle band. Setup → add → test cadence; budgets
+// are soft caps (last group may overshoot).
 const L1_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+  bands: [TOP_BAND],
+  groupPool: L1_GROUP_POOL,
   waves: [
     {
       id: 'l1-w1-setup',
       beatRole: 'setup',
-      enemyPool: ['snake'],
-      enemyCount: 8,
+      enemyCount: 10,
       spawnIntervalMs: 2500,
-      spawnZone: L1_ENTRYWAY,
-      entryDirection: L1_ENTRY_DIR,
+      firstSpawnPool: L1_W1_FIRST_SPAWN_POOL,
     },
     {
       id: 'l1-w2-add',
       beatRole: 'add',
-      enemyPool: ['snake', 'gibbon'],
-      enemyCount: 12,
+      enemyCount: 14,
       spawnIntervalMs: 2000,
-      spawnZone: L1_ENTRYWAY,
-      entryDirection: L1_ENTRY_DIR,
     },
     {
       id: 'l1-w3-test',
       beatRole: 'test',
-      enemyPool: ['snake', 'gibbon'],
-      enemyCount: 16,
+      enemyCount: 20,
       spawnIntervalMs: 1500,
-      spawnZone: L1_ENTRYWAY,
-      entryDirection: L1_ENTRY_DIR,
     },
   ],
 };
 
-// Level 2 — perimeter spawns, three waves. Adds bear in wave 2.
+// Level 2 — top + left + right bands (T-shape; bottom is closed).
 const L2_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+  bands: [TOP_BAND, LEFT_BAND, RIGHT_BAND],
+  groupPool: L2_3_GROUP_POOL,
   waves: [
     {
       id: 'l2-w1-setup',
       beatRole: 'setup',
-      enemyPool: ['snake', 'gibbon'],
-      enemyCount: 10,
+      enemyCount: 14,
       spawnIntervalMs: 2000,
     },
     {
       id: 'l2-w2-add',
       beatRole: 'add',
-      enemyPool: ['snake', 'gibbon', 'bear'],
-      enemyCount: 14,
+      enemyCount: 20,
       spawnIntervalMs: 1700,
     },
     {
       id: 'l2-w3-test',
       beatRole: 'test',
-      enemyPool: ['gibbon', 'bear'],
-      enemyCount: 18,
+      enemyCount: 26,
       spawnIntervalMs: 1400,
     },
   ],
 };
 
-// Level 3 — perimeter spawns, three waves. Panther enters in wave 2 as
-// the last new-type beat for this slice.
+// Level 3 — all four bands (cross-shape).
 const L3_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+  bands: [TOP_BAND, BOTTOM_BAND, LEFT_BAND, RIGHT_BAND],
+  groupPool: L2_3_GROUP_POOL,
   waves: [
     {
       id: 'l3-w1-setup',
       beatRole: 'setup',
-      enemyPool: ['gibbon', 'bear'],
-      enemyCount: 12,
+      enemyCount: 16,
       spawnIntervalMs: 1700,
     },
     {
       id: 'l3-w2-add',
       beatRole: 'add',
-      enemyPool: ['gibbon', 'bear', 'panther'],
-      enemyCount: 16,
+      enemyCount: 22,
       spawnIntervalMs: 1400,
     },
     {
       id: 'l3-w3-test',
       beatRole: 'test',
-      enemyPool: ['bear', 'panther'],
-      enemyCount: 20,
+      enemyCount: 28,
       spawnIntervalMs: 1300,
     },
   ],

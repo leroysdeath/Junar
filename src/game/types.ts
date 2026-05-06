@@ -88,25 +88,41 @@ export type BeatRole =
   | 'pre_boss'
   | 'boss';
 
-// Fixed-count wave: spawn exactly `enemyCount` enemies, one every
-// `spawnIntervalMs`. The wave isn't "complete" until every spawned enemy
-// is dead; only then does the scheduler enter the inter-wave lull. The
-// optional `spawnZone` confines spawns to a rectangle (e.g. Level 1's
-// entryway band) instead of the level perimeter.
+// A 3-tile-wide band sitting one tile outside the canvas where group
+// templates land. `rect` is the front row in pixel space (3 tiles along
+// the orthogonal axis × 1 tile along the entry axis). `entryDirection`
+// is the cardinal unit vector pointing inward; rows further back along
+// the band sit at -entryDirection × N × TILE_SIZE from `rect`.
+export interface BandSpec {
+  rect: Rectangle;
+  entryDirection: Vector2;
+}
+
+// A pre-designed group template. `cells[row][col]` describes which enemy
+// (if any) occupies each grid cell. Outer index = row (0 = front, enters
+// first); inner index = column (0 = outside-left, 1 = middle, 2 =
+// outside-right). Rows trail behind the front row at one-tile spacing
+// along the band's reverse-entry direction.
+export interface SpawnTemplate {
+  id: string;
+  cells: (EnemyType | null)[][];
+}
+
+// Wave: keep drawing groups until cumulative spawned enemies meet or
+// exceed `enemyCount` (soft target — the last group may overshoot).
+// Groups are drawn from the level's `groupPool`, except `firstSpawnPool`
+// — when set, it's used for the wave's very first draw.
 export interface WaveTemplate {
   id: string;
   beatRole: BeatRole;
-  enemyPool: EnemyType[];
   enemyCount: number;
   spawnIntervalMs: number;
-  spawnZone?: Rectangle;
-  // Optional: spawned enemies use this entry direction (cardinal unit
-  // vector) and skip wall collision until fully on-canvas. Used when
-  // `spawnZone` sits outside the playfield, like the L1 entryway band.
-  entryDirection?: Vector2;
+  firstSpawnPool?: SpawnTemplate[];
 }
 
 export interface LevelWaveConfig {
   waves: WaveTemplate[];
   interWaveLullMs: number;
+  bands: BandSpec[];
+  groupPool: SpawnTemplate[];
 }
