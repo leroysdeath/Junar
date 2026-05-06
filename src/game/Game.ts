@@ -21,6 +21,8 @@ import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   TILE_SIZE,
+  GRID_WIDTH,
+  GRID_HEIGHT,
   MAX_DETECTION_RANGE,
   ARROW_SPEED,
   ARROW_COOLDOWN_MS,
@@ -80,9 +82,14 @@ export class Game {
   }> = [];
   private nextEnemyId = 0;
   private waveScheduler: WaveScheduler | null = null;
-  // Cached perimeter spawn positions for the current level (filtered by
-  // min distance from player center). Populated in startLevel().
-  private perimeterSpawnPositions: Vector2[] = [];
+  // Cached perimeter spawn entries for the current level: each entry is an
+  // off-canvas spawn position paired with the cardinal direction the enemy
+  // walks while entering. Filtered by min distance from player center and
+  // populated in startLevel(). Empty for legacy non-wave levels.
+  private perimeterSpawnEntries: Array<{
+    spawn: Vector2;
+    direction: Vector2;
+  }> = [];
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -142,7 +149,7 @@ export class Game {
       // waveConfig at the levels.ts authoring layer.
       this.enemies = [];
       this.pendingSpawns = [];
-      this.perimeterSpawnPositions = this.computePerimeterSpawnPositions();
+      this.perimeterSpawnEntries = this.computePerimeterSpawnEntries();
       this.waveScheduler = new WaveScheduler(waveConfig, {
         onWaveStart: (i, total, beat) => {
           this.callbacks.onWaveStart?.(i, total, beat);
@@ -161,7 +168,7 @@ export class Game {
       // Legacy path (Levels 4–10): static perimeter spawns + optional
       // entryway trickle.
       this.waveScheduler = null;
-      this.perimeterSpawnPositions = [];
+      this.perimeterSpawnEntries = [];
       this.enemies = this.level.getEnemySpawns().map((spawn, index) =>
         new Enemy(spawn.pos, spawn.type, index, this.level)
       );
@@ -185,6 +192,7 @@ export class Game {
     this.callbacks.onStateChange('playing');
     this.callbacks.onLevelChange(this.currentLevelIndex + 1);
     this.callbacks.onEnemiesChange(this.enemies.length + this.pendingSpawns.length);
+    this.emitWaveProgress();
     this.callbacks.onScoreChange(this.score);
     this.hasLineOfSight = false;
     this.levelStartedAt = performance.now();
@@ -198,20 +206,49 @@ export class Game {
     });
   }
 
-  // Build the list of valid edge spawn positions for the current level,
-  // filtered to those at least 128 px from the player center. Mirrors the
-  // logic in initializeLevels() but runs against the live Level object so
-  // wave-driven spawns can pick from the same pool.
-  private computePerimeterSpawnPositions(): Vector2[] {
+  // Build the list of perimeter spawn entries for the current level. Each
+  // candidate inner-edge tile from getEdgeSpawnPositions() is translated
+  // one tile *outside* the canvas with an inward cardinal direction so the
+  // spawned enemy walks in from off-screen (matching the L1 entryway feel
+  // for L2/L3's perimeter spawns). Filtered to ≥128 px from the player.
+  private computePerimeterSpawnEntries(): Array<{
+    spawn: Vector2;
+    direction: Vector2;
+  }> {
     const playerCenter = this.level.getMapCenter();
     const minDistance = 128;
-    return this.level
-      .getEdgeSpawnPositions()
-      .filter((pos) => {
-        const dx = pos.x - playerCenter.x;
-        const dy = pos.y - playerCenter.y;
-        return Math.sqrt(dx * dx + dy * dy) >= minDistance;
-      });
+    const innerTopY = TILE_SIZE;
+    const innerBottomY = (GRID_HEIGHT - 2) * TILE_SIZE;
+    const innerLeftX = TILE_SIZE;
+    const innerRightX = (GRID_WIDTH - 2) * TILE_SIZE;
+
+    const out: Array<{ spawn: Vector2; direction: Vector2 }> = [];
+    for (const pos of this.level.getEdgeSpawnPositions()) {
+      const dx = pos.x - playerCenter.x;
+      const dy = pos.y - playerCenter.y;
+      if (Math.sqrt(dx * dx + dy * dy) < minDistance) continue;
+
+      let spawn: Vector2;
+      let direction: Vector2;
+      if (pos.y === innerTopY) {
+        spawn = { x: pos.x, y: -TILE_SIZE };
+        direction = { x: 0, y: 1 };
+      } else if (pos.y === innerBottomY) {
+        spawn = { x: pos.x, y: CANVAS_HEIGHT };
+        direction = { x: 0, y: -1 };
+      } else if (pos.x === innerLeftX) {
+        spawn = { x: -TILE_SIZE, y: pos.y };
+        direction = { x: 1, y: 0 };
+      } else if (pos.x === innerRightX) {
+        spawn = { x: CANVAS_WIDTH, y: pos.y };
+        direction = { x: -1, y: 0 };
+      } else {
+        // Defensive: skip any position that doesn't sit on a known edge.
+        continue;
+      }
+      out.push({ spawn, direction });
+    }
+    return out;
   }
 
   // Runtime entryway spawning. Picks a random pixel position within the
@@ -363,11 +400,12 @@ export class Game {
         this.callbacks.onEnemiesChange(
           this.enemies.length + this.pendingSpawns.length,
         );
+        this.emitWaveProgress();
       }
     }
 
-    // Wave-driven spawns. The scheduler maintains population floors and
-    // emits wave/lull transitions on its own clock.
+    // Wave-driven spawns. The scheduler ticks one fixed-count spawn per
+    // interval and emits wave/lull transitions on its own clock.
     if (this.waveScheduler) {
       const requests = this.waveScheduler.tick(currentTime, (pool) =>
         this.countEnemiesOfTypes(pool),
@@ -385,6 +423,7 @@ export class Game {
           this.callbacks.onEnemiesChange(
             this.enemies.length + this.pendingSpawns.length,
           );
+          this.emitWaveProgress();
         }
       }
     }
@@ -440,17 +479,24 @@ export class Game {
 
   // Translate a SpawnRequest from the scheduler into a live Enemy. If a
   // zone is given, spawn within it (entryway-style); otherwise pick a
-  // random pre-filtered perimeter position.
+  // random pre-filtered perimeter entry and spawn one tile off-canvas in
+  // entering mode so the enemy slides in from off-screen.
   private spawnFromRequest(req: SpawnRequest): Enemy | null {
     if (req.zone) {
       const direction = req.entryDirection ?? { x: 0, y: 0 };
       return this.spawnInZone(req.type, req.zone, direction);
     }
-    if (this.perimeterSpawnPositions.length === 0) return null;
-    const pos = this.perimeterSpawnPositions[
-      Math.floor(Math.random() * this.perimeterSpawnPositions.length)
+    if (this.perimeterSpawnEntries.length === 0) return null;
+    const entry = this.perimeterSpawnEntries[
+      Math.floor(Math.random() * this.perimeterSpawnEntries.length)
     ];
-    return new Enemy({ ...pos }, req.type, this.nextEnemyId++, this.level);
+    return new Enemy(
+      { ...entry.spawn },
+      req.type,
+      this.nextEnemyId++,
+      undefined,
+      { direction: { ...entry.direction } },
+    );
   }
 
   // Tile-aligned random spawn within a zone rectangle, skipping wall
@@ -485,6 +531,17 @@ export class Game {
       if (pool.includes(e.getType())) count++;
     }
     return count;
+  }
+
+  // Push the current wave/level remaining counts to the React HUD. No-op on
+  // legacy non-wave levels — the HUD hides those rows when never set.
+  private emitWaveProgress() {
+    if (!this.waveScheduler) return;
+    const pool = (p: EnemyType[]) => this.countEnemiesOfTypes(p);
+    this.callbacks.onWaveProgressChange?.(
+      this.waveScheduler.remainingInWave(pool),
+      this.waveScheduler.remainingInLevel(pool),
+    );
   }
 
   // Scan all enemies and return the nearest one within MAX_DETECTION_RANGE
@@ -624,6 +681,7 @@ export class Game {
           this.callbacks.onEnemiesChange(
             this.enemies.length + this.pendingSpawns.length,
           );
+          this.emitWaveProgress();
           this.logger.log('hit', 'arrow->enemy', {
             type: enemyType,
             remaining: this.enemies.length,
