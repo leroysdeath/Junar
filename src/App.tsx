@@ -33,6 +33,8 @@ function App() {
   const [currentLevel, setCurrentLevel] = useState(1);
   const [score, setScore] = useState(0);
   const [enemiesRemaining, setEnemiesRemaining] = useState(0);
+  const [waveRemaining, setWaveRemaining] = useState<number | null>(null);
+  const [levelRemaining, setLevelRemaining] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
   const isMobile = useIsMobile();
@@ -48,9 +50,20 @@ function App() {
     if (canvasRef.current && !gameRef.current) {
       gameRef.current = new Game(canvasRef.current, {
         onStateChange: setGameState,
-        onLevelChange: setCurrentLevel,
+        onLevelChange: (level) => {
+          setCurrentLevel(level);
+          // Wave/level counters are only emitted on wave-driven levels
+          // (1–3). Reset to null on every level change so legacy levels
+          // (4–10) hide the rows until/unless Game emits a value.
+          setWaveRemaining(null);
+          setLevelRemaining(null);
+        },
         onScoreChange: setScore,
         onEnemiesChange: setEnemiesRemaining,
+        onWaveProgressChange: (wave, level) => {
+          setWaveRemaining(wave);
+          setLevelRemaining(level);
+        },
         soundEnabled
       });
       gameRef.current.start();
@@ -95,6 +108,16 @@ function App() {
         <div className="text-xs text-amber-300 mt-1">
           Enemies: {enemiesRemaining}
         </div>
+        {levelRemaining !== null && (
+          <div className="text-xs text-amber-300">
+            Level remaining: {levelRemaining}
+          </div>
+        )}
+        {waveRemaining !== null && (
+          <div className="text-xs text-amber-300">
+            Wave remaining: {waveRemaining}
+          </div>
+        )}
       </div>
 
       <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">

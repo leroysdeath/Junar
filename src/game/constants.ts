@@ -10,6 +10,5 @@ export const ARROW_SPEED = 400; // pixels per second
 export const ARROW_COOLDOWN_MS = 500;
 
 // Wave scheduler defaults. Per-level/per-wave overrides live in levels.ts.
-export const DEFAULT_INTER_WAVE_LULL_MS = 10000;
-export const DEFAULT_WAVE_DURATION_MS = 30000;
+export const DEFAULT_INTER_WAVE_LULL_MS = 3000;
 export const DEFAULT_SPAWN_INTERVAL_MS = 1500;

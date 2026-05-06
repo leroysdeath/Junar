@@ -20,6 +20,9 @@ export interface GameCallbacks {
   onWaveStart?: (waveIndex: number, totalWaves: number, beatRole: BeatRole) => void;
   onWaveComplete?: (waveIndex: number) => void;
   onLullStart?: (durationMs: number) => void;
+  // Wave-driven levels (1–3): live + queued enemies for the current wave
+  // and across the rest of the level. Not emitted on legacy levels.
+  onWaveProgressChange?: (remainingInWave: number, remainingInLevel: number) => void;
   soundEnabled: boolean;
 }
 
@@ -85,17 +88,16 @@ export type BeatRole =
   | 'pre_boss'
   | 'boss';
 
-// Vampire-Survivors-shaped wave: maintain `populationFloor` of `enemyPool`
-// types alive on screen, ticking spawns every `spawnIntervalMs`. After
-// `durationMs` the scheduler transitions to a lull (no new spawns; existing
-// enemies persist). Optional `spawnZone` confines spawns to a rectangle —
-// e.g. Level 1's entryway band — instead of the level perimeter.
+// Fixed-count wave: spawn exactly `enemyCount` enemies, one every
+// `spawnIntervalMs`. The wave isn't "complete" until every spawned enemy
+// is dead; only then does the scheduler enter the inter-wave lull. The
+// optional `spawnZone` confines spawns to a rectangle (e.g. Level 1's
+// entryway band) instead of the level perimeter.
 export interface WaveTemplate {
   id: string;
   beatRole: BeatRole;
-  durationMs: number;
   enemyPool: EnemyType[];
-  populationFloor: number;
+  enemyCount: number;
   spawnIntervalMs: number;
   spawnZone?: Rectangle;
   // Optional: spawned enemies use this entry direction (cardinal unit

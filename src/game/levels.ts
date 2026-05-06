@@ -97,17 +97,16 @@ const L1_ENTRYWAY: Rectangle = {
 const L1_ENTRY_DIR: Vector2 = { x: 0, y: 1 };
 
 // Level 1 — three waves trickling from the top-middle entryway. Setup →
-// add (gibbons join) → test (faster cadence). Per-wave numbers are
-// indicative; tune in playtesting.
+// add (gibbons join) → test (faster cadence). Counts are indicative; tune
+// in playtesting.
 const L1_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
   waves: [
     {
       id: 'l1-w1-setup',
       beatRole: 'setup',
-      durationMs: 30000,
       enemyPool: ['snake'],
-      populationFloor: 2,
+      enemyCount: 8,
       spawnIntervalMs: 2500,
       spawnZone: L1_ENTRYWAY,
       entryDirection: L1_ENTRY_DIR,
@@ -115,9 +114,8 @@ const L1_WAVE_CONFIG: LevelWaveConfig = {
     {
       id: 'l1-w2-add',
       beatRole: 'add',
-      durationMs: 30000,
       enemyPool: ['snake', 'gibbon'],
-      populationFloor: 3,
+      enemyCount: 12,
       spawnIntervalMs: 2000,
       spawnZone: L1_ENTRYWAY,
       entryDirection: L1_ENTRY_DIR,
@@ -125,9 +123,8 @@ const L1_WAVE_CONFIG: LevelWaveConfig = {
     {
       id: 'l1-w3-test',
       beatRole: 'test',
-      durationMs: 30000,
       enemyPool: ['snake', 'gibbon'],
-      populationFloor: 4,
+      enemyCount: 16,
       spawnIntervalMs: 1500,
       spawnZone: L1_ENTRYWAY,
       entryDirection: L1_ENTRY_DIR,
@@ -142,25 +139,22 @@ const L2_WAVE_CONFIG: LevelWaveConfig = {
     {
       id: 'l2-w1-setup',
       beatRole: 'setup',
-      durationMs: 30000,
       enemyPool: ['snake', 'gibbon'],
-      populationFloor: 3,
+      enemyCount: 10,
       spawnIntervalMs: 2000,
     },
     {
       id: 'l2-w2-add',
       beatRole: 'add',
-      durationMs: 30000,
       enemyPool: ['snake', 'gibbon', 'bear'],
-      populationFloor: 4,
+      enemyCount: 14,
       spawnIntervalMs: 1700,
     },
     {
       id: 'l2-w3-test',
       beatRole: 'test',
-      durationMs: 30000,
       enemyPool: ['gibbon', 'bear'],
-      populationFloor: 5,
+      enemyCount: 18,
       spawnIntervalMs: 1400,
     },
   ],
@@ -174,25 +168,22 @@ const L3_WAVE_CONFIG: LevelWaveConfig = {
     {
       id: 'l3-w1-setup',
       beatRole: 'setup',
-      durationMs: 30000,
       enemyPool: ['gibbon', 'bear'],
-      populationFloor: 4,
+      enemyCount: 12,
       spawnIntervalMs: 1700,
     },
     {
       id: 'l3-w2-add',
       beatRole: 'add',
-      durationMs: 30000,
       enemyPool: ['gibbon', 'bear', 'panther'],
-      populationFloor: 5,
+      enemyCount: 16,
       spawnIntervalMs: 1400,
     },
     {
       id: 'l3-w3-test',
       beatRole: 'test',
-      durationMs: 30000,
       enemyPool: ['bear', 'panther'],
-      populationFloor: 5,
+      enemyCount: 20,
       spawnIntervalMs: 1300,
     },
   ],
