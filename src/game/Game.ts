@@ -14,15 +14,12 @@ import {
   EnemyType,
   InputState,
   SpawnEntryway,
-  Rectangle,
 } from './types';
 import { initializeLevels } from './levels';
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   TILE_SIZE,
-  GRID_WIDTH,
-  GRID_HEIGHT,
   MAX_DETECTION_RANGE,
   ARROW_SPEED,
   ARROW_COOLDOWN_MS,
@@ -82,14 +79,6 @@ export class Game {
   }> = [];
   private nextEnemyId = 0;
   private waveScheduler: WaveScheduler | null = null;
-  // Cached perimeter spawn entries for the current level: each entry is an
-  // off-canvas spawn position paired with the cardinal direction the enemy
-  // walks while entering. Filtered by min distance from player center and
-  // populated in startLevel(). Empty for legacy non-wave levels.
-  private perimeterSpawnEntries: Array<{
-    spawn: Vector2;
-    direction: Vector2;
-  }> = [];
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -149,7 +138,6 @@ export class Game {
       // waveConfig at the levels.ts authoring layer.
       this.enemies = [];
       this.pendingSpawns = [];
-      this.perimeterSpawnEntries = this.computePerimeterSpawnEntries();
       this.waveScheduler = new WaveScheduler(waveConfig, {
         onWaveStart: (i, total, beat) => {
           this.callbacks.onWaveStart?.(i, total, beat);
@@ -168,7 +156,6 @@ export class Game {
       // Legacy path (Levels 4–10): static perimeter spawns + optional
       // entryway trickle.
       this.waveScheduler = null;
-      this.perimeterSpawnEntries = [];
       this.enemies = this.level.getEnemySpawns().map((spawn, index) =>
         new Enemy(spawn.pos, spawn.type, index, this.level)
       );
@@ -204,51 +191,6 @@ export class Game {
       waveDriven: this.waveScheduler !== null,
       playerSpawn: this.player.getPosition(),
     });
-  }
-
-  // Build the list of perimeter spawn entries for the current level. Each
-  // candidate inner-edge tile from getEdgeSpawnPositions() is translated
-  // one tile *outside* the canvas with an inward cardinal direction so the
-  // spawned enemy walks in from off-screen (matching the L1 entryway feel
-  // for L2/L3's perimeter spawns). Filtered to ≥128 px from the player.
-  private computePerimeterSpawnEntries(): Array<{
-    spawn: Vector2;
-    direction: Vector2;
-  }> {
-    const playerCenter = this.level.getMapCenter();
-    const minDistance = 128;
-    const innerTopY = TILE_SIZE;
-    const innerBottomY = (GRID_HEIGHT - 2) * TILE_SIZE;
-    const innerLeftX = TILE_SIZE;
-    const innerRightX = (GRID_WIDTH - 2) * TILE_SIZE;
-
-    const out: Array<{ spawn: Vector2; direction: Vector2 }> = [];
-    for (const pos of this.level.getEdgeSpawnPositions()) {
-      const dx = pos.x - playerCenter.x;
-      const dy = pos.y - playerCenter.y;
-      if (Math.sqrt(dx * dx + dy * dy) < minDistance) continue;
-
-      let spawn: Vector2;
-      let direction: Vector2;
-      if (pos.y === innerTopY) {
-        spawn = { x: pos.x, y: -TILE_SIZE };
-        direction = { x: 0, y: 1 };
-      } else if (pos.y === innerBottomY) {
-        spawn = { x: pos.x, y: CANVAS_HEIGHT };
-        direction = { x: 0, y: -1 };
-      } else if (pos.x === innerLeftX) {
-        spawn = { x: -TILE_SIZE, y: pos.y };
-        direction = { x: 1, y: 0 };
-      } else if (pos.x === innerRightX) {
-        spawn = { x: CANVAS_WIDTH, y: pos.y };
-        direction = { x: -1, y: 0 };
-      } else {
-        // Defensive: skip any position that doesn't sit on a known edge.
-        continue;
-      }
-      out.push({ spawn, direction });
-    }
-    return out;
   }
 
   // Runtime entryway spawning. Picks a random pixel position within the
@@ -404,27 +346,29 @@ export class Game {
       }
     }
 
-    // Wave-driven spawns. The scheduler ticks one fixed-count spawn per
-    // interval and emits wave/lull transitions on its own clock.
+    // Wave-driven spawns. Each tick may emit zero, one, or many spawn
+    // requests — group templates land row-by-row at unit speed, so a
+    // single tick can release multiple enemies (the front row of a new
+    // group, or simultaneous rows across different bands).
     if (this.waveScheduler) {
-      const requests = this.waveScheduler.tick(currentTime, (pool) =>
-        this.countEnemiesOfTypes(pool),
+      const requests = this.waveScheduler.tick(currentTime, () =>
+        this.enemies.length,
       );
       for (const req of requests) {
         const enemy = this.spawnFromRequest(req);
-        if (enemy) {
-          this.enemies.push(enemy);
-          this.logger.log('spawn', 'wave', {
-            id: enemy.getId(),
-            type: enemy.getType(),
-            waveIndex: this.waveScheduler.currentWaveIndex(),
-            pos: enemy.getPosition(),
-          });
-          this.callbacks.onEnemiesChange(
-            this.enemies.length + this.pendingSpawns.length,
-          );
-          this.emitWaveProgress();
-        }
+        this.enemies.push(enemy);
+        this.logger.log('spawn', 'wave', {
+          id: enemy.getId(),
+          type: enemy.getType(),
+          waveIndex: this.waveScheduler.currentWaveIndex(),
+          pos: enemy.getPosition(),
+        });
+      }
+      if (requests.length > 0) {
+        this.callbacks.onEnemiesChange(
+          this.enemies.length + this.pendingSpawns.length,
+        );
+        this.emitWaveProgress();
       }
     }
 
@@ -477,70 +421,27 @@ export class Game {
     }
   }
 
-  // Translate a SpawnRequest from the scheduler into a live Enemy. If a
-  // zone is given, spawn within it (entryway-style); otherwise pick a
-  // random pre-filtered perimeter entry and spawn one tile off-canvas in
-  // entering mode so the enemy slides in from off-screen.
-  private spawnFromRequest(req: SpawnRequest): Enemy | null {
-    if (req.zone) {
-      const direction = req.entryDirection ?? { x: 0, y: 0 };
-      return this.spawnInZone(req.type, req.zone, direction);
-    }
-    if (this.perimeterSpawnEntries.length === 0) return null;
-    const entry = this.perimeterSpawnEntries[
-      Math.floor(Math.random() * this.perimeterSpawnEntries.length)
-    ];
+  // Translate a scheduler SpawnRequest into a live Enemy. The scheduler
+  // already computes the off-canvas position and entry direction from the
+  // chosen band/template/cell, so this is a thin Enemy-construction step.
+  private spawnFromRequest(req: SpawnRequest): Enemy {
     return new Enemy(
-      { ...entry.spawn },
+      { ...req.position },
       req.type,
       this.nextEnemyId++,
       undefined,
-      { direction: { ...entry.direction } },
+      { direction: { ...req.entryDirection } },
     );
-  }
-
-  // Tile-aligned random spawn within a zone rectangle, skipping wall
-  // collision until the AABB is fully on-canvas. Mirrors spawnFromEntryway
-  // but with a caller-provided enemy type.
-  private spawnInZone(
-    type: EnemyType,
-    zone: Rectangle,
-    direction: Vector2,
-  ): Enemy {
-    const tileCols = Math.max(1, Math.floor(zone.width / TILE_SIZE));
-    const tileRows = Math.max(1, Math.floor(zone.height / TILE_SIZE));
-    const colOffset = Math.floor(Math.random() * tileCols);
-    const rowOffset = Math.floor(Math.random() * tileRows);
-    const spawnPos: Vector2 = {
-      x: zone.x + colOffset * TILE_SIZE,
-      y: zone.y + rowOffset * TILE_SIZE,
-    };
-    return new Enemy(
-      spawnPos,
-      type,
-      this.nextEnemyId++,
-      undefined,
-      { direction: { ...direction } },
-    );
-  }
-
-  private countEnemiesOfTypes(pool: EnemyType[]): number {
-    if (pool.length === 0) return 0;
-    let count = 0;
-    for (const e of this.enemies) {
-      if (pool.includes(e.getType())) count++;
-    }
-    return count;
   }
 
   // Push the current wave/level remaining counts to the React HUD. No-op on
   // legacy non-wave levels — the HUD hides those rows when never set.
   private emitWaveProgress() {
     if (!this.waveScheduler) return;
-    const pool = (p: EnemyType[]) => this.countEnemiesOfTypes(p);
+    const live = () => this.enemies.length;
     this.callbacks.onWaveProgressChange?.(
-      this.waveScheduler.remainingInWave(pool),
-      this.waveScheduler.remainingInLevel(pool),
+      this.waveScheduler.remainingInWave(live),
+      this.waveScheduler.remainingInLevel(live),
     );
   }
 
