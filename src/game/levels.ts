@@ -108,6 +108,11 @@ const RIGHT_BAND: BandSpec = {
   rect: { x: CANVAS_WIDTH, y: 7 * TILE_SIZE, width: TILE_SIZE, height: 3 * TILE_SIZE },
   entryDirection: { x: -1, y: 0 },
 };
+// L1's top entryway is offset right (cols 20-22) rather than centered.
+const L1_TOP_BAND: BandSpec = {
+  rect: { x: 20 * TILE_SIZE, y: -TILE_SIZE, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  entryDirection: { x: 0, y: 1 },
+};
 
 // 8 pre-designed templates. Cells are [row][col] with col length 3
 // (outside-left, middle, outside-right). Row 0 enters first; trailing
@@ -183,11 +188,11 @@ const L2_3_GROUP_POOL: SpawnTemplate[] = [
 // the player always opens on a readable threat shape.
 const L1_W1_FIRST_SPAWN_POOL: SpawnTemplate[] = [T_1PANTHER, T_1PANTHER_6SNAKE];
 
-// Level 1 — single top-middle band. Setup → add → test cadence; budgets
-// are soft caps (last group may overshoot).
+// Level 1 — single top band, offset right over cols 20-22. Setup → add
+// → test cadence; budgets are soft caps (last group may overshoot).
 const L1_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
-  bands: [TOP_BAND],
+  bands: [L1_TOP_BAND],
   groupPool: L1_GROUP_POOL,
   waves: [
     {
@@ -267,20 +272,20 @@ const L3_WAVE_CONFIG: LevelWaveConfig = {
 };
 
 export const levels: LevelData[] = [
-  // Level 1 — L-shaped path. Wave-driven trickle from the top-middle
-  // entryway (see L1_WAVE_CONFIG).
+  // Level 1 — L-shaped path. Wave-driven trickle from the right-offset
+  // top entryway at cols 20-22 (see L1_WAVE_CONFIG).
   buildLevel(
     [
-      '#############...#############',
-      '#############...#############',
-      '#############...#############',
-      '#############...#############',
-      '#############...#############',
-      '#############...#############',
-      '#############...#############',
-      '................#############',
-      '................#############',
-      '................#############',
+      '####################...######',
+      '####################...######',
+      '####################...######',
+      '####################...######',
+      '####################...######',
+      '####################...######',
+      '####################...######',
+      '.......................######',
+      '.......................######',
+      '.......................######',
       '#############################',
       '#############################',
       '#############################',
