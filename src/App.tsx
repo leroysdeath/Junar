@@ -232,12 +232,12 @@ function App() {
 
         {/* Main Menu (overlays canvas on both mobile and desktop) */}
         {gameState === 'menu' && (
-          <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
+          <div className={`${isMobile ? 'fixed inset-0 z-50' : 'absolute inset-0'} bg-black/90 flex items-center justify-center`}>
             <div className="text-center text-white max-w-md mx-auto px-6">
-              <h1 className="text-6xl font-bold text-amber-400 mb-2 font-serif">
+              <h1 className={`${isMobile ? 'text-4xl' : 'text-6xl'} font-bold text-amber-400 mb-2 font-serif`}>
                 Jungle Archer
               </h1>
-              <p className="text-lg text-amber-200 mb-8 font-mono">
+              <p className={`text-lg text-amber-200 ${isMobile ? 'mb-4' : 'mb-8'} font-mono`}>
                 Survive the Ancient Forest
               </p>
 
@@ -301,7 +301,7 @@ function App() {
         )}
       </div>
 
-      {isMobile && (
+      {isMobile && gameState === 'playing' && (
         <MobileControls
           onPress={handleMobilePress}
           onRelease={handleMobileRelease}
