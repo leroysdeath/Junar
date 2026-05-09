@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target } from 'lucide-react';
+import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target, Zap } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState } from './game/types';
 import { Direction } from './game/InputManager';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from './game/constants';
-import { MobileControls } from './MobileControls';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, STAMINA_MAX } from './game/constants';
+import { MobileControls, Action } from './MobileControls';
 
 // Detect touch-primary devices via the (pointer: coarse) media query.
 // Matches phones and tablets; spares desktop touchscreens (which have a
@@ -37,6 +37,8 @@ function App() {
   const [levelRemaining, setLevelRemaining] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
+  const [burst, setBurst] = useState({ active: false, multiplier: 1 });
   const isMobile = useIsMobile();
 
   const handleMobilePress = useCallback((dir: Direction) => {
@@ -44,6 +46,11 @@ function App() {
   }, []);
   const handleMobileRelease = useCallback((dir: Direction) => {
     gameRef.current?.setVirtualInput(dir, false);
+  }, []);
+  const handleActionPress = useCallback((action: Action) => {
+    if (action === 'b') {
+      gameRef.current?.triggerBurst();
+    }
   }, []);
 
   const initGame = useCallback(() => {
@@ -64,6 +71,8 @@ function App() {
           setWaveRemaining(wave);
           setLevelRemaining(level);
         },
+        onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
+        onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
         soundEnabled
       });
       gameRef.current.start();
@@ -98,43 +107,84 @@ function App() {
     };
   }, [initGame]);
 
-  const renderHud = () => (
-    <div className="flex justify-between items-start text-white font-mono gap-2">
-      <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-        <div className="flex items-center gap-2 text-sm">
-          <Target size={16} className="text-amber-400" />
-          <span>Level {currentLevel}/10</span>
-        </div>
-        <div className="text-xs text-amber-300 mt-1">
-          Enemies: {enemiesRemaining}
-        </div>
-        {levelRemaining !== null && (
-          <div className="text-xs text-amber-300">
-            Level remaining: {levelRemaining}
+  const renderHud = () => {
+    // Stamina bar fill — red when low, warm gold while bursting, amber
+    // otherwise. Width is rounded so the bar visibly steps as the value
+    // crosses each percent boundary.
+    const fillPct = Math.max(0, Math.min(100, (stamina.value / STAMINA_MAX) * 100));
+    const fillColor = stamina.isLow
+      ? 'bg-red-500'
+      : burst.active
+        ? 'bg-amber-300'
+        : 'bg-amber-500';
+    return (
+      <div className="flex justify-between items-start text-white font-mono gap-2">
+        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
+          <div className="flex items-center gap-2 text-sm">
+            <Target size={16} className="text-amber-400" />
+            <span>Level {currentLevel}/10</span>
           </div>
-        )}
-        {waveRemaining !== null && (
-          <div className="text-xs text-amber-300">
-            Wave remaining: {waveRemaining}
+          <div className="text-xs text-amber-300 mt-1">
+            Enemies: {enemiesRemaining}
           </div>
-        )}
-      </div>
-
-      <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-        <div className="flex items-center gap-2 text-sm">
-          <Trophy size={16} className="text-yellow-400" />
-          <span>Score: {score}</span>
+          {levelRemaining !== null && (
+            <div className="text-xs text-amber-300">
+              Level remaining: {levelRemaining}
+            </div>
+          )}
+          {waveRemaining !== null && (
+            <div className="text-xs text-amber-300">
+              Wave remaining: {waveRemaining}
+            </div>
+          )}
         </div>
-      </div>
 
-      <button
-        onClick={toggleSound}
-        className="bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors"
-      >
-        {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-      </button>
-    </div>
-  );
+        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px]">
+          <div className="flex items-center gap-2 text-xs">
+            <Zap
+              size={14}
+              className={
+                burst.active
+                  ? 'text-amber-300'
+                  : stamina.isLow
+                    ? 'text-red-400'
+                    : 'text-amber-400'
+              }
+            />
+            <span>Stamina</span>
+            <span className="ml-auto tabular-nums">
+              {Math.floor(stamina.value)}/{STAMINA_MAX}
+            </span>
+          </div>
+          <div className="mt-1 h-2 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
+            <div
+              className={`h-full ${fillColor} transition-[width] duration-100`}
+              style={{ width: `${fillPct}%` }}
+            />
+          </div>
+          {burst.active && (
+            <div className="text-[10px] text-amber-200 mt-1 tabular-nums">
+              Burst {burst.multiplier.toFixed(2)}×
+            </div>
+          )}
+        </div>
+
+        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
+          <div className="flex items-center gap-2 text-sm">
+            <Trophy size={16} className="text-yellow-400" />
+            <span>Score: {score}</span>
+          </div>
+        </div>
+
+        <button
+          onClick={toggleSound}
+          className="bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors"
+        >
+          {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        </button>
+      </div>
+    );
+  };
 
   const renderGameOverContent = () => (
     <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
@@ -267,6 +317,12 @@ function App() {
                       {isMobile ? 'Use the on-screen D-pad' : 'Use WASD or Arrow Keys'}
                     </li>
                     <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
+                    <li>
+                      <strong>Burst:</strong>{' '}
+                      {isMobile ? 'Tap B for 10s rapid-fire' : 'Press Space for 10s rapid-fire'}
+                      {' '}(costs stamina; spam loses bonus)
+                    </li>
+                    <li><strong>Stamina:</strong> One bar for the whole run — no regen</li>
                     <li><strong>Objective:</strong> Eliminate all enemies to advance</li>
                     <li><strong>Strategy:</strong> Position for clear line of sight</li>
                     <li><strong>Warning:</strong> Avoid all enemy contact!</li>
@@ -305,6 +361,7 @@ function App() {
         <MobileControls
           onPress={handleMobilePress}
           onRelease={handleMobileRelease}
+          onActionPress={handleActionPress}
         />
       )}
     </div>

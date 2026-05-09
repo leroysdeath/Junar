@@ -15,6 +15,7 @@ export type LogCategory =
   | 'input'
   | 'sample'
   | 'spawn'
+  | 'stamina'
   | 'wall'
   | 'warn'
   | 'error';

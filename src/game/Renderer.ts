@@ -41,8 +41,22 @@ export class Renderer {
     }
   }
 
-  renderPlayer(player: Player) {
+  renderPlayer(player: Player, burstActive = false) {
     const pos = player.getPosition();
+
+    // Burst aura — single warm-gold layer behind the player. Drawn first
+    // so the figure remains readable on top. Fixed alpha and color; no
+    // multiplier-tied intensity (intentional — keeps the cue binary).
+    if (burstActive) {
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.35;
+      this.ctx.fillStyle = '#FFC857';
+      this.ctx.fillRect(pos.x - 6, pos.y - 6, 44, 44);
+      this.ctx.globalAlpha = 0.55;
+      this.ctx.fillStyle = '#FFD97A';
+      this.ctx.fillRect(pos.x - 3, pos.y - 3, 38, 38);
+      this.ctx.restore();
+    }
 
     // Tunic / dhoti-coded cloth (cream cotton)
     this.ctx.fillStyle = '#DCC59C';

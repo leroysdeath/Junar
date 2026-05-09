@@ -7,6 +7,7 @@ import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
 import { WaveScheduler, SpawnRequest } from './WaveScheduler';
+import { Stamina } from './Stamina';
 import {
   GameState,
   GameCallbacks,
@@ -23,6 +24,7 @@ import {
   MAX_DETECTION_RANGE,
   ARROW_SPEED,
   ARROW_COOLDOWN_MS,
+  STAMINA_MAX,
 } from './constants';
 
 type GameOverReason =
@@ -66,12 +68,19 @@ export class Game {
   private lastSampleFrame = 0;
 
   private lastArrowTime = 0;
-  private arrowCooldown = ARROW_COOLDOWN_MS;
   private maxDetectionRange = MAX_DETECTION_RANGE;
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
   private hasLineOfSight = false; // Track if player has line of sight to any enemy
   private levelTransitionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  // Stamina state. Constructed once; persists across level transitions
+  // and resets only on Game.restart(). The was* fields drive
+  // edge-triggered logging and callback emission for state transitions.
+  private stamina = new Stamina();
+  private wasBurstActive = false;
+  private wasLowStamina = false;
+  private wasDepleted = false;
+  private lastEmittedStaminaValue = STAMINA_MAX;
   private pendingSpawns: Array<{
     spawnAtMs: number; // ms relative to levelStartedAt
     entryway: SpawnEntryway;
@@ -122,6 +131,13 @@ export class Game {
     this.score = 0;
     this.arrows = [];
     this.lastArrowTime = 0;
+    this.stamina.reset();
+    this.wasBurstActive = false;
+    this.wasLowStamina = false;
+    this.wasDepleted = false;
+    this.lastEmittedStaminaValue = STAMINA_MAX;
+    this.callbacks.onStaminaChange?.(STAMINA_MAX, false);
+    this.callbacks.onBurstChange?.(false, 1, 0);
     this.logger.log('lifecycle', 'restart');
     this.startLevel();
   }
@@ -285,6 +301,10 @@ export class Game {
         : 0,
       playerX: playerPos !== undefined ? round2(playerPos.x) : undefined,
       playerY: playerPos !== undefined ? round2(playerPos.y) : undefined,
+      stamina: round2(this.stamina.getValue()),
+      staminaLow: this.stamina.isLow(),
+      burstActive: this.stamina.isBurstActive(),
+      burstMultiplier: round2(this.stamina.getBurstMultiplier()),
       pressedKeys,
       enemyPositions,
     };
@@ -304,8 +324,16 @@ export class Game {
   }
 
   private update(deltaTime: number, currentTime: number) {
-    // Update player
+    // Apply low-stamina speed penalty before player movement so the
+    // multiplier composes against this frame's intended motion.
+    this.player.setSpeedMultiplier(this.stamina.getMovementSpeedMultiplier());
+
+    // Update player. Snapshot position pre/post so we can charge stamina
+    // for distance traveled this frame. Math.hypot (not Manhattan) so the
+    // corner-cut slide that produces simultaneous x+y motion isn't
+    // overcharged by ~41%.
     const input = this.inputManager.getInput();
+    const prePos = this.player.getPosition();
     this.player.update(deltaTime, input, this.level, (rej) => {
       this.logger.log('wall', 'reject', {
         axis: rej.axis,
@@ -315,11 +343,22 @@ export class Game {
         in: input,
       });
     });
+    const postPos = this.player.getPosition();
+    this.stamina.consumeMovement(
+      Math.hypot(postPos.x - prePos.x, postPos.y - prePos.y),
+    );
 
     if (this.frameCount - this.lastSampleFrame >= SAMPLE_EVERY_FRAMES) {
       this.lastSampleFrame = this.frameCount;
       this.sampleTick(input, deltaTime);
     }
+
+    // Burst activation — edge-triggered. Stamina gates on cost +
+    // already-active; rejected presses don't tick the decay multiplier.
+    if (this.inputManager.consumeBurstPress()) {
+      this.stamina.tryActivateBurst(currentTime);
+    }
+    this.stamina.tick(currentTime);
 
     // Process delayed entryway spawns (legacy path). Pending spawns are
     // sorted by spawnAtMs (since startLevel pushes them in order); pop
@@ -377,7 +416,12 @@ export class Game {
     const visibleTarget = this.findNearestVisibleEnemy();
     this.hasLineOfSight = visibleTarget !== null;
 
-    if (visibleTarget && currentTime - this.lastArrowTime >= this.arrowCooldown) {
+    // Effective cooldown is recomputed each frame from the composed
+    // multiplier (burst × low-stamina) — burst can end mid-frame and the
+    // cooldown must respond on the very next check.
+    const effectiveCooldown =
+      ARROW_COOLDOWN_MS / this.stamina.getArrowRateMultiplier();
+    if (visibleTarget && currentTime - this.lastArrowTime >= effectiveCooldown) {
       this.fireArrow(visibleTarget);
       this.lastArrowTime = currentTime;
     }
@@ -418,6 +462,58 @@ export class Game {
       : this.pendingSpawns.length === 0;
     if (this.enemies.length === 0 && noFutureSpawns) {
       this.completeLevel();
+    }
+
+    this.emitStaminaTransitions();
+  }
+
+  // Fire callbacks + log events on stamina/burst state transitions. Edge
+  // detection against the was* fields keeps logs to one entry per change
+  // and avoids per-frame spam in the React HUD; the value emit is
+  // throttled to every 10 frames unless the low-state flips.
+  private emitStaminaTransitions() {
+    const isBurstActive = this.stamina.isBurstActive();
+    if (isBurstActive !== this.wasBurstActive) {
+      if (isBurstActive) {
+        this.logger.log('stamina', 'burst_start', {
+          multiplier: round2(this.stamina.getBurstMultiplier()),
+          value: round2(this.stamina.getValue()),
+        });
+        this.callbacks.onBurstChange?.(
+          true,
+          this.stamina.getBurstMultiplier(),
+          this.stamina.getBurstEndAt() ?? 0,
+        );
+      } else {
+        this.logger.log('stamina', 'burst_end', {
+          value: round2(this.stamina.getValue()),
+        });
+        this.callbacks.onBurstChange?.(false, 1, 0);
+      }
+      this.wasBurstActive = isBurstActive;
+    }
+
+    const isLow = this.stamina.isLow();
+    const lowChanged = isLow !== this.wasLowStamina;
+    if (lowChanged) {
+      this.logger.log('stamina', isLow ? 'low_enter' : 'low_exit', {
+        value: round2(this.stamina.getValue()),
+      });
+      this.wasLowStamina = isLow;
+    }
+
+    const v = this.stamina.getValue();
+    if (
+      lowChanged ||
+      (this.frameCount % 10 === 0 && v !== this.lastEmittedStaminaValue)
+    ) {
+      this.callbacks.onStaminaChange?.(v, isLow);
+      this.lastEmittedStaminaValue = v;
+    }
+
+    if (v <= 0 && !this.wasDepleted) {
+      this.logger.log('stamina', 'depleted', { value: 0 });
+      this.wasDepleted = true;
     }
   }
 
@@ -534,6 +630,7 @@ export class Game {
       dir,
       id: this.nextArrowId++,
     });
+    this.stamina.consumeArrow();
 
     this.logger.log('fire', 'arrow', { dx: round2(dir.x), dy: round2(dir.y) });
     this.soundManager.play('arrow');
@@ -742,7 +839,7 @@ export class Game {
       this.renderer.renderLevel(this.level);
       this.renderer.renderHuts(this.level.getHutPositions());
       this.renderer.renderNpcs(this.level.getNpcPositions());
-      this.renderer.renderPlayer(this.player);
+      this.renderer.renderPlayer(this.player, this.stamina.isBurstActive());
 
       if (this.enemies.length > 0) {
         this.renderer.renderEnemies(this.enemies);
@@ -767,6 +864,12 @@ export class Game {
   // this on pointer down/up to drive movement without keyboard events.
   setVirtualInput(direction: Direction, pressed: boolean) {
     this.inputManager.setVirtualInput(direction, pressed);
+  }
+
+  // Bridge for the on-screen mobile B button. Equivalent to a Space
+  // keydown — sets the edge-triggered burst flag in InputManager.
+  triggerBurst() {
+    this.inputManager.setBurstPressed();
   }
 
   cleanup() {

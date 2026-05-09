@@ -14,9 +14,16 @@ export class InputManager {
     left: false,
     right: false
   };
+  // Edge-triggered burst flag. Set on Space keydown (de-duped against the
+  // existing keys Set so browser auto-repeat doesn't refire) or via mobile
+  // setBurstPressed(); cleared by consumeBurstPress() on read.
+  private burstPressed = false;
   private onBlurClear?: InputBlurCallback;
 
   private readonly handleKeyDown = (e: KeyboardEvent) => {
+    if (e.code === 'Space' && !this.keys.has('Space')) {
+      this.burstPressed = true;
+    }
     this.keys.add(e.code);
     this.updateInputState();
   };
@@ -42,6 +49,7 @@ export class InputManager {
     this.virtual.down = false;
     this.virtual.left = false;
     this.virtual.right = false;
+    this.burstPressed = false;
     this.updateInputState();
     this.onBlurClear?.(cleared);
   };
@@ -69,6 +77,18 @@ export class InputManager {
     this.updateInputState();
   }
 
+  // Mobile bridge for the B button. Equivalent to a Space keydown edge.
+  setBurstPressed() {
+    this.burstPressed = true;
+  }
+
+  // Read + clear the edge flag. Called once per frame from Game.update().
+  consumeBurstPress(): boolean {
+    const r = this.burstPressed;
+    this.burstPressed = false;
+    return r;
+  }
+
   // For diagnostics: lets the logger snapshot the raw key Set, not just
   // the WASD/arrow projection. Surfaces phantom-stuck keys.
   getPressedKeys(): string[] {
@@ -80,5 +100,6 @@ export class InputManager {
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.handleBlur);
     this.keys.clear();
+    this.burstPressed = false;
   }
 }

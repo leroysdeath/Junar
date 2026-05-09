@@ -1,6 +1,6 @@
 import { Vector2, InputState } from './types';
 import { Level } from './Level';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE } from './constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, PLAYER_SPEED } from './constants';
 
 export interface WallRejection {
   axis: 'x' | 'y';
@@ -11,11 +11,18 @@ export interface WallRejection {
 
 export class Player {
   private position: Vector2;
-  private speed = 150; // pixels per second
+  private baseSpeed = PLAYER_SPEED;
+  private speedMultiplier = 1;
   private size = 32;
 
   constructor(startPosition: Vector2) {
     this.position = { ...startPosition };
+  }
+
+  // Set by Game each frame from stamina state. Composes against baseSpeed;
+  // 1 = full, 0.5 = low-stamina penalty.
+  setSpeedMultiplier(m: number) {
+    this.speedMultiplier = m;
   }
 
   update(
@@ -24,7 +31,7 @@ export class Player {
     level: Level,
     onWallReject?: (rej: WallRejection) => void,
   ) {
-    const moveDistance = this.speed * (deltaTime / 1000);
+    const moveDistance = this.baseSpeed * this.speedMultiplier * (deltaTime / 1000);
     let newX = this.position.x;
     let newY = this.position.y;
 
