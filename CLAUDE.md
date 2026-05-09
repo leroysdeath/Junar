@@ -59,20 +59,25 @@ Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal
 
 **No ranged attacks.** Every beast threatens by contact only — there are no projectile-throwing or AoE infected variants. Don't add a ranged enemy without explicit owner approval; it would change the LOS-based combat contract from "where you stand" to "what you can react to."
 
-**Family NPCs** (planned, not yet implemented) — wife, son, daughter. Current scope:
-- Levels 1–9: solo, no family.
-- Level 10 (final boss): all three family members are present and fight alongside the player as active combatants. Any family member's death = game over.
-- An earlier-level intro and passive-escort phase may come after testing — not in current scope.
+**Family NPCs** (planned, behavior unwired in code) — wife, son, daughter. Current scope (updated 2026-05-09):
+- Levels 1–3: solo, no family.
+- **Levels 4 or 5 onward (exact level TBD): family begins to appear** and continues through the boss arena. (This was previously "L10 only"; owner-approved expansion 2026-05-09.)
+- Level 10 (final boss): all three remaining family members fight alongside the player as active combatants.
+- Currently in code, family is render-only: translucent placeholder rectangles at `N` tiles in `Renderer.renderNpcs`. No `FamilyMember` class, no AI, no AABB, no death triggers, no carryover yet — all to be built.
 
-The "any family death = game over" rule on Level 10 is the central tension of the boss fight (prototype shape).
+**Family-death rule:**
+- **Alpha** ships the simple "any family member's death = game over" rule (prototype shape).
+- **Demo** changes the rule to a branching shape — the specific behavior is TBD. See `docs/IDEATION.md` §1 for candidate shapes (survivor-set drives endings, player-choice moment, survivor behavior changes).
 
-**Future direction — multiple-endings system (not in current scope; do not implement without owner sign-off).** The prototype's any-family-death-ends-the-run rule is the simplest shape; the eventual target is a multi-ending system. Sketch:
-- A **hut-attack event** earlier in the run can destroy the family's home. If destroyed, the family never appears in subsequent levels (one ending branch).
-- If the hut survives, the family appears on the level(s) the design calls for.
+**Approved (simple) hut-attack branch — owner-approved 2026-05-09, EA target.** If the hut is destroyed or attacked during the run, family never appears in subsequent levels. This is the prototype form of the multi-ending system and the first divergence input.
+
+**Future direction — full multi-ending system (still requires owner sign-off before implementation).** Beyond the simple hut-attack branch above, the eventual target is per-member carryover with multiple endings:
 - Once family members are present in a level, they can die individually. Each dead family member does not appear in subsequent levels.
 - Different endings flow from how many family members survive to the boss arena.
 
-Until that system is designed and approved, stay on the prototype rule. Don't structure family code in a way that locks the branches out (e.g., hardcoding "family always survives", or coupling family identity to a single boolean). See the `protagonist-and-family-tone` skill.
+Don't structure family / hut code in a way that locks future per-member branching out (e.g., hardcoding "all family always present", or coupling family identity to a single boolean). See the `protagonist-and-family-tone` skill.
+
+**Design ideation (TBD, not committed for any tier).** Several mechanics are under exploration but not on a build tier: gibbons-drop-from-trees spawn behavior, convert-beasts-to-allies, stick-barriers (mild Tower Defense), dash/roll, burst/rapid-fire, and (concept-only) free-movement between primary + connector levels with continuous waves. See `docs/IDEATION.md` for the full backlog and read it before proposing related changes.
 
 **Auto-fire** (`Game.ts`) — cooldown 500 ms, range 450 px, **full 360° at any angle**. Each frame, picks the nearest enemy within range whose center is reachable from the player center by an unobstructed wall raycast; fires an arrow on the raw unit vector to that enemy (no angle snapping). Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit.
 
