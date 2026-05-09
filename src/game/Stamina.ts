@@ -25,7 +25,7 @@ export class Stamina {
   private burstActive = false;
   private burstEndAt: number | null = null;
   // performance.now() of the previous burst's end. null = no burst yet.
-  // Drives the 30s decay-vs-reset rule on the next activation.
+  // Drives the BURST_RESET_BREAK_MS decay-vs-reset rule on the next activation.
   private lastBurstEndAt: number | null = null;
   // The multiplier the *next* burst activation will use. Set on activation
   // (decayed or reset). Reads as 1× when burst is inactive so the composed

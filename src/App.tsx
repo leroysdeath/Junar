@@ -319,7 +319,7 @@ function App() {
                     <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
                     <li>
                       <strong>Burst:</strong>{' '}
-                      {isMobile ? 'Tap B for 10s rapid-fire' : 'Press Space for 10s rapid-fire'}
+                      {isMobile ? 'Tap B for 5s rapid-fire' : 'Press Space for 5s rapid-fire'}
                       {' '}(costs stamina; spam loses bonus)
                     </li>
                     <li><strong>Stamina:</strong> One bar for the whole run — no regen</li>

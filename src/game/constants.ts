@@ -32,10 +32,10 @@ export const STAMINA_DASH_COST = 0.5; // reserved; no consumer wired yet
 // ARROW_COOLDOWN_MS / (burstMultiplier * lowStaminaMultiplier). Decay is
 // compounding with no floor — players who spam burst eventually drop below
 // 1× and burst becomes a self-debuff (intentional self-limiting tuning).
-export const BURST_DURATION_MS = 10_000;
+export const BURST_DURATION_MS = 5_000;
 export const BURST_BASE_MULTIPLIER = 2.0;
 export const BURST_DECAY_FACTOR = 0.75;
-export const BURST_RESET_BREAK_MS = 30_000;
+export const BURST_RESET_BREAK_MS = 15_000;
 
 // Wave scheduler defaults. Per-level/per-wave overrides live in levels.ts.
 export const DEFAULT_INTER_WAVE_LULL_MS = 3000;
