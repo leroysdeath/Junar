@@ -77,7 +77,9 @@ export class InputManager {
   private updateInputState() {
     this.inputState.up = this.virtual.up || this.keys.has('KeyW') || this.keys.has('ArrowUp');
     this.inputState.down = this.virtual.down || this.keys.has('KeyS') || this.keys.has('ArrowDown');
-    this.inputState.left = this.virtual.left || this.keys.has('KeyA') || this.keys.has('ArrowLeft');
+    // KeyA is intentionally NOT mapped to left — it's the dash key.
+    // WSAD-style players use ArrowLeft for left movement.
+    this.inputState.left = this.virtual.left || this.keys.has('ArrowLeft');
     this.inputState.right = this.virtual.right || this.keys.has('KeyD') || this.keys.has('ArrowRight');
   }
 

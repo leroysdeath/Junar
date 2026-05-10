@@ -316,7 +316,7 @@ function App() {
                   <ul className="text-sm space-y-2 text-amber-100">
                     <li>
                       <strong>Movement:</strong>{' '}
-                      {isMobile ? 'Use the on-screen D-pad' : 'Use WASD or Arrow Keys'}
+                      {isMobile ? 'Use the on-screen D-pad' : 'Arrow Keys (or W/S/D — A is dash)'}
                     </li>
                     <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
                     <li>
