@@ -26,7 +26,12 @@ export const STAMINA_LOW_PENALTY = 0.5; // multiplier on speed + arrow rate when
 export const STAMINA_PER_TILE_MOVED = 0.001; // per TILE_SIZE px traveled
 export const STAMINA_PER_ARROW = 0.001;
 export const STAMINA_BURST_COST = 5;
-export const STAMINA_DASH_COST = 0.5; // reserved; no consumer wired yet
+export const STAMINA_DASH_COST = 0.5;
+
+// Dash teleport distance — instant blink in the direction opposite the
+// player's current facing. Walks the AABB in small steps along the path,
+// stopping at the last open tile before a wall or canvas edge.
+export const DASH_DISTANCE_PX = 96; // 3 tiles
 
 // Burst rapid-fire. Multiplier applied as: effective_cooldown =
 // ARROW_COOLDOWN_MS / (burstMultiplier * lowStaminaMultiplier). Decay is

@@ -121,7 +121,7 @@ export function MobileControls({ onPress, onRelease, onActionPress }: MobileCont
         />
       </div>
       <div className="flex gap-3 items-center pb-4">
-        <ActionButton action="a" label="A" disabled onActionPress={onActionPress} />
+        <ActionButton action="a" label="A" disabled={false} onActionPress={onActionPress} />
         <ActionButton action="b" label="B" disabled={false} onActionPress={onActionPress} />
       </div>
     </div>

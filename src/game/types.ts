@@ -37,6 +37,11 @@ export interface InputState {
   right: boolean;
 }
 
+// Cardinal facing direction, set by Player based on the most recent
+// directional input. Drives both the player render variant and the dash
+// direction (dash teleports opposite of facing).
+export type Facing = 'up' | 'down' | 'left' | 'right';
+
 export type EnemyType = 'panther' | 'snake' | 'gibbon' | 'bear';
 
 export interface EnemySpawn {

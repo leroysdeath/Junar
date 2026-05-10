@@ -50,6 +50,8 @@ function App() {
   const handleActionPress = useCallback((action: Action) => {
     if (action === 'b') {
       gameRef.current?.triggerBurst();
+    } else if (action === 'a') {
+      gameRef.current?.triggerDash();
     }
   }, []);
 
@@ -321,6 +323,11 @@ function App() {
                       <strong>Burst:</strong>{' '}
                       {isMobile ? 'Tap B for 5s rapid-fire' : 'Press Space for 5s rapid-fire'}
                       {' '}(costs stamina; spam loses bonus)
+                    </li>
+                    <li>
+                      <strong>Dash:</strong>{' '}
+                      {isMobile ? 'Tap A to blink backward' : 'Shift or A to blink backward'}
+                      {' '}(opposite of facing, walls block)
                     </li>
                     <li><strong>Stamina:</strong> One bar for the whole run — no regen</li>
                     <li><strong>Objective:</strong> Eliminate all enemies to advance</li>

@@ -43,6 +43,7 @@ export class Renderer {
 
   renderPlayer(player: Player, burstActive = false) {
     const pos = player.getPosition();
+    const facing = player.getFacing();
 
     // Burst aura — single warm-gold layer behind the player. Drawn first
     // so the figure remains readable on top. Fixed alpha and color; no
@@ -70,22 +71,45 @@ export class Renderer {
     this.ctx.fillStyle = '#4E342E';
     this.ctx.fillRect(pos.x + 10, pos.y + 6, 12, 10);
 
-    // Hair (short black cap, no headdress)
+    // Hair — taller cap when facing UP (player's back to camera, more of
+    // the head's hair-cover is visible). Standard cap otherwise.
     this.ctx.fillStyle = '#1A1A1A';
-    this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 3);
+    if (facing === 'up') {
+      this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 7);
+    } else {
+      this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 3);
+    }
 
-    // Bow (dark wood, held in offhand, left side)
+    // Eye dots — only when facing DOWN (player faces camera). Subtle
+    // forward-facing cue; absence on left/right/up reads as profile or
+    // back-of-head without needing extra geometry.
+    if (facing === 'down') {
+      this.ctx.fillStyle = '#1A1A1A';
+      this.ctx.fillRect(pos.x + 13, pos.y + 10, 2, 2);
+      this.ctx.fillRect(pos.x + 19, pos.y + 10, 2, 2);
+    }
+
+    // Bow + quiver + fletchings. The archer's bow lives in the offhand
+    // and the quiver at the opposite hip. Mirror the layout when facing
+    // LEFT so the bow visually leads the direction the player is moving.
+    // UP/DOWN/RIGHT all share the right-leading layout (bow on left edge
+    // of sprite, quiver on right) — the distinguishing cues for those
+    // are head-level (eyes for down, taller hair for up).
+    const mirrored = facing === 'left';
     this.ctx.fillStyle = '#654321';
-    this.ctx.fillRect(pos.x + 2, pos.y + 6, 4, 16);
+    this.ctx.fillRect(mirrored ? pos.x + 26 : pos.x + 2, pos.y + 6, 4, 16);
 
-    // Quiver (dark leather, slung at right hip)
     this.ctx.fillStyle = '#4A3C28';
-    this.ctx.fillRect(pos.x + 20, pos.y + 8, 6, 12);
+    this.ctx.fillRect(mirrored ? pos.x : pos.x + 20, pos.y + 8, 6, 12);
 
-    // Arrow fletchings peeking from the quiver
     this.ctx.fillStyle = '#FFEEAA';
-    this.ctx.fillRect(pos.x + 21, pos.y + 5, 2, 3);
-    this.ctx.fillRect(pos.x + 24, pos.y + 5, 2, 3);
+    if (mirrored) {
+      this.ctx.fillRect(pos.x + 1, pos.y + 5, 2, 3);
+      this.ctx.fillRect(pos.x + 4, pos.y + 5, 2, 3);
+    } else {
+      this.ctx.fillRect(pos.x + 21, pos.y + 5, 2, 3);
+      this.ctx.fillRect(pos.x + 24, pos.y + 5, 2, 3);
+    }
   }
 
   renderEnemies(enemies: Enemy[]) {

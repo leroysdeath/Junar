@@ -13,6 +13,7 @@ import {
   GameCallbacks,
   Vector2,
   EnemyType,
+  Facing,
   InputState,
   SpawnEntryway,
 } from './types';
@@ -25,6 +26,7 @@ import {
   ARROW_SPEED,
   ARROW_COOLDOWN_MS,
   STAMINA_MAX,
+  DASH_DISTANCE_PX,
 } from './constants';
 
 type GameOverReason =
@@ -43,6 +45,21 @@ const SAMPLE_EVERY_FRAMES = 10;
 const EARLY_DEATH_MS = 500;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// Dash teleports the player in the direction opposite to their current
+// facing — a back-step / disengage move. Returns a cardinal unit vector.
+const dashDirectionFromFacing = (facing: Facing): Vector2 => {
+  switch (facing) {
+    case 'up':
+      return { x: 0, y: 1 };
+    case 'down':
+      return { x: 0, y: -1 };
+    case 'left':
+      return { x: 1, y: 0 };
+    case 'right':
+      return { x: -1, y: 0 };
+  }
+};
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -333,6 +350,10 @@ export class Game {
     // corner-cut slide that produces simultaneous x+y motion isn't
     // overcharged by ~41%.
     const input = this.inputManager.getInput();
+    // Update facing BEFORE the dash check so a same-frame press +
+    // dash uses the freshly-set facing (dash inverts whatever facing
+    // is current at the moment of activation).
+    this.player.updateFacing(input);
     const prePos = this.player.getPosition();
     this.player.update(deltaTime, input, this.level, (rej) => {
       this.logger.log('wall', 'reject', {
@@ -347,6 +368,33 @@ export class Game {
     this.stamina.consumeMovement(
       Math.hypot(postPos.x - prePos.x, postPos.y - prePos.y),
     );
+
+    // Dash — instant blink in the direction OPPOSITE of facing, gated by
+    // stamina (0.5/use). Edge-triggered; tryConsumeDash rejects if the
+    // pool can't afford the cost. AABB-vs-enemy collision still applies
+    // at the post-dash position via the per-frame check below, so a dash
+    // that ends inside an enemy still kills the player.
+    if (this.inputManager.consumeDashPress()) {
+      if (this.stamina.tryConsumeDash()) {
+        const dir = dashDirectionFromFacing(this.player.getFacing());
+        const preDash = this.player.getPosition();
+        const traveled = this.player.dash(dir, DASH_DISTANCE_PX, this.level);
+        const postDash = this.player.getPosition();
+        this.logger.log('stamina', 'dash', {
+          facing: this.player.getFacing(),
+          dir,
+          traveled: round2(traveled),
+          from: { x: round2(preDash.x), y: round2(preDash.y) },
+          to: { x: round2(postDash.x), y: round2(postDash.y) },
+          value: round2(this.stamina.getValue()),
+        });
+      } else {
+        this.logger.log('stamina', 'dash_rejected', {
+          reason: 'no_stamina',
+          value: round2(this.stamina.getValue()),
+        });
+      }
+    }
 
     if (this.frameCount - this.lastSampleFrame >= SAMPLE_EVERY_FRAMES) {
       this.lastSampleFrame = this.frameCount;
@@ -870,6 +918,12 @@ export class Game {
   // keydown — sets the edge-triggered burst flag in InputManager.
   triggerBurst() {
     this.inputManager.setBurstPressed();
+  }
+
+  // Bridge for the on-screen mobile A button. Equivalent to a Shift or
+  // KeyA keydown — sets the edge-triggered dash flag in InputManager.
+  triggerDash() {
+    this.inputManager.setDashPressed();
   }
 
   cleanup() {

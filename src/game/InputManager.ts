@@ -18,11 +18,23 @@ export class InputManager {
   // existing keys Set so browser auto-repeat doesn't refire) or via mobile
   // setBurstPressed(); cleared by consumeBurstPress() on read.
   private burstPressed = false;
+  // Edge-triggered dash flag. Set on Shift or A keydown (same dedup
+  // pattern), or via mobile setDashPressed(). KeyA is intentionally
+  // dual-purpose: this fires a one-shot dash on press while continuing to
+  // register as held-state left movement.
+  private dashPressed = false;
   private onBlurClear?: InputBlurCallback;
 
   private readonly handleKeyDown = (e: KeyboardEvent) => {
     if (e.code === 'Space' && !this.keys.has('Space')) {
       this.burstPressed = true;
+    }
+    if (
+      (e.code === 'ShiftLeft' && !this.keys.has('ShiftLeft')) ||
+      (e.code === 'ShiftRight' && !this.keys.has('ShiftRight')) ||
+      (e.code === 'KeyA' && !this.keys.has('KeyA'))
+    ) {
+      this.dashPressed = true;
     }
     this.keys.add(e.code);
     this.updateInputState();
@@ -50,6 +62,7 @@ export class InputManager {
     this.virtual.left = false;
     this.virtual.right = false;
     this.burstPressed = false;
+    this.dashPressed = false;
     this.updateInputState();
     this.onBlurClear?.(cleared);
   };
@@ -89,6 +102,17 @@ export class InputManager {
     return r;
   }
 
+  // Mobile bridge for the A button. Equivalent to a Shift/A keydown edge.
+  setDashPressed() {
+    this.dashPressed = true;
+  }
+
+  consumeDashPress(): boolean {
+    const r = this.dashPressed;
+    this.dashPressed = false;
+    return r;
+  }
+
   // For diagnostics: lets the logger snapshot the raw key Set, not just
   // the WASD/arrow projection. Surfaces phantom-stuck keys.
   getPressedKeys(): string[] {
@@ -101,5 +125,6 @@ export class InputManager {
     window.removeEventListener('blur', this.handleBlur);
     this.keys.clear();
     this.burstPressed = false;
+    this.dashPressed = false;
   }
 }
