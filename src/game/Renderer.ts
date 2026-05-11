@@ -1,13 +1,37 @@
 import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
-import { Vector2 } from './types';
+import { Facing, Vector2 } from './types';
+// ArMM1998's "Zelda-like tilesets and sprites" pack, CC0 / public domain
+// (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
+// 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
+import playerSpriteUrl from '../assets/player-sprite.png';
+
+// Sprite-sheet layout — character.png from ArMM1998's pack uses 16-wide ×
+// 32-tall cells, 4-frame walk per direction across columns, one direction
+// per row. Row order inferred visually from the sheet: down, left, up, right.
+const SPRITE_CELL_W = 16;
+const SPRITE_CELL_H = 32;
+const SPRITE_WALK_FRAMES = 4;
+const SPRITE_WALK_FRAME_MS = 140;
+const SPRITE_DIR_ROW: Record<Facing, number> = {
+  down: 0,
+  right: 1,
+  up: 2,
+  left: 3,
+};
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
+  private playerSprite: HTMLImageElement;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
+    // Disable bilinear filtering so the pixel-art sprite stays crisp when
+    // scaled. fillRect-based procedural drawing is unaffected by this flag.
+    this.ctx.imageSmoothingEnabled = false;
+    this.playerSprite = new Image();
+    this.playerSprite.src = playerSpriteUrl;
   }
 
   renderLevel(level: Level) {
@@ -41,7 +65,7 @@ export class Renderer {
     }
   }
 
-  renderPlayer(player: Player, burstActive = false) {
+  renderPlayer(player: Player, burstActive = false, currentTime = 0) {
     const pos = player.getPosition();
     const facing = player.getFacing();
 
@@ -59,57 +83,28 @@ export class Renderer {
       this.ctx.restore();
     }
 
-    // Tunic / dhoti-coded cloth (cream cotton)
-    this.ctx.fillStyle = '#DCC59C';
-    this.ctx.fillRect(pos.x + 8, pos.y + 14, 16, 14);
+    // Walk frame: cycle through 0..3 while a direction is held; hold col 0
+    // (idle pose) otherwise. currentTime comes from the gameLoop's RAF
+    // timestamp per CLAUDE.md — defaulting to 0 just freezes the idle frame.
+    const frame = player.isMoving()
+      ? Math.floor(currentTime / SPRITE_WALK_FRAME_MS) % SPRITE_WALK_FRAMES
+      : 0;
+    const row = SPRITE_DIR_ROW[facing];
 
-    // Waist sash (dark earth)
-    this.ctx.fillStyle = '#5D4037';
-    this.ctx.fillRect(pos.x + 8, pos.y + 20, 16, 2);
-
-    // Head (deep warm brown skin tone)
-    this.ctx.fillStyle = '#4E342E';
-    this.ctx.fillRect(pos.x + 10, pos.y + 6, 12, 10);
-
-    // Hair — taller cap when facing UP (player's back to camera, more of
-    // the head's hair-cover is visible). Standard cap otherwise.
-    this.ctx.fillStyle = '#1A1A1A';
-    if (facing === 'up') {
-      this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 7);
-    } else {
-      this.ctx.fillRect(pos.x + 10, pos.y + 4, 12, 3);
-    }
-
-    // Eye dots — only when facing DOWN (player faces camera). Subtle
-    // forward-facing cue; absence on left/right/up reads as profile or
-    // back-of-head without needing extra geometry.
-    if (facing === 'down') {
-      this.ctx.fillStyle = '#1A1A1A';
-      this.ctx.fillRect(pos.x + 13, pos.y + 10, 2, 2);
-      this.ctx.fillRect(pos.x + 19, pos.y + 10, 2, 2);
-    }
-
-    // Bow + quiver + fletchings. The archer's bow lives in the offhand
-    // and the quiver at the opposite hip. Mirror the layout when facing
-    // LEFT so the bow visually leads the direction the player is moving.
-    // UP/DOWN/RIGHT all share the right-leading layout (bow on left edge
-    // of sprite, quiver on right) — the distinguishing cues for those
-    // are head-level (eyes for down, taller hair for up).
-    const mirrored = facing === 'left';
-    this.ctx.fillStyle = '#654321';
-    this.ctx.fillRect(mirrored ? pos.x + 26 : pos.x + 2, pos.y + 6, 4, 16);
-
-    this.ctx.fillStyle = '#4A3C28';
-    this.ctx.fillRect(mirrored ? pos.x : pos.x + 20, pos.y + 8, 6, 12);
-
-    this.ctx.fillStyle = '#FFEEAA';
-    if (mirrored) {
-      this.ctx.fillRect(pos.x + 1, pos.y + 5, 2, 3);
-      this.ctx.fillRect(pos.x + 4, pos.y + 5, 2, 3);
-    } else {
-      this.ctx.fillRect(pos.x + 21, pos.y + 5, 2, 3);
-      this.ctx.fillRect(pos.x + 24, pos.y + 5, 2, 3);
-    }
+    // Source cell from the sheet. Destination: native scale (16w × 32h)
+    // centered horizontally in the 32×32 AABB so the burst aura still
+    // envelopes the visible character correctly.
+    this.ctx.drawImage(
+      this.playerSprite,
+      frame * SPRITE_CELL_W,
+      row * SPRITE_CELL_H,
+      SPRITE_CELL_W,
+      SPRITE_CELL_H,
+      pos.x + 8,
+      pos.y,
+      SPRITE_CELL_W,
+      SPRITE_CELL_H,
+    );
   }
 
   renderEnemies(enemies: Enemy[]) {

@@ -34,6 +34,15 @@ export class Player {
     return this.facing;
   }
 
+  // True if the player is actively pressing a direction this frame
+  // (pressing into a wall still counts — the walk animation should play
+  // while attempting to move, even if position is blocked).
+  isMoving(): boolean {
+    return (
+      this.prevInput.up || this.prevInput.down || this.prevInput.left || this.prevInput.right
+    );
+  }
+
   // Update facing from this frame's input. Two rules combined:
   //   1. Any new press (false→true edge) wins — the most recent direction
   //      the player asked for becomes the facing.

@@ -887,7 +887,7 @@ export class Game {
       this.renderer.renderLevel(this.level);
       this.renderer.renderHuts(this.level.getHutPositions());
       this.renderer.renderNpcs(this.level.getNpcPositions());
-      this.renderer.renderPlayer(this.player, this.stamina.isBurstActive());
+      this.renderer.renderPlayer(this.player, this.stamina.isBurstActive(), this.lastTime);
 
       if (this.enemies.length > 0) {
         this.renderer.renderEnemies(this.enemies);

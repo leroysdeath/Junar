@@ -155,6 +155,56 @@ positioning," not "always-on offensive crutch."
 
 ---
 
+## 8. Upgrade player sprite to LPC (Liberated Pixel Cup)
+
+**Status:** Future iteration. Captured 2026-05-10 alongside the owner-approved
+move to a CC0 LTTP-style player sprite (ArMM1998 pack) for prototype
+playtesting. LPC is the leading candidate for a *shipped* high-fidelity
+player sprite if/when we outgrow the placeholder.
+
+**Sketch:** Replace the prototype's ArMM1998 sword-character sprite with a
+player rendered from the Universal LPC Spritesheet Generator
+(`github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator`).
+LPC ships true 4-directional **walk, slash, thrust, bow-shoot, hurt,
+spellcast, and die** animations at 64×64 — the bow-shoot animation in
+particular is the right anim for our auto-fire mechanic, which the
+ArMM1998 sword-swing only approximates. The generator can compose a
+brown-skinned, cream-tunic, no-headdress archer reasonably close to the
+Adivasi design described in CLAUDE.md §6.
+
+**The license trade-off — the reason this is in ideation, not on a tier:**
+LPC is CC-BY-SA 3.0 / GPL 3.0+, not CC0. Practical implications for
+shipping:
+- We must credit each contributing artist in an in-game / Steam page
+  credits screen (CC-BY).
+- The *modified sprite sheet we ship* must remain CC-BY-SA — anyone
+  could legally extract and reuse it. The SA only attaches to the art
+  layer, not our game code. Terraria, Stardew Valley etc. ship with
+  mixed-license assets, so this is well-trodden territory, but it does
+  give up the "this art is ours" position the procedural rendering
+  currently gives us.
+
+**Open questions:**
+- Do we ship with LPC or stick with the ArMM1998 CC0 placeholder for
+  Steam? Decision can defer until the prototype loop is solid.
+- If LPC: which artist's body base do we compose on? (Affects credits
+  list length and the "Adivasi-coded" fidelity — the LPC bases vary in
+  facial detail.)
+- If LPC: do we extend to family members and beasts, or keep them
+  procedural per the current scoped decision? Mixing LPC player + procedural
+  family/beasts may read inconsistently.
+- If we add bow-shoot animation, does the auto-fire cooldown (500 ms)
+  need a frame-timing tweak so the draw-and-release animation reads at
+  the moment the arrow leaves?
+
+**Tension to watch:** scope creep. The "just upgrade the player sprite"
+work can balloon into a full art pass if we let it. Bound the work to:
+*player only, ship LPC composed sheet, update Renderer to swap source —
+nothing else changes.* If the sprite upgrade pulls in tile/wall art,
+enemy art, or HUD art, that's a separate decision.
+
+---
+
 ## Process for moving an entry out of this doc
 
 - **Greenlit:** owner commits the idea to a build tier. Entry's design

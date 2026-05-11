@@ -27,7 +27,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 - **Death is fast and fair — and weighted when family is present.** One enemy hit on the player ends solo levels; in family levels, any family member's death also ends the run. Deaths must always feel like the player's mistake.
 - **The corruption is the antagonist, not the beasts.** The beasts are victims of an infection. Tone is tragic, not bloodthirsty. The boss — a monstrous plant exuding black goo — is the real enemy.
 - **The jungle traps and channels.** Walls are dense trees; the playable space is narrow paths and small clearings. Power comes from reading the maze and forcing chokepoints.
-- **Readable at a glance.** Procedural pixel-rectangle rendering is a feature, not a limitation: every entity (player, family member, each beast type) must be identifiable in one frame.
+- **Readable at a glance.** Procedural pixel-rectangle rendering is the direction for family, beasts, walls, and FX: every entity must be identifiable in one frame. The player is the single sprite-asset exception (CC0 LTTP-style sheet, owner-approved 2026-05-10 for playtesting fidelity) — the readability standard still applies, and the procedural rule still holds for everything else.
 - **Short prototype, tight scope.** Ten levels, one boss arena. Resist scope creep until the prototype loop is solid.
 
 ## 4. Core loop (30 seconds of play)
@@ -123,7 +123,7 @@ Don't structure family / hut code in a way that locks future per-member branchin
 - Ranged enemy attacks. Touch-only is the design.
 - A passive family-escort intro on a mid-game level. Possible future phase, not now.
 - Multiple-endings system (hut-attack branch, family-survival carryover into later levels). Documented direction; do not implement without owner sign-off. See §4 and the `protagonist-and-family-tone` skill.
-- Sprite-sheet asset pipeline (staying procedural — see Pillars).
+- Sprite assets for anything other than the player. The player is on a CC0 LTTP-style sheet (owner-approved 2026-05-10); family, beasts, walls, HUD, arrows, and FX stay procedural. Expanding sprite use to a second entity type needs owner approval. See `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
 - New input methods (gamepad, mouse-aim). Touch input is now supported for mobile testing — phones and tablets get an on-screen D-pad via `src/MobileControls.tsx`. Detection uses `(pointer: coarse)` so desktop touchscreens stay on keyboard. Don't add additional input methods without owner sign-off.
 - Saves, accounts, leaderboards.
 - Multiplayer, online features.
@@ -173,7 +173,7 @@ When working in this repo:
 - **No ranged enemy attacks.** Beasts threaten by contact only. A ranged enemy would invalidate the "where you stand" pillar; if asked to add one, push back unless the owner explicitly approves.
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
 - **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 8). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
-- **Don't add real sprite assets.** Procedural rendering is the chosen art direction. Improve `Renderer.ts` instead.
+- **Player is the only entity allowed to use a real sprite asset.** Owner-approved 2026-05-10 to swap the procedural player for a CC0 LTTP-style sheet (ArMM1998's Zelda-like pack) so playtesting reads at higher fidelity. Family NPCs, beasts, walls, HUD, arrows, and FX still render procedurally via `Renderer.ts`. Don't extend sprite assets to any other entity without owner approval. See `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
 - **Prefer extending existing modules** over adding new ones. The 10 files in `src/game/` cover the surface area; new concerns should fit in one of them.
 - **Pull magic numbers into named constants** when you touch them. Especially `928`, `544`, `32`, `16`, `400`, `450`, `500`. Use `src/game/constants.ts`.
 - **Always clean up listeners and timers.** The Bolt.new scaffold leaked both — those are now fixed. Anything new that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
