@@ -32,12 +32,14 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 ## 4. Core loop (30 seconds of play)
 
-1. Spawn into a maze; enemies appear from the edges.
+1. Spawn in **anchor 1** (the run-start room) of a freshly generated room grid; a 10-second grace precedes the first wave.
 2. Move (WASD/arrows) to expose targets through corridor gaps and to break LOS on threats you can't safely engage.
 3. Arrows auto-fire every 500ms at the nearest enemy within 450px with an unobstructed center-to-center raycast (any angle).
 4. Avoid contact — every enemy is melee, and any AABB overlap with the player is instant death.
-5. Clear all enemies → 2-second "Level Complete" → next level.
-6. Survive Levels 1–9 (mazes scaling in density), then Level 10 (open arena, boss intended but unimplemented).
+5. Walk to a room-edge opening that connects to a neighbor → **LTTP hard-cut transition** into that room. One run-long wave scheduler keeps spawning into whichever room you currently occupy.
+6. Traverse the grid to reach the **boss room (anchor 10)**. Death regenerates the whole map and respawns you in a new anchor 1. (Boss fight + win condition land in a later refactor step; today, reaching anchor 10 is just another room.)
+
+> **Note (traversable-maps refactor):** §4 describes the post-refactor room-grid loop (Step 3, 2026-05-30). The legacy per-level "clear all enemies → Level Complete → next level" loop is gone. The full design lives in `docs/ROADMAP-traversable-maps.md`.
 
 ## 5. Mechanics reference
 
@@ -104,17 +106,15 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 
 **Line of sight** (`src/game/Game.ts` → `hasDirectLineOfSight`) — generic point-to-point raycast from player center to enemy center, sampled in equal steps at ~8 px granularity (`steps = ceil(distance / 8)`); LOS is blocked if any sampled tile is a wall. Center-to-center is intentional: an enemy peeking out from behind a wall column doesn't qualify until the player steps to clear the line.
 
-**Levels** (`src/game/levels.ts`) — hardcoded ASCII grids. Levels 1–3 are wave-driven (see Spawning below). Levels 4–10 use legacy static spawning. All levels:
-- Grid size: 29 columns × 17 rows, each tile 32 px = 928×544 px total.
-- Tile chars: `#` = wall (tree), `.` = floor (dirt), `N` = family-NPC placeholder (parsed into `npcPositions`; renderer draws translucent marker; behavior unwired), `H` = hut placeholder (parsed into `hutPositions`; mechanics deferred to the multiple-endings system). `N` and `H` tiles count as floor for collision/pathfinding.
-- Enemy count (legacy levels 4–10): `min(3 + level_index * 2, 25)` spawned at edges, capped by available safe positions.
-- Level 10: outer wall ring, all interior floor (open arena reserved for the boss).
+**Rooms & map** (`src/game/RoomGrid.ts`, `src/game/RoomTemplates.ts`, `src/game/levels.ts`) — each run generates a **29×17 grid of rooms** (`generateRunMap`, 493 rooms), regenerated on every run/death. Each room is one 29×17-tile playfield (928×544 px). Two kinds:
+- **Anchors (10):** the hand-authored ASCII levels in `levels.ts`. Anchor 1 = run start, anchor 10 = boss. Placed by Poisson-disk sampling (≥ `MIN_ANCHOR_SPACING` rooms apart, interior cells only). At build time `RoomGrid` carves canonical doorways (N/S at cols 13–15, E/W at rows 7–9) into a *copy* of each anchor's walls so they connect to the corridor fabric — the boss arena was an unenterable sealed wall ring otherwise. `N`/`H` family/hut markers ride along and still render in their anchor room.
+- **Connectors (~483):** procedurally placed from `CONNECTOR_TEMPLATE_POOL` (20 templates: straights, bends, T-junctions, cross, dead-end, multi-opening hubs, interior mazes). Adjacent connectors are chosen so shared-edge openings match; a BFS path-existence check guarantees the boss is reachable from the start, else the map regenerates.
+- Grid size: 29 columns × 17 rows, each tile 32 px = 928×544 px total. Tile chars: `#` wall (tree), `.` floor (dirt), `N`/`H` family/hut markers (floor); connector templates additionally use `s`/`S` static-spawn candidates (floor; consumed by a later step). `N`/`H`/`s`/`S` all count as floor for collision/pathfinding.
+- **Transitions are LTTP hard cuts:** walking (pressing outward) into an edge opening that overlaps a neighbor room's opening drops the player at the aligned opposite edge of that neighbor (`Game.detectTransition`).
 
-**Spawning** — two paths, determined at level start:
-- **Wave-driven (Levels 1–3):** A `WaveScheduler` manages spawning. Each level defines waves (`setup`, `add`, `test`). Waves draw from pre-designed group templates (typed enemy rows — `SpawnTemplate.rows: EnemyType[][]`, each row packed left-to-right by cumulative AABB width) and spawn them in drips across spawn bands (e.g., L1 has one top-centered band; L2 has top+left+right; L3 has all four cardinal bands). Each row lands in the band and blocks further spawns until the slowest unit in that row passes. A 3-second lull separates waves. Wave completes when all spawned enemies are dead. Level completes when all waves are done + all enemies are dead. (A run-long `GlobalWaveScheduler` variant — 10 s grace, triplet cadence, random inter-triplet break — exists behind the default-off `USE_GLOBAL_WAVE_SCHEDULER` flag for the traversable-maps refactor; see `docs/ROADMAP-traversable-maps.md` §5.4.)
-- **Legacy (Levels 4–10):** Enemies spawn at level start from `enemySpawns` (calculated at runtime from edge positions). Optional `delayedSpawns` trickle enemies from an entryway over time. Level completes when all static + pending enemies are dead.
+**Spawning** (`src/game/WaveScheduler.ts`) — one run-long **`GlobalWaveScheduler`** drives all spawns. (The per-level `WaveScheduler` class and the legacy static-`enemySpawns`/`delayedSpawns` paths still exist in the source but are no longer wired by `Game`; the `USE_GLOBAL_WAVE_SCHEDULER` flag is removed — global is permanent.) Lifecycle: a 10 s run-start grace, then **triplets** of three waves (setup → add → test) separated by a 3 s inter-wave lull, with a random 15–60 s break between triplets; wave size/cadence escalate indefinitely (`waveParams`; cap 25/wave; bears unlock at wave 7). Each tick, group templates (`SpawnTemplate.rows: EnemyType[][]`, packed by cumulative AABB width) drip row-by-row into the **current room's per-opening spawn bands** — one band per room opening, derived on room entry (`Game.bandsForRoom`, roadmap §5.5). The scheduler **pauses during a room transition** and resumes on entry (hooks reused for the boss arena later). Enemies **persist per-room** (no despawn): leaving a room parks its enemies; they're still there on return. Cross-room hunting and statics arrive in later refactor steps.
 
-**Scoring** — +10 per kill, +100 × (level_index + 1) on level complete.
+**Scoring** — +10 per kill. (The old +100 × level "level complete" bonus is gone with the level-complete flow; run/room-progression scoring is TBD.)
 
 ## 6. World & tone
 
@@ -143,14 +143,14 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 ## 7. Scope & roadmap
 
 **In scope (prototype):**
-- Levels 1–10 with current mechanics, evolved to fit the vision. (Code already contains all 10 level definitions; Levels 1–3 are wave-driven; Levels 4–10 use legacy spawning; Level 10 is an empty arena reserved for the boss.)
-- Family appears on Levels 4+ as translucent placeholders and continues through the boss arena.
-- Level 10 boss: corrupted plant exuding black goo.
+- **Traversable room grid** (`docs/ROADMAP-traversable-maps.md`): the 10 hand-authored levels become **anchors** in a procedurally generated grid of rooms; the player traverses room-to-room toward the boss. Generator + LTTP hard-cut transitions + global wave scheduler landed as **Step 3 (2026-05-30)**. Remaining refactor steps: cross-room Hunt AI (4), static spawns + density (5/6), per-anchor static authoring (7), boss-room gating (9).
+- Family appears in the anchor rooms that carry `N` markers (currently anchors 6–9) as translucent placeholders, and through the boss arena.
+- Boss room (anchor 10): corrupted plant exuding black goo.
 - Visual update for the Adivasi-coded protagonist (complete: sprite asset in use as of 2026-05-10).
 - Infected-beast visual treatment (black goo accents) within procedural rendering.
 - Hit feedback, screen shake, death pop — within Canvas 2D.
 - Stamina, burst, and dash mechanics (complete as of 2026-05-10).
-- Wave scheduler for Levels 1–3 (complete as of 2026-05-06).
+- Global run-long wave scheduler (complete; replaced the per-level scheduler in the Step-3 room refactor, 2026-05-30).
 
 **Out of scope until owner says otherwise:**
 - New enemy types beyond the four approved beasts. Ask first.
@@ -208,7 +208,7 @@ When working in this repo:
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
 - **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 8). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
 - **Player is the only entity allowed to use a real sprite asset.** Owner-approved 2026-05-10 to swap the procedural player for a CC0 LTTP-style sheet. Family NPCs, beasts, walls, HUD, arrows, and FX still render procedurally via `Renderer.ts`. Don't extend sprite assets to any other entity without owner approval. See `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
-- **Prefer extending existing modules** over adding new ones. The 14 files in `src/game/` cover the surface area; new concerns should fit in one of them: `Game.ts` (orchestrator), `Player.ts`, `Enemy.ts`, `Level.ts`, `levels.ts` (ASCII), `types.ts`, `Renderer.ts`, `InputManager.ts`, `CollisionManager.ts`, `SoundManager.ts`, `Stamina.ts`, `WaveScheduler.ts`, `Logger.ts`, `constants.ts`.
+- **Prefer extending existing modules** over adding new ones. The 16 files in `src/game/` cover the surface area; new concerns should fit in one of them: `Game.ts` (orchestrator), `Player.ts`, `Enemy.ts`, `Level.ts`, `levels.ts` (anchor ASCII), `RoomGrid.ts` (run-map generation), `RoomTemplates.ts` (connector templates), `types.ts`, `Renderer.ts`, `InputManager.ts`, `CollisionManager.ts`, `SoundManager.ts`, `Stamina.ts`, `WaveScheduler.ts`, `Logger.ts`, `constants.ts`.
 - **Pull magic numbers into named constants** when you touch them. Especially `928`, `544`, `32`, `16`, `400`, `450`, `500`. Use `src/game/constants.ts`.
 - **Always clean up listeners and timers.** The early scaffolding leaked both — those are now fixed. Anything new that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
 - **Lint and typecheck before declaring done.** `npm run lint` and `npx tsc -p tsconfig.app.json --noEmit` must be clean.
@@ -220,23 +220,25 @@ When working in this repo:
 
 ```
 src/
-├── App.tsx                       React shell: canvas + HUD overlays + menu/game-over/victory/levelComplete; useIsMobile hook
+├── App.tsx                       React shell: canvas + HUD overlays (room coord + wave #) + menu/game-over/victory; useIsMobile hook
 ├── MobileControls.tsx            On-screen D-pad rendered when (pointer: coarse) matches; pointer-capture press/release tracking
 ├── main.tsx                      React entry point
 ├── index.css                     Global styles (Tailwind)
 └── game/                         All game logic — pure TS, no React
-    ├── Game.ts                   Orchestrator: game loop, state, arrow firing, collisions, stamina, burst, dash
-    ├── Player.ts                 Player position, movement, wall collision, dash teleport, cardinal facing
+    ├── Game.ts                   Orchestrator: game loop, room grid + LTTP transitions, arrow firing, collisions, stamina, burst, dash
+    ├── Player.ts                 Player position, movement, wall collision, dash teleport, cardinal facing, setPosition
     ├── Enemy.ts                  Enemy AI (direct pathfinding + cardinal-fallback, entry mode for wave spawns)
     ├── Level.ts                  Tilemap, isWall(), spawn helpers (player + enemies), NPC/hut positions
-    ├── levels.ts                 Hardcoded ASCII grids for all 10 levels (Levels 1–3 wave-driven, 4–10 legacy)
-    ├── types.ts                  Vector2, Rectangle, GameState, GameCallbacks, EnemyType, Facing, WaveScheduler types
-    ├── Renderer.ts               Canvas 2D draw routines for level/player/enemies/arrows/NPCs/huts/HUD (hybrid sprite + procedural)
+    ├── levels.ts                 Hardcoded ASCII grids for the 10 anchor levels + global wave-pool templates
+    ├── RoomGrid.ts               Run-map generator: Poisson anchors, anchor door-carving, connector fill, BFS path-existence, transition helpers
+    ├── RoomTemplates.ts          Connector template pool (ASCII → walls/openings/candidates) + parser (deriveOpenings)
+    ├── types.ts                  Vector2, Rectangle, GameState, GameCallbacks, EnemyType, Facing, room-grid + WaveScheduler types
+    ├── Renderer.ts               Canvas 2D draw routines for the current room/player/enemies/arrows/NPCs/huts/HUD (hybrid sprite + procedural)
     ├── InputManager.ts           Keyboard + virtual (mobile) input listener → InputState; burst + dash edge-trigger detection
     ├── CollisionManager.ts       AABB overlap helper
     ├── SoundManager.ts           Web Audio synthesized SFX
     ├── Stamina.ts                Playthrough-wide stamina pool, burst state machine, decay multiplier, low-stamina penalty
-    ├── WaveScheduler.ts          Wave sequencing for Levels 1–3 (group templates, spawn bands, inter-wave lulls)
+    ├── WaveScheduler.ts          GlobalWaveScheduler (run-long triplets, grace, per-opening bands, pause/resume) + legacy per-level WaveScheduler
     ├── Logger.ts                 Crash capture + frame-by-frame snapshot + on-screen overlay rendering
-    └── constants.ts              Named constants: canvas size (928×544), tile size (32), grid (29×17), ranges, cooldowns, stamina costs, burst tuning
+    └── constants.ts              Named constants: canvas size (928×544), tile size (32), grid (29×17), room grid, ranges, cooldowns, stamina costs, burst tuning
 ```
