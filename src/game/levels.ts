@@ -114,30 +114,41 @@ const L1_TOP_BAND: BandSpec = {
   entryDirection: { x: 0, y: 1 },
 };
 
-// 8 pre-designed templates. Cells are [row][col] with col length 3
-// (outside-left, middle, outside-right). Row 0 enters first; trailing
-// rows arrive at the leading row's clearance cadence (one tile at the
-// row's slowest unit speed).
+// 8 pre-designed templates. Each `rows[i]` is the ordered list of enemies
+// entering together in row i; row 0 enters first and trailing rows arrive
+// at the leading row's clearance cadence (one tile at the row's slowest
+// unit speed). Within a row, enemies pack left-justified by cumulative AABB
+// width (Step 1: a uniform TILE_SIZE per type). See ROADMAP §5.6.
+//
+// NOTE (intentional): the old `cells` grid encoded position by column, so
+// null gaps centered/spread a row across the 3-tile band (e.g. a lone
+// panther sat in the middle column). The new `rows` shape packs from the
+// band's start, so for the 5 templates that had gaps the in-band entry
+// position shifts by ≤1 tile. This is the mandated §5.6 packing and also
+// affects the legacy (USE_GLOBAL_WAVE_SCHEDULER=false) path, which shares
+// these templates. It changes only sub-tile entry positions — never counts,
+// types, timing, cadence, or wall-safety (packed rows of ≤3 stay inside the
+// 3-tile corridor bands). The legacy path is removed in Step 3.
 const T_1PANTHER: SpawnTemplate = {
   id: 'g-1panther',
-  cells: [[null, 'panther', null]],
+  rows: [['panther']],
 };
 const T_2PANTHER: SpawnTemplate = {
   id: 'g-2panther',
-  cells: [['panther', null, 'panther']],
+  rows: [['panther', 'panther']],
 };
 const T_1PANTHER_6SNAKE: SpawnTemplate = {
   id: 'g-1panther-6snake',
-  cells: [
-    [null, 'panther', null],
-    ['snake', null, 'snake'],
-    ['snake', null, 'snake'],
-    ['snake', null, 'snake'],
+  rows: [
+    ['panther'],
+    ['snake', 'snake'],
+    ['snake', 'snake'],
+    ['snake', 'snake'],
   ],
 };
 const T_9SNAKE: SpawnTemplate = {
   id: 'g-9snake',
-  cells: [
+  rows: [
     ['snake', 'snake', 'snake'],
     ['snake', 'snake', 'snake'],
     ['snake', 'snake', 'snake'],
@@ -145,7 +156,7 @@ const T_9SNAKE: SpawnTemplate = {
 };
 const T_12SNAKE: SpawnTemplate = {
   id: 'g-12snake',
-  cells: [
+  rows: [
     ['snake', 'snake', 'snake'],
     ['snake', 'snake', 'snake'],
     ['snake', 'snake', 'snake'],
@@ -154,31 +165,34 @@ const T_12SNAKE: SpawnTemplate = {
 };
 const T_1BEAR: SpawnTemplate = {
   id: 'g-1bear',
-  cells: [[null, 'bear', null]],
+  rows: [['bear']],
 };
 const T_1BEAR_4SNAKE: SpawnTemplate = {
   id: 'g-1bear-4snake',
-  cells: [
-    [null, 'bear', null],
-    ['snake', null, 'snake'],
-    ['snake', null, 'snake'],
+  rows: [
+    ['bear'],
+    ['snake', 'snake'],
+    ['snake', 'snake'],
   ],
 };
 const T_2PANTHER_1BEAR: SpawnTemplate = {
   id: 'g-2panther-1bear',
-  cells: [['panther', 'bear', 'panther']],
+  rows: [['panther', 'bear', 'panther']],
 };
 
-// L1 forbids bear-bearing groups; L2/L3 unlock all 8.
-const L1_GROUP_POOL: SpawnTemplate[] = [
+// Type-gated group pools. SNAKE_PANTHER_POOL has no bears (used by L1 and,
+// in the global scheduler, by waves 1–6). SNAKE_PANTHER_BEAR_POOL adds the
+// bear groups (used by L2/L3 and, globally, by waves 7+). Exported so the
+// GlobalWaveScheduler can select by global wave number (TYPE_UNLOCK_BEAR_WAVE).
+export const SNAKE_PANTHER_POOL: SpawnTemplate[] = [
   T_1PANTHER,
   T_2PANTHER,
   T_1PANTHER_6SNAKE,
   T_9SNAKE,
   T_12SNAKE,
 ];
-const L2_3_GROUP_POOL: SpawnTemplate[] = [
-  ...L1_GROUP_POOL,
+export const SNAKE_PANTHER_BEAR_POOL: SpawnTemplate[] = [
+  ...SNAKE_PANTHER_POOL,
   T_1BEAR,
   T_1BEAR_4SNAKE,
   T_2PANTHER_1BEAR,
@@ -193,7 +207,7 @@ const L1_W1_FIRST_SPAWN_POOL: SpawnTemplate[] = [T_1PANTHER, T_1PANTHER_6SNAKE];
 const L1_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
   bands: [L1_TOP_BAND],
-  groupPool: L1_GROUP_POOL,
+  groupPool: SNAKE_PANTHER_POOL,
   waves: [
     {
       id: 'l1-w1-setup',
@@ -221,7 +235,7 @@ const L1_WAVE_CONFIG: LevelWaveConfig = {
 const L2_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
   bands: [TOP_BAND, LEFT_BAND, RIGHT_BAND],
-  groupPool: L2_3_GROUP_POOL,
+  groupPool: SNAKE_PANTHER_BEAR_POOL,
   waves: [
     {
       id: 'l2-w1-setup',
@@ -248,7 +262,7 @@ const L2_WAVE_CONFIG: LevelWaveConfig = {
 const L3_WAVE_CONFIG: LevelWaveConfig = {
   interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
   bands: [TOP_BAND, BOTTOM_BAND, LEFT_BAND, RIGHT_BAND],
-  groupPool: L2_3_GROUP_POOL,
+  groupPool: SNAKE_PANTHER_BEAR_POOL,
   waves: [
     {
       id: 'l3-w1-setup',

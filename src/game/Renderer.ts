@@ -2,6 +2,7 @@ import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
 import { Facing, Vector2 } from './types';
+import { TILE_SIZE, ENEMY_AABB_PX } from './constants';
 // ArMM1998's "Zelda-like tilesets and sprites" pack, CC0 / public domain
 // (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
 // 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
@@ -20,6 +21,15 @@ const SPRITE_DIR_ROW: Record<Facing, number> = {
   up: 2,
   left: 3,
 };
+
+// Enemy procedural art is scaled around its cell centre so drawn size
+// reflects the per-type collision AABB (ENEMY_AABB_PX): the bear reads
+// biggest, the snake smallest. Floored here so the smallest beasts (gibbon,
+// snake) stay identifiable in one frame rather than shrinking to a sub-pixel
+// speck — Pillar 5 (readable at a glance) is a hard constraint, so the drawn
+// size is allowed to exceed the tiny collision box. Collision itself always
+// uses the true AABB (Enemy.getAABB), independent of this.
+const ENEMY_VISUAL_SCALE_FLOOR = 0.5;
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -112,6 +122,21 @@ export class Renderer {
       const pos = enemy.getPosition();
       const type = enemy.getType();
 
+      // Scale the procedural art around the cell centre so drawn size tracks
+      // the per-type collision AABB (bear biggest → snake smallest), floored
+      // so the smallest beasts stay identifiable in one frame (Pillar 5).
+      const scale = Math.max(
+        ENEMY_AABB_PX[type] / TILE_SIZE,
+        ENEMY_VISUAL_SCALE_FLOOR,
+      );
+      const cx = pos.x + TILE_SIZE / 2;
+      const cy = pos.y + TILE_SIZE / 2;
+
+      this.ctx.save();
+      this.ctx.translate(cx, cy);
+      this.ctx.scale(scale, scale);
+      this.ctx.translate(-cx, -cy);
+
       switch (type) {
         case 'panther':
           this.renderPanther(pos);
@@ -126,6 +151,8 @@ export class Renderer {
           this.renderBear(pos);
           break;
       }
+
+      this.ctx.restore();
     });
   }
 
@@ -201,9 +228,10 @@ export class Renderer {
     this.ctx.fillRect(pos.x + 14, pos.y + 13, 4, 3);
   }
 
-  // Snake — thin slithering body, ~2-3 px tall, spans most of the AABB
-  // horizontally. AABB is still 32x32 (so arrows hit reliably) but the
-  // visible footprint is small. Serpentine zigzag suggests motion.
+  // Snake — thin slithering body, drawn within the cell (scaled in
+  // renderEnemies). Collision AABB is a tiny 4 px box (ENEMY_AABB_PX) so many
+  // snakes pack/stack per tile; the 32 px cell still drives arrow-hit in
+  // Game.ts, so arrows land reliably. Serpentine zigzag suggests motion.
   private renderSnake(pos: Vector2) {
     // Body segments alternating high/low to suggest a slither
     this.ctx.fillStyle = '#2F4F2F';

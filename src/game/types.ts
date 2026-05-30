@@ -107,14 +107,17 @@ export interface BandSpec {
   entryDirection: Vector2;
 }
 
-// A pre-designed group template. `cells[row][col]` describes which enemy
-// (if any) occupies each grid cell. Outer index = row (0 = front, enters
-// first); inner index = column (0 = outside-left, 1 = middle, 2 =
-// outside-right). Rows trail behind the front row at one-tile spacing
-// along the band's reverse-entry direction.
+// A pre-designed group template. `rows[i]` is the ordered list of enemies
+// that enter together in row i (0 = front, enters first). Within a row the
+// enemies lay out along the band's orthogonal axis, left-justified by
+// cumulative AABB width (see WaveScheduler.slotPosition; Step 1 uses a
+// uniform TILE_SIZE width per type, Step 2 swaps in per-type widths). Rows
+// trail behind the front row at one-tile spacing along the band's
+// reverse-entry direction. (Replaces the old `cells: (EnemyType|null)[][]`
+// grid — see docs/ROADMAP-traversable-maps.md §5.6.)
 export interface SpawnTemplate {
   id: string;
-  cells: (EnemyType | null)[][];
+  rows: EnemyType[][];
 }
 
 // Wave: keep drawing groups until cumulative spawned enemies meet or

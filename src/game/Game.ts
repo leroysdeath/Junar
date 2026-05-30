@@ -6,7 +6,7 @@ import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
-import { WaveScheduler, SpawnRequest } from './WaveScheduler';
+import { WaveScheduler, GlobalWaveScheduler, SpawnRequest } from './WaveScheduler';
 import { Stamina } from './Stamina';
 import {
   GameState,
@@ -17,7 +17,11 @@ import {
   InputState,
   SpawnEntryway,
 } from './types';
-import { initializeLevels } from './levels';
+import {
+  initializeLevels,
+  SNAKE_PANTHER_POOL,
+  SNAKE_PANTHER_BEAR_POOL,
+} from './levels';
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
@@ -27,6 +31,8 @@ import {
   ARROW_COOLDOWN_MS,
   STAMINA_MAX,
   DASH_DISTANCE_PX,
+  USE_GLOBAL_WAVE_SCHEDULER,
+  DEFAULT_INTER_WAVE_LULL_MS,
 } from './constants';
 
 type GameOverReason =
@@ -105,6 +111,11 @@ export class Game {
   }> = [];
   private nextEnemyId = 0;
   private waveScheduler: WaveScheduler | null = null;
+  // Step 1 of the traversable-maps refactor: a single run-long scheduler,
+  // used in place of the per-level waveScheduler when
+  // USE_GLOBAL_WAVE_SCHEDULER is true. Holds no listeners/timers (it's a
+  // pure tick-driven state machine), so it needs no teardown in cleanup().
+  private globalWaveScheduler: GlobalWaveScheduler | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -165,12 +176,49 @@ export class Game {
     this.player = new Player(this.level.getSafePlayerSpawn());
 
     const waveConfig = this.level.getWaveConfig();
-    if (waveConfig) {
-      // Wave-driven path: scheduler authors all spawns. Skip both static
+    if (USE_GLOBAL_WAVE_SCHEDULER && waveConfig) {
+      // Global path (Step 1 of the traversable-maps refactor): one run-long
+      // scheduler drives spawns. There is no clear-to-advance gate and the
+      // arena never auto-completes — progression will come from moving
+      // between rooms (Step 3). For now it is an endless survival arena, so
+      // completeLevel() is skipped while this scheduler is active. Bands come
+      // from the current level's wave config; Step 3 sets them per room.
+      this.enemies = [];
+      this.pendingSpawns = [];
+      this.waveScheduler = null;
+      this.globalWaveScheduler = new GlobalWaveScheduler(
+        {
+          snakePantherPool: SNAKE_PANTHER_POOL,
+          snakePantherBearPool: SNAKE_PANTHER_BEAR_POOL,
+          interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+        },
+        {
+          onGraceStart: (durMs) =>
+            this.logger.log('level', 'globalGrace', { durationMs: durMs }),
+          onWaveStart: (waveNum, triplet, beat) => {
+            // Reuse the per-level callback (HUD does not wire it); pass a
+            // 0-based wave index for parity with the legacy path.
+            this.callbacks.onWaveStart?.(waveNum - 1, 0, beat);
+            this.logger.log('level', 'globalWaveStart', {
+              wave: waveNum,
+              triplet,
+              beat,
+            });
+          },
+          onInterWaveLull: (durMs) =>
+            this.logger.log('level', 'globalLull', { durationMs: durMs }),
+          onTripletBreak: (durMs) =>
+            this.logger.log('level', 'globalTripletBreak', { durationMs: durMs }),
+        },
+      );
+      this.globalWaveScheduler.setBands(waveConfig.bands);
+    } else if (waveConfig) {
+      // Per-level path: scheduler authors all spawns. Skip both static
       // enemySpawns and delayedSpawns — they are mutually exclusive with
       // waveConfig at the levels.ts authoring layer.
       this.enemies = [];
       this.pendingSpawns = [];
+      this.globalWaveScheduler = null;
       this.waveScheduler = new WaveScheduler(waveConfig, {
         onWaveStart: (i, total, beat) => {
           this.callbacks.onWaveStart?.(i, total, beat);
@@ -189,6 +237,7 @@ export class Game {
       // Legacy path (Levels 4–10): static perimeter spawns + optional
       // entryway trickle.
       this.waveScheduler = null;
+      this.globalWaveScheduler = null;
       this.enemies = this.level.getEnemySpawns().map((spawn, index) =>
         new Enemy(spawn.pos, spawn.type, index, this.level)
       );
@@ -222,6 +271,7 @@ export class Game {
       enemies: this.enemies.length,
       pendingSpawns: this.pendingSpawns.length,
       waveDriven: this.waveScheduler !== null,
+      globalWaveDriven: this.globalWaveScheduler !== null,
       playerSpawn: this.player.getPosition(),
     });
   }
@@ -305,6 +355,7 @@ export class Game {
     return {
       gameState: this.gameState,
       level: this.currentLevelIndex + 1,
+      globalWaveNum: this.globalWaveScheduler?.currentWaveNum(),
       score: this.score,
       enemies: this.enemies.length,
       arrows: this.arrows.length,
@@ -459,6 +510,28 @@ export class Game {
       }
     }
 
+    // Global wave-driven spawns (Step 1). Mirrors the per-level path, but the
+    // scheduler is run-long and time-driven. emitWaveProgress is a no-op here
+    // (it is gated on waveScheduler), so the HUD's wave rows stay hidden.
+    if (this.globalWaveScheduler) {
+      const requests = this.globalWaveScheduler.tick(currentTime);
+      for (const req of requests) {
+        const enemy = this.spawnFromRequest(req);
+        this.enemies.push(enemy);
+        this.logger.log('spawn', 'wave', {
+          id: enemy.getId(),
+          type: enemy.getType(),
+          wave: this.globalWaveScheduler.currentWaveNum(),
+          pos: enemy.getPosition(),
+        });
+      }
+      if (requests.length > 0) {
+        this.callbacks.onEnemiesChange(
+          this.enemies.length + this.pendingSpawns.length,
+        );
+      }
+    }
+
     // Pick the nearest enemy with clear LOS at any angle. Drives both
     // auto-fire targeting and the on-screen LOS indicator.
     const visibleTarget = this.findNearestVisibleEnemy();
@@ -474,9 +547,10 @@ export class Game {
       this.lastArrowTime = currentTime;
     }
     
-    // Update enemies
+    // Update enemies. Pass the live enemy list so each can enforce
+    // enemy-vs-enemy no-overlap at its movement step (Enemy.update).
     this.enemies.forEach(enemy => {
-      enemy.update(deltaTime, this.player.getPosition(), this.level);
+      enemy.update(deltaTime, this.player.getPosition(), this.level, this.enemies);
     });
     
     // Update arrows
@@ -504,12 +578,16 @@ export class Game {
     // is empty AND no future spawns are queued — for wave-driven levels
     // that means the scheduler has finished its last wave and lull;
     // otherwise the level would complete during the grace period before
-    // the first wave's first spawn lands.
-    const noFutureSpawns = this.waveScheduler
-      ? this.waveScheduler.isFinished()
-      : this.pendingSpawns.length === 0;
-    if (this.enemies.length === 0 && noFutureSpawns) {
-      this.completeLevel();
+    // the first wave's first spawn lands. The global scheduler never
+    // finishes (endless survival arena until rooms land in Step 3), so it
+    // never auto-completes — guard the check off entirely while it runs.
+    if (!this.globalWaveScheduler) {
+      const noFutureSpawns = this.waveScheduler
+        ? this.waveScheduler.isFinished()
+        : this.pendingSpawns.length === 0;
+      if (this.enemies.length === 0 && noFutureSpawns) {
+        this.completeLevel();
+      }
     }
 
     this.emitStaminaTransitions();
