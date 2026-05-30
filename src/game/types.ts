@@ -135,3 +135,50 @@ export interface LevelWaveConfig {
   bands: BandSpec[];
   groupPool: SpawnTemplate[];
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Traversable-maps refactor (see docs/ROADMAP-traversable-maps.md §11).
+// These types support the room-grid system. Step 8 (this slice) uses
+// RoomTemplate / RoomOpening / StaticCandidate to author the connector
+// template pool in RoomTemplates.ts. Later steps consume the rest.
+// ───────────────────────────────────────────────────────────────────────────
+
+// One of the four canvas edges. N = top (row 0), S = bottom (row GRID_HEIGHT-1),
+// W = left (col 0), E = right (col GRID_WIDTH-1).
+export type Edge = 'N' | 'S' | 'E' | 'W';
+
+// A walkable gap on one edge of a room template. For N/S edges the range is a
+// span of column indices; for E/W edges it's a span of row indices. Both ends
+// are inclusive. A single edge may carry multiple openings (multi-opening
+// templates), each emitted as its own RoomOpening.
+export interface RoomOpening {
+  edge: Edge;
+  rangeStart: number; // tile index along the edge (inclusive)
+  rangeEnd: number; // tile index along the edge (inclusive)
+}
+
+// Static spawn candidate kind, sourced from the template tile char:
+//   's' → 'small' (snake or gibbon only)
+//   'S' → 'any'   (any 1-tile-fitting type: snake, gibbon, or panther)
+// Bears (34 px) never spawn statically; they come from waves only.
+export type StaticCandidateKind = 'small' | 'any';
+
+// A candidate tile where the per-run density roll (§5.10) may place a static.
+// `tile` holds the world-space pixel position (col*TILE_SIZE, row*TILE_SIZE),
+// matching how levels.ts records NPC/hut positions.
+export interface StaticCandidate {
+  tile: Vector2;
+  kind: StaticCandidateKind;
+}
+
+// A parsed room (anchor or connector). `walls` is the 29×17 collision grid
+// (walls[row][col]); `openings` and `candidates` are derived from the source
+// ASCII. `authoredStatics` is an anchors-only manifest of pre-placed statics —
+// empty for connectors, which roll their statics from `candidates` at run time.
+export interface RoomTemplate {
+  id: string;
+  walls: boolean[][];
+  openings: RoomOpening[];
+  candidates: StaticCandidate[];
+  authoredStatics: { type: EnemyType; pos: Vector2 }[];
+}
