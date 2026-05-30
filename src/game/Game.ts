@@ -550,7 +550,7 @@ export class Game {
     // Update enemies. Pass the live enemy list so each can enforce
     // enemy-vs-enemy no-overlap at its movement step (Enemy.update).
     this.enemies.forEach(enemy => {
-      enemy.update(deltaTime, this.player.getPosition(), this.level, this.enemies);
+      enemy.update(deltaTime, currentTime, this.player.getPosition(), this.level, this.enemies);
     });
     
     // Update arrows

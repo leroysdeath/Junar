@@ -85,6 +85,7 @@ export class Enemy {
 
   update(
     deltaTime: number,
+    currentTime: number,
     playerPosition: Vector2,
     level: Level,
     others: Enemy[] = [],
@@ -106,12 +107,9 @@ export class Enemy {
       return;
     }
 
-    // NOTE: Date.now() here is a pre-existing Invariant 8 item slated for a
-    // separate fix (migrate to gameLoop currentTime); left untouched per the
-    // Step 2 scope.
-    const currentTime = Date.now();
-
-    // Update pathfinding target every 200ms.
+    // Pathfinding repolls every 200 ms, timed off the gameLoop currentTime
+    // (the rAF clock threaded through update) — never Date.now (Invariant 8),
+    // so the repoll cadence stays correct across pause/resume.
     if (currentTime - this.lastPathfindTime > 200) {
       this.targetPosition = this.findPathToPlayer(playerPosition, level);
       this.lastPathfindTime = currentTime;
@@ -137,10 +135,21 @@ export class Enemy {
       if (!this.collidesWall(newX, this.position.y, level)) candX = newX;
       if (!this.collidesWall(candX, newY, level)) candY = newY;
 
-      // Enemy-vs-enemy no-overlap (snake-snake exempt, §5.8). If the
-      // wall-resolved step would overlap another enemy, reject it and jitter
-      // to a random clear cardinal; hold position if none is clear.
-      if (!this.overlapsEnemy(candX, candY, others)) {
+      if (candX === this.position.x && candY === this.position.y) {
+        // Per-axis wall resolution produced ZERO motion while still
+        // off-target — the freeze mode for an over-tile enemy. A 34 px bear's
+        // centred AABB overhangs its cell by 1 px, so when it sits in a
+        // corridor's edge column the box clips the adjacent wall column on
+        // every attempted move and both axes stay blocked forever. Jitter to
+        // a clear cardinal so it slides off the wall toward the open centre
+        // column (§5.8 jitter-then-hold). For enemies that fit inside their
+        // cell this branch only triggers in a genuine dead end, where
+        // jitter-then-hold is the intended behavior anyway.
+        this.jitter(moveDistance, level, others);
+      } else if (!this.overlapsEnemy(candX, candY, others)) {
+        // Enemy-vs-enemy no-overlap (snake-snake exempt, §5.8): commit the
+        // wall-resolved step only if it doesn't land on another enemy;
+        // otherwise jitter to a random clear cardinal, or hold if none clears.
         this.position.x = candX;
         this.position.y = candY;
       } else {
