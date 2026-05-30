@@ -263,4 +263,11 @@ export class Player {
   getPosition(): Vector2 {
     return { ...this.position };
   }
+
+  // Hard-set the position. Used by room transitions (Step 3) to drop the
+  // player at the opposite edge of the destination room. Caller is
+  // responsible for choosing a wall-free landing spot.
+  setPosition(pos: Vector2) {
+    this.position = { ...pos };
+  }
 }

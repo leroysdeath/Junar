@@ -1,4 +1,4 @@
-import type { EnemyType } from './types';
+import type { EnemyType, Vector2 } from './types';
 
 export const CANVAS_WIDTH = 928;
 export const CANVAS_HEIGHT = 544;
@@ -6,6 +6,11 @@ export const TILE_SIZE = 32;
 export const PLAYER_SIZE = 32;
 export const GRID_WIDTH = 29;
 export const GRID_HEIGHT = 17;
+
+// Player spawn at the exact center of a 29×17 room (col 14 × 32, row 8 × 32).
+// Used as the run-start spawn inside anchor 1 (roadmap §5.1). levels.ts keeps
+// its own private copy for the legacy per-level spawn path.
+export const CENTER_SPAWN: Vector2 = { x: 448, y: 256 };
 // Real-world scale: 1 tile (32 px) ≈ 5.5 ft (adult male archer height)
 export const FEET_PER_TILE = 5.5;
 export const MAP_WIDTH_FEET = GRID_WIDTH * FEET_PER_TILE;   // 159.5 ft
@@ -72,10 +77,24 @@ export const WAVE_ENEMYCOUNT_CAP = 25;
 // snake+panther only; waves 7+ (triplet 3 onward) add bears.
 export const TYPE_UNLOCK_BEAR_WAVE = 7;
 
-// Feature flag: route wave-driven arenas through the new GlobalWaveScheduler
-// instead of the per-level WaveScheduler. Default OFF so current behavior is
-// unchanged. Step 3 of the refactor removes the flag and the per-level path.
-export const USE_GLOBAL_WAVE_SCHEDULER = false;
+// --- Room grid (Step 3 of the traversable-maps refactor) ---
+// See docs/ROADMAP-traversable-maps.md §4 (glossary), §5.1 (run structure).
+// A run is a ROOM_GRID_COLS × ROOM_GRID_ROWS grid of rooms (493 total),
+// regenerated each run. Each room is itself one 29×17-tile playfield (the
+// GRID_WIDTH × GRID_HEIGHT above) — the room-grid dimensions equalling the
+// tile-grid dimensions is a coincidence of the chosen numbers, not a
+// dependency; keep them as separate names.
+export const ROOM_GRID_COLS = 29;
+export const ROOM_GRID_ROWS = 17;
+
+// Hand-designed anchor rooms (the 10 existing levels). Anchor 1 is the run
+// start; anchor 10 is the boss room. The rest of the grid is connectors.
+export const ANCHOR_COUNT = 10;
+
+// Poisson-disk spacing: a newly placed anchor must be at least this far (in
+// Manhattan room-grid distance) from every already-placed anchor. Tunable
+// 4–6 per roadmap §5.1.
+export const MIN_ANCHOR_SPACING = 5;
 
 // --- Per-enemy AABB sizing (Step 2 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.7.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target, Zap } from 'lucide-react';
 import { Game } from './game/Game';
-import { GameState } from './game/types';
+import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, STAMINA_MAX } from './game/constants';
 import { MobileControls, Action } from './MobileControls';
@@ -30,11 +30,10 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
   const [gameState, setGameState] = useState<GameState>('menu');
-  const [currentLevel, setCurrentLevel] = useState(1);
+  const [roomCoord, setRoomCoord] = useState<RoomGridCoord>({ col: 0, row: 0 });
+  const [waveNum, setWaveNum] = useState(0);
   const [score, setScore] = useState(0);
   const [enemiesRemaining, setEnemiesRemaining] = useState(0);
-  const [waveRemaining, setWaveRemaining] = useState<number | null>(null);
-  const [levelRemaining, setLevelRemaining] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
@@ -59,20 +58,10 @@ function App() {
     if (canvasRef.current && !gameRef.current) {
       gameRef.current = new Game(canvasRef.current, {
         onStateChange: setGameState,
-        onLevelChange: (level) => {
-          setCurrentLevel(level);
-          // Wave/level counters are only emitted on wave-driven levels
-          // (1–3). Reset to null on every level change so legacy levels
-          // (4–10) hide the rows until/unless Game emits a value.
-          setWaveRemaining(null);
-          setLevelRemaining(null);
-        },
+        onRoomChange: (coord) => setRoomCoord(coord),
+        onWaveChange: (n) => setWaveNum(n),
         onScoreChange: setScore,
         onEnemiesChange: setEnemiesRemaining,
-        onWaveProgressChange: (wave, level) => {
-          setWaveRemaining(wave);
-          setLevelRemaining(level);
-        },
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
         soundEnabled
@@ -124,21 +113,14 @@ function App() {
         <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
           <div className="flex items-center gap-2 text-sm">
             <Target size={16} className="text-amber-400" />
-            <span>Level {currentLevel}/10</span>
+            <span>Room ({roomCoord.col}, {roomCoord.row})</span>
           </div>
           <div className="text-xs text-amber-300 mt-1">
+            Wave: {waveNum}
+          </div>
+          <div className="text-xs text-amber-300">
             Enemies: {enemiesRemaining}
           </div>
-          {levelRemaining !== null && (
-            <div className="text-xs text-amber-300">
-              Level remaining: {levelRemaining}
-            </div>
-          )}
-          {waveRemaining !== null && (
-            <div className="text-xs text-amber-300">
-              Wave remaining: {waveRemaining}
-            </div>
-          )}
         </div>
 
         <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px]">
@@ -192,7 +174,7 @@ function App() {
     <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
       <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">Game Over</h2>
       <p className="text-lg text-amber-200 mb-2 drop-shadow">
-        You reached Level {currentLevel}
+        You reached room ({roomCoord.col}, {roomCoord.row})
       </p>
       <p className="text-base text-amber-300 mb-8 drop-shadow">
         Final Score: {score}
@@ -246,15 +228,6 @@ function App() {
     </div>
   );
 
-  const renderLevelCompleteContent = () => (
-    <div className="text-center text-white">
-      <h2 className="text-3xl font-bold text-green-400 mb-4">Level Complete!</h2>
-      <p className="text-lg text-amber-200">
-        Preparing Level {currentLevel + 1}...
-      </p>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4">
       {isMobile && gameState !== 'menu' && (
@@ -262,7 +235,6 @@ function App() {
           {gameState === 'playing' && renderHud()}
           {gameState === 'gameOver' && renderGameOverContent()}
           {gameState === 'victory' && renderVictoryContent()}
-          {gameState === 'levelComplete' && renderLevelCompleteContent()}
         </div>
       )}
 
@@ -330,10 +302,9 @@ function App() {
                       {' '}(opposite of facing, walls block)
                     </li>
                     <li><strong>Stamina:</strong> One bar for the whole run — no regen</li>
-                    <li><strong>Objective:</strong> Eliminate all enemies to advance</li>
                     <li><strong>Strategy:</strong> Position for clear line of sight</li>
                     <li><strong>Warning:</strong> Avoid all enemy contact!</li>
-                    <li><strong>Levels:</strong> 9 levels + epic boss battle</li>
+                    <li><strong>Objective:</strong> Travel room to room toward the boss</li>
                     <li><strong>Victory:</strong> Defeat the Ancient Tree Guardian</li>
                   </ul>
                 </div>
@@ -353,13 +324,6 @@ function App() {
         {!isMobile && gameState === 'victory' && (
           <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
             {renderVictoryContent()}
-          </div>
-        )}
-
-        {/* Level Complete Transition (desktop only — mobile renders above the canvas) */}
-        {!isMobile && gameState === 'levelComplete' && (
-          <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
-            {renderLevelCompleteContent()}
           </div>
         )}
       </div>

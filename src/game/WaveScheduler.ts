@@ -86,6 +86,15 @@ class BandDripper {
     this.pending = [];
   }
 
+  // Shift every pending band-ready deadline forward by `deltaMs`. Used by the
+  // GlobalWaveScheduler's pause/resume so a paused stretch (room transition,
+  // boss arena) doesn't make blocked bands fire all at once on resume.
+  shiftTime(deltaMs: number): void {
+    for (let i = 0; i < this.bandReadyAtMs.length; i++) {
+      if (Number.isFinite(this.bandReadyAtMs[i])) this.bandReadyAtMs[i] += deltaMs;
+    }
+  }
+
   // Indices of bands ready to accept a new group's front row right now.
   readyBands(nowMs: number): number[] {
     const out: number[] = [];
@@ -156,10 +165,12 @@ class BandDripper {
 }
 
 // ---------------------------------------------------------------------------
-// Per-level WaveScheduler (legacy path — used when USE_GLOBAL_WAVE_SCHEDULER
-// is false). Drives spawn ticks for a single level: setup → add → test waves
-// gated on clearing each wave, with a fixed inter-wave lull. Step 3 of the
-// traversable-maps refactor removes this class in favor of GlobalWaveScheduler.
+// Per-level WaveScheduler (legacy). As of Step 3 of the traversable-maps
+// refactor this class is no longer wired into Game — the run-long
+// GlobalWaveScheduler below drives all spawns — but it is kept here (unused)
+// pending a later cleanup pass. Drives spawn ticks for a single level:
+// setup → add → test waves gated on clearing each wave, with a fixed
+// inter-wave lull.
 // ---------------------------------------------------------------------------
 
 type Phase = 'spawning' | 'awaiting_clear' | 'lull' | 'finished';
@@ -420,15 +431,34 @@ export class GlobalWaveScheduler {
   private currentEnemyCount = 0;
   private currentIntervalMs = 0;
   private currentPool: SpawnTemplate[] = [];
+  // Pause state (Step 3). All phase timing is absolute rAF time, so a pause
+  // records when it began and resume() shifts every future deadline forward by
+  // the paused duration — keeping the grace/wave/lull/break cadence intact
+  // across room transitions (and, later, the boss arena).
+  private paused = false;
+  private pausedAtMs = 0;
 
   constructor(config: GlobalSchedulerConfig, callbacks: GlobalSchedulerCallbacks) {
     this.config = config;
     this.callbacks = callbacks;
   }
 
-  // The current arena's spawn bands. Step 1 sets this once at run start;
-  // Step 3 (room grid) will update it on each room entry.
+  // The current room's spawn bands — updated on every room entry (Step 3) from
+  // the room template's openings (per-opening bands, roadmap §5.5).
+  //
+  // A room transition can land mid-drip: dripper.setBands discards the old
+  // room's still-queued group rows. spawnedInWave was credited the WHOLE
+  // template at draw time, so without reconciling, those dropped (never-
+  // emitted) enemies would still count toward the wave's soft target and the
+  // completion gate (spawnedInWave >= currentEnemyCount && !hasPending) would
+  // end the wave early with fewer enemies released. Credit the dropped count
+  // back so the scheduler re-draws the remaining budget into the new room and
+  // the per-wave enemy count stays honest across transitions.
   setBands(bands: BandSpec[]): void {
+    this.spawnedInWave = Math.max(
+      0,
+      this.spawnedInWave - this.dripper.pendingEnemyCount(),
+    );
     this.dripper.setBands(bands);
   }
 
@@ -437,7 +467,31 @@ export class GlobalWaveScheduler {
     return this.waveNum;
   }
 
+  isPaused(): boolean {
+    return this.paused;
+  }
+
+  // Freeze the timer (room transition / boss arena). Idempotent.
+  pause(nowMs: number): void {
+    if (this.paused) return;
+    this.paused = true;
+    this.pausedAtMs = nowMs;
+  }
+
+  // Resume, shifting all absolute deadlines forward by the paused duration so
+  // no phase "catches up" by firing immediately. Idempotent.
+  resume(nowMs: number): void {
+    if (!this.paused) return;
+    this.paused = false;
+    const delta = nowMs - this.pausedAtMs;
+    if (delta <= 0) return;
+    this.phaseDeadlineMs += delta;
+    if (Number.isFinite(this.lastSpawnAt)) this.lastSpawnAt += delta;
+    this.dripper.shiftTime(delta);
+  }
+
   tick(nowMs: number): SpawnRequest[] {
+    if (this.paused) return [];
     if (!this.started) {
       this.started = true;
       this.phase = 'grace';

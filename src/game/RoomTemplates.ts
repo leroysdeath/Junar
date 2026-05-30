@@ -65,7 +65,10 @@ function pushEdgeRuns(
 
 // Derive edge openings purely from the parsed walls grid, so openings can
 // never drift from the actual walkable geometry. Order: N, S, W, E.
-function deriveOpenings(walls: boolean[][]): RoomOpening[] {
+// Exported so the room-grid generator (Step 3) can derive anchor openings
+// straight from each anchor level's walls (anchors aren't authored as
+// connectors, so their openings come from geometry, same as connectors).
+export function deriveOpenings(walls: boolean[][]): RoomOpening[] {
   const openings: RoomOpening[] = [];
   const lastRow = GRID_HEIGHT - 1;
   const lastCol = GRID_WIDTH - 1;

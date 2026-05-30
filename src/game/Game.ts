@@ -6,7 +6,7 @@ import { Renderer } from './Renderer';
 import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
-import { WaveScheduler, GlobalWaveScheduler, SpawnRequest } from './WaveScheduler';
+import { GlobalWaveScheduler, SpawnRequest } from './WaveScheduler';
 import { Stamina } from './Stamina';
 import {
   GameState,
@@ -15,24 +15,37 @@ import {
   EnemyType,
   Facing,
   InputState,
-  SpawnEntryway,
+  Edge,
+  RoomDef,
+  RoomOpening,
+  RoomGridCoord,
+  RunMap,
+  BandSpec,
+  LevelData,
 } from './types';
+import { SNAKE_PANTHER_POOL, SNAKE_PANTHER_BEAR_POOL } from './levels';
 import {
-  initializeLevels,
-  SNAKE_PANTHER_POOL,
-  SNAKE_PANTHER_BEAR_POOL,
-} from './levels';
+  generateRunMap,
+  roomAt,
+  openingsOnEdge,
+  oppositeEdge,
+  roomsConnect,
+  rangesOverlap,
+} from './RoomGrid';
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   TILE_SIZE,
+  PLAYER_SIZE,
+  GRID_WIDTH,
+  GRID_HEIGHT,
   MAX_DETECTION_RANGE,
   ARROW_SPEED,
   ARROW_COOLDOWN_MS,
   STAMINA_MAX,
   DASH_DISTANCE_PX,
-  USE_GLOBAL_WAVE_SCHEDULER,
   DEFAULT_INTER_WAVE_LULL_MS,
+  CENTER_SPAWN,
 } from './constants';
 
 type GameOverReason =
@@ -49,6 +62,10 @@ interface GameOverVerdict {
 
 const SAMPLE_EVERY_FRAMES = 10;
 const EARLY_DEATH_MS = 500;
+// A transition fires only when the player presses outward while pinned to the
+// canvas edge; the edge clamp in Player.update lands them exactly on the
+// boundary, so this tolerance just absorbs float error.
+const EDGE_EPS_PX = 0.5;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -70,9 +87,12 @@ const dashDirectionFromFacing = (facing: Facing): Vector2 => {
 export class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private player: Player;
+  private player!: Player;
+  // Enemies in the CURRENT room. Other rooms' enemies are parked in
+  // roomEnemies (no despawn — they wait where the player left them; cross-room
+  // hunting arrives in Step 4).
   private enemies: Enemy[] = [];
-  private level: Level;
+  private level!: Level;
   private inputManager: InputManager;
   private renderer: Renderer;
   private soundManager: SoundManager;
@@ -81,12 +101,13 @@ export class Game {
   private logger: CrashLogger;
 
   private gameState: GameState = 'menu';
-  private initializedLevels = initializeLevels();
-  private currentLevelIndex = 0;
   private score = 0;
   private lastTime = 0;
   private animationId: number | null = null;
   private frameCount = 0;
+  // Wall-clock-of-the-run start (rAF time), set when a run begins. Drives the
+  // suspicious-death heuristics; named *LevelStart in the verdict for crash-log
+  // schema stability.
   private levelStartedAt = 0;
   private lastSampleFrame = 0;
 
@@ -95,26 +116,22 @@ export class Game {
   private arrows: Array<{ pos: Vector2; dir: Vector2; id: number }> = [];
   private nextArrowId = 0;
   private hasLineOfSight = false; // Track if player has line of sight to any enemy
-  private levelTransitionTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  // Stamina state. Constructed once; persists across level transitions
-  // and resets only on Game.restart(). The was* fields drive
-  // edge-triggered logging and callback emission for state transitions.
+  // Stamina state. Constructed once; persists across rooms and resets only on
+  // Game.restart(). The was* fields drive edge-triggered logging and callback
+  // emission for state transitions.
   private stamina = new Stamina();
   private wasBurstActive = false;
   private wasLowStamina = false;
   private wasDepleted = false;
   private lastEmittedStaminaValue = STAMINA_MAX;
-  private pendingSpawns: Array<{
-    spawnAtMs: number; // ms relative to levelStartedAt
-    entryway: SpawnEntryway;
-    entryDirection: Vector2;
-  }> = [];
   private nextEnemyId = 0;
-  private waveScheduler: WaveScheduler | null = null;
-  // Step 1 of the traversable-maps refactor: a single run-long scheduler,
-  // used in place of the per-level waveScheduler when
-  // USE_GLOBAL_WAVE_SCHEDULER is true. Holds no listeners/timers (it's a
-  // pure tick-driven state machine), so it needs no teardown in cleanup().
+
+  // Room grid (Step 3). The run map regenerates each run; the player traverses
+  // it room-to-room. One run-long global scheduler drives spawns into the
+  // current room.
+  private runMap!: RunMap;
+  private currentRoomCoord!: RoomGridCoord;
+  private roomEnemies = new Map<number, Enemy[]>();
   private globalWaveScheduler: GlobalWaveScheduler | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
@@ -134,8 +151,8 @@ export class Game {
     this.soundManager = new SoundManager(callbacks.soundEnabled);
     this.collisionManager = new CollisionManager();
 
-    this.level = new Level(this.initializedLevels[0]);
-    this.player = new Player(this.level.getPlayerSpawn());
+    // Build an initial map so the menu backdrop shows the real anchor-1 room.
+    this.regenerateMap();
 
     this.logger.log('lifecycle', 'game constructed');
     this.setupEventListeners();
@@ -144,7 +161,7 @@ export class Game {
   private setupEventListeners() {
     this.canvas.addEventListener('click', () => {
       if (this.gameState === 'menu') {
-        this.startLevel();
+        this.startRun();
       }
     });
   }
@@ -154,9 +171,6 @@ export class Game {
   }
 
   restart() {
-    this.clearLevelTransitionTimeout();
-    this.currentLevelIndex = 0;
-    this.score = 0;
     this.arrows = [];
     this.lastArrowTime = 0;
     this.stamina.reset();
@@ -167,142 +181,251 @@ export class Game {
     this.callbacks.onStaminaChange?.(STAMINA_MAX, false);
     this.callbacks.onBurstChange?.(false, 1, 0);
     this.logger.log('lifecycle', 'restart');
-    this.startLevel();
+    // A new run regenerates the whole map (roadmap §5.1).
+    this.regenerateMap();
+    this.startRun();
   }
 
-  private startLevel() {
+  // Build a fresh run map and place the player (stationary) in anchor 1. Used
+  // both for the menu backdrop (constructor) and at the start of each run.
+  private regenerateMap() {
+    this.runMap = generateRunMap();
+    this.currentRoomCoord = { ...this.runMap.startCoord };
+    this.level = this.levelFromRoom(this.currentRoomDef());
+    this.player = new Player({ ...CENTER_SPAWN });
+  }
+
+  private startRun() {
     this.gameState = 'playing';
-    this.level = new Level(this.initializedLevels[this.currentLevelIndex]);
-    this.player = new Player(this.level.getSafePlayerSpawn());
-
-    const waveConfig = this.level.getWaveConfig();
-    if (USE_GLOBAL_WAVE_SCHEDULER && waveConfig) {
-      // Global path (Step 1 of the traversable-maps refactor): one run-long
-      // scheduler drives spawns. There is no clear-to-advance gate and the
-      // arena never auto-completes — progression will come from moving
-      // between rooms (Step 3). For now it is an endless survival arena, so
-      // completeLevel() is skipped while this scheduler is active. Bands come
-      // from the current level's wave config; Step 3 sets them per room.
-      this.enemies = [];
-      this.pendingSpawns = [];
-      this.waveScheduler = null;
-      this.globalWaveScheduler = new GlobalWaveScheduler(
-        {
-          snakePantherPool: SNAKE_PANTHER_POOL,
-          snakePantherBearPool: SNAKE_PANTHER_BEAR_POOL,
-          interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
-        },
-        {
-          onGraceStart: (durMs) =>
-            this.logger.log('level', 'globalGrace', { durationMs: durMs }),
-          onWaveStart: (waveNum, triplet, beat) => {
-            // Reuse the per-level callback (HUD does not wire it); pass a
-            // 0-based wave index for parity with the legacy path.
-            this.callbacks.onWaveStart?.(waveNum - 1, 0, beat);
-            this.logger.log('level', 'globalWaveStart', {
-              wave: waveNum,
-              triplet,
-              beat,
-            });
-          },
-          onInterWaveLull: (durMs) =>
-            this.logger.log('level', 'globalLull', { durationMs: durMs }),
-          onTripletBreak: (durMs) =>
-            this.logger.log('level', 'globalTripletBreak', { durationMs: durMs }),
-        },
-      );
-      this.globalWaveScheduler.setBands(waveConfig.bands);
-    } else if (waveConfig) {
-      // Per-level path: scheduler authors all spawns. Skip both static
-      // enemySpawns and delayedSpawns — they are mutually exclusive with
-      // waveConfig at the levels.ts authoring layer.
-      this.enemies = [];
-      this.pendingSpawns = [];
-      this.globalWaveScheduler = null;
-      this.waveScheduler = new WaveScheduler(waveConfig, {
-        onWaveStart: (i, total, beat) => {
-          this.callbacks.onWaveStart?.(i, total, beat);
-          this.logger.log('level', 'waveStart', { index: i, total, beat });
-        },
-        onWaveComplete: (i) => {
-          this.callbacks.onWaveComplete?.(i);
-          this.logger.log('level', 'waveComplete', { index: i });
-        },
-        onLullStart: (durMs) => {
-          this.callbacks.onLullStart?.(durMs);
-          this.logger.log('level', 'waveLull', { durationMs: durMs });
-        },
-      });
-    } else {
-      // Legacy path (Levels 4–10): static perimeter spawns + optional
-      // entryway trickle.
-      this.waveScheduler = null;
-      this.globalWaveScheduler = null;
-      this.enemies = this.level.getEnemySpawns().map((spawn, index) =>
-        new Enemy(spawn.pos, spawn.type, index, this.level)
-      );
-      this.pendingSpawns = [];
-      const dc = this.level.getDelayedSpawnConfig();
-      if (dc) {
-        for (let i = 0; i < dc.count; i++) {
-          this.pendingSpawns.push({
-            spawnAtMs: dc.initialDelayMs + i * dc.intervalMs,
-            entryway: dc.entryway,
-            entryDirection: { ...dc.entryDirection },
-          });
-        }
-      }
-    }
-
-    this.nextEnemyId = this.enemies.length;
+    this.score = 0;
+    this.nextEnemyId = 0;
     this.arrows = [];
     this.lastArrowTime = 0;
-
-    this.callbacks.onStateChange('playing');
-    this.callbacks.onLevelChange(this.currentLevelIndex + 1);
-    this.callbacks.onEnemiesChange(this.enemies.length + this.pendingSpawns.length);
-    this.emitWaveProgress();
-    this.callbacks.onScoreChange(this.score);
+    this.roomEnemies = new Map();
+    this.enemies = [];
     this.hasLineOfSight = false;
+    this.globalWaveScheduler = this.createScheduler();
     this.levelStartedAt = performance.now();
     this.lastSampleFrame = this.frameCount;
-    this.logger.log('level', 'startLevel', {
-      level: this.currentLevelIndex + 1,
-      enemies: this.enemies.length,
-      pendingSpawns: this.pendingSpawns.length,
-      waveDriven: this.waveScheduler !== null,
-      globalWaveDriven: this.globalWaveScheduler !== null,
+
+    // Enter anchor 1 at the centre spawn. enterRoom wires the room's level,
+    // wave bands, and HUD signals.
+    this.enterRoom({ ...this.runMap.startCoord }, { ...CENTER_SPAWN });
+
+    this.callbacks.onStateChange('playing');
+    this.callbacks.onScoreChange(this.score);
+    this.callbacks.onWaveChange?.(0);
+    this.logger.log('level', 'startRun', {
+      start: this.runMap.startCoord,
+      boss: this.runMap.bossCoord,
       playerSpawn: this.player.getPosition(),
     });
   }
 
-  // Runtime entryway spawning. Picks a random pixel position within the
-  // entryway band and a random enemy type. Spawned enemies start in
-  // 'entering' mode; they walk freely along entryDirection until their
-  // AABB is fully inside the canvas, then collision/AI takes over.
-  private spawnFromEntryway(
-    entryway: SpawnEntryway,
-    entryDirection: Vector2,
-  ): Enemy {
-    // Constrain spawn to grid-aligned tiles within the band so the AABB
-    // doesn't straddle a side wall once the enemy enters.
-    const tileCols = Math.max(1, Math.floor(entryway.width / TILE_SIZE));
-    const tileRows = Math.max(1, Math.floor(entryway.height / TILE_SIZE));
-    const colOffset = Math.floor(Math.random() * tileCols);
-    const rowOffset = Math.floor(Math.random() * tileRows);
-    const spawnPos: Vector2 = {
-      x: entryway.x + colOffset * TILE_SIZE,
-      y: entryway.y + rowOffset * TILE_SIZE,
-    };
-    const types: EnemyType[] = ['panther', 'snake', 'gibbon', 'bear'];
-    const type = types[Math.floor(Math.random() * types.length)];
-    return new Enemy(
-      spawnPos,
-      type,
-      this.nextEnemyId++,
-      undefined,
-      { direction: { ...entryDirection } },
+  private createScheduler(): GlobalWaveScheduler {
+    return new GlobalWaveScheduler(
+      {
+        snakePantherPool: SNAKE_PANTHER_POOL,
+        snakePantherBearPool: SNAKE_PANTHER_BEAR_POOL,
+        interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
+      },
+      {
+        onGraceStart: (durMs) =>
+          this.logger.log('level', 'globalGrace', { durationMs: durMs }),
+        onWaveStart: (waveNum, triplet, beat) => {
+          this.callbacks.onWaveChange?.(waveNum);
+          this.logger.log('level', 'globalWaveStart', {
+            wave: waveNum,
+            triplet,
+            beat,
+          });
+        },
+        onInterWaveLull: (durMs) =>
+          this.logger.log('level', 'globalLull', { durationMs: durMs }),
+        onTripletBreak: (durMs) =>
+          this.logger.log('level', 'globalTripletBreak', { durationMs: durMs }),
+      },
     );
+  }
+
+  private currentRoomDef(): RoomDef {
+    return roomAt(this.runMap, this.currentRoomCoord);
+  }
+
+  private roomKey(coord: RoomGridCoord): number {
+    return coord.row * this.runMap.cols + coord.col;
+  }
+
+  // Wrap a room's collision/render data in a Level. Connectors carry no
+  // npc/hut markers; anchor rooms keep theirs so the family/hut placeholders
+  // still render.
+  private levelFromRoom(def: RoomDef): Level {
+    const data: LevelData = {
+      width: GRID_WIDTH,
+      height: GRID_HEIGHT,
+      walls: def.walls,
+      playerSpawn: { ...CENTER_SPAWN },
+      enemySpawns: [],
+      npcPositions: def.npcPositions,
+      hutPositions: def.hutPositions,
+    };
+    return new Level(data);
+  }
+
+  // Per-opening spawn bands (roadmap §5.5). Each opening yields one band sitting
+  // one tile outside the canvas along that edge, sized to the opening width.
+  private bandsForRoom(def: RoomDef): BandSpec[] {
+    return def.openings.map((o) => {
+      const span = (o.rangeEnd - o.rangeStart + 1) * TILE_SIZE;
+      switch (o.edge) {
+        case 'N':
+          return {
+            rect: { x: o.rangeStart * TILE_SIZE, y: -TILE_SIZE, width: span, height: TILE_SIZE },
+            entryDirection: { x: 0, y: 1 },
+          };
+        case 'S':
+          return {
+            rect: { x: o.rangeStart * TILE_SIZE, y: CANVAS_HEIGHT, width: span, height: TILE_SIZE },
+            entryDirection: { x: 0, y: -1 },
+          };
+        case 'W':
+          return {
+            rect: { x: -TILE_SIZE, y: o.rangeStart * TILE_SIZE, width: TILE_SIZE, height: span },
+            entryDirection: { x: 1, y: 0 },
+          };
+        case 'E':
+          return {
+            rect: { x: CANVAS_WIDTH, y: o.rangeStart * TILE_SIZE, width: TILE_SIZE, height: span },
+            entryDirection: { x: -1, y: 0 },
+          };
+        default: {
+          // Exhaustiveness guard: a future Edge member would fail here at
+          // compile time rather than silently yielding an undefined band that
+          // later throws deep in the wave dripper.
+          const exhaustive: never = o.edge;
+          throw new Error(`bandsForRoom: unhandled edge ${String(exhaustive)}`);
+        }
+      }
+    });
+  }
+
+  // Switch the active room. Loads the room's level, wave bands and parked
+  // enemies, drops the player at `entryPos`, and emits HUD signals. Used at run
+  // start (entryPos = CENTER_SPAWN) and on every transition.
+  private enterRoom(coord: RoomGridCoord, entryPos: Vector2) {
+    this.currentRoomCoord = { ...coord };
+    const def = this.currentRoomDef();
+    this.level = this.levelFromRoom(def);
+    this.player.setPosition(entryPos);
+    this.enemies = this.roomEnemies.get(this.roomKey(coord)) ?? [];
+    this.arrows = []; // arrows don't carry across a hard cut
+    this.hasLineOfSight = false;
+    this.globalWaveScheduler?.setBands(this.bandsForRoom(def));
+    this.callbacks.onRoomChange({ ...coord });
+    this.callbacks.onEnemiesChange(this.enemies.length);
+  }
+
+  // The wave timer pauses while transitioning (and, later, in the boss arena)
+  // so its run-long cadence isn't disrupted. For a hard cut start/end share the
+  // same frame time, so the pause is effectively zero-length here; the hooks
+  // exist for Step 9's boss-arena pause.
+  private onRoomTransitionStart(now: number) {
+    this.globalWaveScheduler?.pause(now);
+  }
+
+  private onRoomTransitionEnd(now: number) {
+    this.globalWaveScheduler?.resume(now);
+  }
+
+  // If the player is pressing outward while pinned to a room edge inside an
+  // opening that connects to a neighbor, return the transition to take.
+  private detectTransition(
+    input: InputState,
+  ): { edge: Edge; dest: RoomGridCoord; entry: Vector2 } | null {
+    const pos = this.player.getPosition();
+    const maxX = CANVAS_WIDTH - PLAYER_SIZE;
+    const maxY = CANVAS_HEIGHT - PLAYER_SIZE;
+
+    let edge: Edge | null = null;
+    if (input.right && pos.x >= maxX - EDGE_EPS_PX) edge = 'E';
+    else if (input.left && pos.x <= EDGE_EPS_PX) edge = 'W';
+    else if (input.up && pos.y <= EDGE_EPS_PX) edge = 'N';
+    else if (input.down && pos.y >= maxY - EDGE_EPS_PX) edge = 'S';
+    if (!edge) return null;
+
+    const def = this.currentRoomDef();
+    // The player must be standing in an opening on that edge (use their centre
+    // tile along the edge axis).
+    const centerCol = Math.floor((pos.x + PLAYER_SIZE / 2) / TILE_SIZE);
+    const centerRow = Math.floor((pos.y + PLAYER_SIZE / 2) / TILE_SIZE);
+    const along = edge === 'E' || edge === 'W' ? centerRow : centerCol;
+    const opening = openingsOnEdge(def, edge).find(
+      (o) => along >= o.rangeStart && along <= o.rangeEnd,
+    );
+    if (!opening) return null;
+
+    const dest: RoomGridCoord = {
+      col: this.currentRoomCoord.col + (edge === 'E' ? 1 : edge === 'W' ? -1 : 0),
+      row: this.currentRoomCoord.row + (edge === 'S' ? 1 : edge === 'N' ? -1 : 0),
+    };
+    if (
+      dest.col < 0 ||
+      dest.row < 0 ||
+      dest.col >= this.runMap.cols ||
+      dest.row >= this.runMap.rows
+    ) {
+      return null;
+    }
+    const destDef = roomAt(this.runMap, dest);
+    if (!roomsConnect(def, edge, destDef)) return null;
+
+    return { edge, dest, entry: this.entryPosition(edge, opening, destDef, pos) };
+  }
+
+  // Place the player just inside the destination's opposite edge, preserving
+  // their position along the edge (roadmap §5.3) but clamped into the matching
+  // destination opening so they land on floor.
+  private entryPosition(
+    edge: Edge,
+    srcOpening: RoomOpening,
+    destDef: RoomDef,
+    pos: Vector2,
+  ): Vector2 {
+    const destOpenings = openingsOnEdge(destDef, oppositeEdge(edge));
+    const match =
+      destOpenings.find((o) =>
+        rangesOverlap(o.rangeStart, o.rangeEnd, srcOpening.rangeStart, srcOpening.rangeEnd),
+      ) ?? destOpenings[0];
+    if (!match) return { ...CENTER_SPAWN };
+
+    const lo = match.rangeStart * TILE_SIZE;
+    const hi = (match.rangeEnd + 1) * TILE_SIZE - PLAYER_SIZE;
+    if (edge === 'E' || edge === 'W') {
+      return {
+        x: edge === 'E' ? 0 : CANVAS_WIDTH - PLAYER_SIZE,
+        y: Math.max(lo, Math.min(pos.y, hi)),
+      };
+    }
+    return {
+      x: Math.max(lo, Math.min(pos.x, hi)),
+      y: edge === 'S' ? 0 : CANVAS_HEIGHT - PLAYER_SIZE,
+    };
+  }
+
+  private doTransition(
+    now: number,
+    t: { edge: Edge; dest: RoomGridCoord; entry: Vector2 },
+  ) {
+    this.onRoomTransitionStart(now);
+    // Park the current room's enemies (no despawn — they stay put).
+    this.roomEnemies.set(this.roomKey(this.currentRoomCoord), this.enemies);
+    this.enterRoom(t.dest, t.entry);
+    this.onRoomTransitionEnd(now);
+    this.logger.log('level', 'roomTransition', {
+      edge: t.edge,
+      to: t.dest,
+      enemies: this.enemies.length,
+    });
   }
 
   private gameLoop(currentTime: number) {
@@ -354,7 +477,9 @@ export class Game {
     }
     return {
       gameState: this.gameState,
-      level: this.currentLevelIndex + 1,
+      room: this.currentRoomCoord
+        ? `${this.currentRoomCoord.col},${this.currentRoomCoord.row}`
+        : undefined,
       globalWaveNum: this.globalWaveScheduler?.currentWaveNum(),
       score: this.score,
       enemies: this.enemies.length,
@@ -383,7 +508,6 @@ export class Game {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
-    this.clearLevelTransitionTimeout();
     try {
       this.logger.renderOverlay(this.ctx);
     } catch (e) {
@@ -447,6 +571,15 @@ export class Game {
       }
     }
 
+    // Room transition (LTTP hard cut). Checked once movement + dash have
+    // settled the player's position. On a transition we swap rooms and skip
+    // the rest of this frame so the new room simulates cleanly next tick.
+    const transition = this.detectTransition(input);
+    if (transition) {
+      this.doTransition(currentTime, transition);
+      return;
+    }
+
     if (this.frameCount - this.lastSampleFrame >= SAMPLE_EVERY_FRAMES) {
       this.lastSampleFrame = this.frameCount;
       this.sampleTick(input, deltaTime);
@@ -459,60 +592,10 @@ export class Game {
     }
     this.stamina.tick(currentTime);
 
-    // Process delayed entryway spawns (legacy path). Pending spawns are
-    // sorted by spawnAtMs (since startLevel pushes them in order); pop
-    // while their scheduled time has elapsed.
-    if (this.pendingSpawns.length > 0) {
-      const elapsed = currentTime - this.levelStartedAt;
-      while (
-        this.pendingSpawns.length > 0 &&
-        this.pendingSpawns[0].spawnAtMs <= elapsed
-      ) {
-        const next = this.pendingSpawns.shift()!;
-        const enemy = this.spawnFromEntryway(next.entryway, next.entryDirection);
-        this.enemies.push(enemy);
-        this.logger.log('spawn', 'entryway', {
-          id: enemy.getId(),
-          type: enemy.getType(),
-          atMs: Math.round(elapsed),
-          pos: enemy.getPosition(),
-        });
-        this.callbacks.onEnemiesChange(
-          this.enemies.length + this.pendingSpawns.length,
-        );
-        this.emitWaveProgress();
-      }
-    }
-
-    // Wave-driven spawns. Each tick may emit zero, one, or many spawn
-    // requests — group templates land row-by-row at unit speed, so a
-    // single tick can release multiple enemies (the front row of a new
-    // group, or simultaneous rows across different bands).
-    if (this.waveScheduler) {
-      const requests = this.waveScheduler.tick(currentTime, () =>
-        this.enemies.length,
-      );
-      for (const req of requests) {
-        const enemy = this.spawnFromRequest(req);
-        this.enemies.push(enemy);
-        this.logger.log('spawn', 'wave', {
-          id: enemy.getId(),
-          type: enemy.getType(),
-          waveIndex: this.waveScheduler.currentWaveIndex(),
-          pos: enemy.getPosition(),
-        });
-      }
-      if (requests.length > 0) {
-        this.callbacks.onEnemiesChange(
-          this.enemies.length + this.pendingSpawns.length,
-        );
-        this.emitWaveProgress();
-      }
-    }
-
-    // Global wave-driven spawns (Step 1). Mirrors the per-level path, but the
-    // scheduler is run-long and time-driven. emitWaveProgress is a no-op here
-    // (it is gated on waveScheduler), so the HUD's wave rows stay hidden.
+    // Global wave-driven spawns. Each tick may emit zero, one, or many spawn
+    // requests — group templates land row-by-row, so a single tick can release
+    // multiple enemies. Spawns enter the current room from its per-opening
+    // bands.
     if (this.globalWaveScheduler) {
       const requests = this.globalWaveScheduler.tick(currentTime);
       for (const req of requests) {
@@ -526,9 +609,7 @@ export class Game {
         });
       }
       if (requests.length > 0) {
-        this.callbacks.onEnemiesChange(
-          this.enemies.length + this.pendingSpawns.length,
-        );
+        this.callbacks.onEnemiesChange(this.enemies.length);
       }
     }
 
@@ -546,18 +627,18 @@ export class Game {
       this.fireArrow(visibleTarget);
       this.lastArrowTime = currentTime;
     }
-    
+
     // Update enemies. Pass the live enemy list so each can enforce
     // enemy-vs-enemy no-overlap at its movement step (Enemy.update).
     this.enemies.forEach(enemy => {
       enemy.update(deltaTime, this.player.getPosition(), this.level, this.enemies);
     });
-    
+
     // Update arrows
     this.arrows = this.arrows.filter(arrow => {
       arrow.pos.x += arrow.dir.x * ARROW_SPEED * (deltaTime / 1000);
       arrow.pos.y += arrow.dir.y * ARROW_SPEED * (deltaTime / 1000);
-      
+
       // Check bounds
       if (arrow.pos.x < 0 || arrow.pos.x > CANVAS_WIDTH || arrow.pos.y < 0 || arrow.pos.y > CANVAS_HEIGHT) {
         return false;
@@ -567,28 +648,12 @@ export class Game {
       if (this.level.isWall(Math.floor(arrow.pos.x / TILE_SIZE), Math.floor(arrow.pos.y / TILE_SIZE))) {
         return false;
       }
-      
+
       return true;
     });
-    
+
     // Check collisions
     this.checkCollisions();
-    
-    // Check level completion. The level is clear when the live enemy list
-    // is empty AND no future spawns are queued — for wave-driven levels
-    // that means the scheduler has finished its last wave and lull;
-    // otherwise the level would complete during the grace period before
-    // the first wave's first spawn lands. The global scheduler never
-    // finishes (endless survival arena until rooms land in Step 3), so it
-    // never auto-completes — guard the check off entirely while it runs.
-    if (!this.globalWaveScheduler) {
-      const noFutureSpawns = this.waveScheduler
-        ? this.waveScheduler.isFinished()
-        : this.pendingSpawns.length === 0;
-      if (this.enemies.length === 0 && noFutureSpawns) {
-        this.completeLevel();
-      }
-    }
 
     this.emitStaminaTransitions();
   }
@@ -656,17 +721,6 @@ export class Game {
     );
   }
 
-  // Push the current wave/level remaining counts to the React HUD. No-op on
-  // legacy non-wave levels — the HUD hides those rows when never set.
-  private emitWaveProgress() {
-    if (!this.waveScheduler) return;
-    const live = () => this.enemies.length;
-    this.callbacks.onWaveProgressChange?.(
-      this.waveScheduler.remainingInWave(live),
-      this.waveScheduler.remainingInLevel(live),
-    );
-  }
-
   // Scan all enemies and return the nearest one within MAX_DETECTION_RANGE
   // whose center is reachable from the player center by an unobstructed
   // raycast. Single source of truth for both auto-fire targeting and the
@@ -709,29 +763,29 @@ export class Game {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     if (distance === 0) return true;
-    
+
     // Use smaller steps for more accurate collision detection
     const steps = Math.ceil(distance / 8); // Check every 8 pixels
     const stepX = dx / steps;
     const stepY = dy / steps;
-    
+
     // Check each point along the line for wall collisions
     for (let i = 1; i < steps; i++) {
       const checkX = start.x + stepX * i;
       const checkY = start.y + stepY * i;
-      
+
       // Convert to grid coordinates
-      const gridX = Math.floor(checkX / 32);
-      const gridY = Math.floor(checkY / 32);
-      
+      const gridX = Math.floor(checkX / TILE_SIZE);
+      const gridY = Math.floor(checkY / TILE_SIZE);
+
       // Check if this point hits a wall
       if (this.level.isWall(gridX, gridY)) {
         return false; // Line of sight blocked by wall
       }
     }
-    
+
     return true; // Clear line of sight
   }
 
@@ -764,8 +818,8 @@ export class Game {
 
   private checkCollisions() {
     const playerPos = this.player.getPosition();
-    const playerCenterX = playerPos.x + 16;
-    const playerCenterY = playerPos.y + 16;
+    const playerCenterX = playerPos.x + TILE_SIZE / 2;
+    const playerCenterY = playerPos.y + TILE_SIZE / 2;
 
     // Pass 1: AABB-overlap kill. Contact-only enemies on top of the player
     // end the run immediately; return on hit so we don't double-report.
@@ -796,20 +850,16 @@ export class Game {
         const enemy = this.enemies[i];
         if (this.collisionManager.checkCollision(
           { x: arrow.pos.x, y: arrow.pos.y, width: 4, height: 4 },
-          { x: enemy.getPosition().x, y: enemy.getPosition().y, width: 32, height: 32 }
+          { x: enemy.getPosition().x, y: enemy.getPosition().y, width: TILE_SIZE, height: TILE_SIZE }
         )) {
           const enemyType = enemy.getType();
           this.enemies.splice(i, 1);
           this.score += 10;
           this.callbacks.onScoreChange(this.score);
-          this.callbacks.onEnemiesChange(
-            this.enemies.length + this.pendingSpawns.length,
-          );
-          this.emitWaveProgress();
+          this.callbacks.onEnemiesChange(this.enemies.length);
           this.logger.log('hit', 'arrow->enemy', {
             type: enemyType,
             remaining: this.enemies.length,
-            pending: this.pendingSpawns.length,
           });
           this.soundManager.play('hit');
           return false; // Remove arrow
@@ -817,38 +867,6 @@ export class Game {
       }
       return true; // Keep arrow
     });
-  }
-
-  private completeLevel() {
-    this.score += 100 * (this.currentLevelIndex + 1);
-    this.callbacks.onScoreChange(this.score);
-    this.logger.log('level', 'completeLevel', {
-      level: this.currentLevelIndex + 1,
-      score: this.score,
-    });
-
-    if (this.currentLevelIndex >= this.initializedLevels.length - 1) {
-      this.victory();
-    } else {
-      this.gameState = 'levelComplete';
-      this.callbacks.onStateChange('levelComplete');
-
-      this.clearLevelTransitionTimeout();
-      this.levelTransitionTimeoutId = setTimeout(() => {
-        this.levelTransitionTimeoutId = null;
-        // Guard: bail if the game state changed during the fade (restart, cleanup, gameOver)
-        if (this.gameState !== 'levelComplete') return;
-        this.currentLevelIndex++;
-        this.startLevel();
-      }, 2000);
-    }
-  }
-
-  private clearLevelTransitionTimeout() {
-    if (this.levelTransitionTimeoutId !== null) {
-      clearTimeout(this.levelTransitionTimeoutId);
-      this.levelTransitionTimeoutId = null;
-    }
   }
 
   private gameOver(reason: GameOverReason = { kind: 'manual' }) {
@@ -859,7 +877,7 @@ export class Game {
 
     const verdict = this.classifyGameOver(reason);
     this.logger.log('state', 'gameOver', {
-      level: this.currentLevelIndex + 1,
+      room: this.currentRoomCoord,
       score: this.score,
       reason: reason.kind,
       flags: verdict.flags,
@@ -947,20 +965,14 @@ export class Game {
     });
   }
 
-  private victory() {
-    this.gameState = 'victory';
-    this.callbacks.onStateChange('victory');
-    this.logger.log('state', 'victory', { score: this.score });
-    this.soundManager.play('victory');
-  }
-
   private render() {
-    // Clear canvas with dark green background
+    // Clear canvas with dark green background. The full-canvas clear each
+    // frame is what makes a room transition a hard cut — the new room paints
+    // straight over the old with no fade.
     this.ctx.fillStyle = '#1a4a3a';
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    
-    // Always render the level, player, and enemies when they exist
-    // This ensures we can see the game even in menu state for debugging
+
+    // Render the current room only (one canvas, one room).
     if (this.level && this.player) {
       this.renderer.renderLevel(this.level);
       this.renderer.renderHuts(this.level.getHutPositions());
@@ -974,7 +986,7 @@ export class Game {
       if (this.arrows.length > 0) {
         this.renderer.renderArrows(this.arrows);
       }
-      
+
       // Render line of sight indicator
       if (this.gameState === 'playing') {
         this.renderer.renderLineOfSightIndicator(this.player, this.hasLineOfSight);
@@ -1009,7 +1021,6 @@ export class Game {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
-    this.clearLevelTransitionTimeout();
     this.inputManager.dispose();
     this.logger.log('lifecycle', 'cleanup');
     this.logger.dispose();

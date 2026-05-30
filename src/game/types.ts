@@ -1,4 +1,7 @@
-export type GameState = 'menu' | 'playing' | 'gameOver' | 'victory' | 'levelComplete';
+// 'levelComplete' was removed in Step 3 (traversable-maps): there is no
+// per-level clear-to-advance flow any more — progression is room-to-room.
+// 'victory' is retained but dormant until Step 9 wires the boss-room win.
+export type GameState = 'menu' | 'playing' | 'gameOver' | 'victory';
 
 export interface Vector2 {
   x: number;
@@ -14,15 +17,13 @@ export interface Rectangle {
 
 export interface GameCallbacks {
   onStateChange: (state: GameState) => void;
-  onLevelChange: (level: number) => void;
+  // Room-grid HUD signals (Step 3). onRoomChange fires when the player
+  // enters a room (run start + every transition); onWaveChange fires when
+  // the global scheduler advances its run-long wave number.
+  onRoomChange: (coord: RoomGridCoord) => void;
+  onWaveChange?: (waveNum: number) => void;
   onScoreChange: (score: number) => void;
   onEnemiesChange: (count: number) => void;
-  onWaveStart?: (waveIndex: number, totalWaves: number, beatRole: BeatRole) => void;
-  onWaveComplete?: (waveIndex: number) => void;
-  onLullStart?: (durationMs: number) => void;
-  // Wave-driven levels (1–3): live + queued enemies for the current wave
-  // and across the rest of the level. Not emitted on legacy levels.
-  onWaveProgressChange?: (remainingInWave: number, remainingInLevel: number) => void;
   // Stamina + burst signals. isLow is bundled with value to avoid a
   // render race between the bar value and its low-state styling.
   onStaminaChange?: (value: number, isLow: boolean) => void;
@@ -184,4 +185,51 @@ export interface RoomTemplate {
   openings: RoomOpening[];
   candidates: StaticCandidate[];
   authoredStatics: { type: EnemyType; pos: Vector2 }[];
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Room grid (Step 3). A run is a ROOM_GRID_COLS × ROOM_GRID_ROWS grid of
+// rooms, regenerated each run; the player traverses it from anchor 1 toward
+// the boss (anchor 10). See docs/ROADMAP-traversable-maps.md §4, §5.1, §5.3.
+// ───────────────────────────────────────────────────────────────────────────
+
+// Position of a room within the room grid. Distinct from in-room tile coords.
+export interface RoomGridCoord {
+  col: number; // 0..ROOM_GRID_COLS-1
+  row: number; // 0..ROOM_GRID_ROWS-1
+}
+
+export type RoomKind = 'anchor' | 'connector';
+
+// A resolved room placed in the grid. Connectors are drawn from the connector
+// template pool; anchors are the 10 hand-designed levels. `walls`/`openings`
+// drive collision, rendering, transitions and per-opening wave bands.
+// `candidates`/`authoredStatics` are consumed by later steps (statics); for
+// Step 3 they ride along unused. `npcPositions`/`hutPositions` come from the
+// anchor levels (empty for connectors) so family/hut markers still render.
+export interface RoomDef {
+  kind: RoomKind;
+  templateId: string;
+  // 0..ANCHOR_COUNT-1 for anchors (index into the anchor level list, also the
+  // placement identity: 0 = start, ANCHOR_COUNT-1 = boss); null for connectors.
+  anchorIndex: number | null;
+  walls: boolean[][];
+  openings: RoomOpening[];
+  candidates: StaticCandidate[];
+  authoredStatics: { type: EnemyType; pos: Vector2 }[];
+  npcPositions: Vector2[];
+  hutPositions: Vector2[];
+}
+
+// A generated run: the room grid plus the anchor placements. `cells[row][col]`
+// indexes a RoomDef (connector RoomDefs are shared by reference across cells
+// using the same template). `anchorCoords[i]` is anchor i's grid position;
+// `startCoord` = anchorCoords[0], `bossCoord` = anchorCoords[ANCHOR_COUNT-1].
+export interface RunMap {
+  cols: number;
+  rows: number;
+  cells: RoomDef[][];
+  anchorCoords: RoomGridCoord[];
+  startCoord: RoomGridCoord;
+  bossCoord: RoomGridCoord;
 }
