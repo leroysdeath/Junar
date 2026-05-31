@@ -38,6 +38,9 @@ function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
   const [burst, setBurst] = useState({ active: false, multiplier: 1 });
+  // Boss-arena sub-state (Step 9): true while the player is inside anchor 10.
+  // Drives the non-blocking "Reached Boss" banner; the game stays in 'playing'.
+  const [bossArena, setBossArena] = useState(false);
   const isMobile = useIsMobile();
 
   const handleMobilePress = useCallback((dir: Direction) => {
@@ -60,6 +63,7 @@ function App() {
         onStateChange: setGameState,
         onRoomChange: (coord) => setRoomCoord(coord),
         onWaveChange: (n) => setWaveNum(n),
+        onBossArenaChange: (active) => setBossArena(active),
         onScoreChange: setScore,
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
@@ -251,6 +255,27 @@ function App() {
         {!isMobile && gameState === 'playing' && (
           <div className="absolute top-4 left-4 right-4">
             {renderHud()}
+          </div>
+        )}
+
+        {/* "Reached Boss" banner (Step 9). Non-blocking placeholder shown on
+            both desktop and mobile while the player is in the boss arena. The
+            boss fight + real win condition are deferred (roadmap §5.15); for
+            now V claims a stub victory. */}
+        {gameState === 'playing' && bossArena && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+            <div className="bg-black/80 border-2 border-purple-500 rounded-lg px-6 py-3 text-center shadow-lg">
+              <p className="text-purple-300 font-bold text-lg font-mono tracking-wide drop-shadow">
+                Reached Boss
+              </p>
+              <p className="text-purple-200/80 text-xs font-mono mt-1">
+                {/* The V win-stub is keyboard-only (desktop); mobile has no
+                    bind, so don't tell touch players to press it. */}
+                {isMobile
+                  ? 'Boss fight coming soon'
+                  : 'Press V to claim victory · boss fight coming soon'}
+              </p>
+            </div>
           </div>
         )}
 

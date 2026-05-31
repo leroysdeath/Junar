@@ -136,6 +136,12 @@ export class Game {
   private currentRoomCoord!: RoomGridCoord;
   private roomEnemies = new Map<number, Enemy[]>();
   private globalWaveScheduler: GlobalWaveScheduler | null = null;
+  // Boss-arena sub-state (Step 9). True while the player occupies the boss room
+  // (anchor 10). It is NOT a separate GameState — the run stays 'playing' so
+  // movement, auto-fire, contact-death and cross-room hunters (Step 4) all keep
+  // running; only the wave timer is held paused (roadmap §5.4, §5.15). Drives
+  // the "Reached Boss" overlay and gates the V win-stub.
+  private inBossArena = false;
   // Hunt 4-state machine (Step 4, roadmap §5.12). Stateless across runs (the
   // activation clock lives on each Enemy; it owns no listeners/timers), so it's
   // built once and needs no disposal or per-run reset.
@@ -182,6 +188,9 @@ export class Game {
   }
 
   restart() {
+    // Drop any one-shot input edge (e.g. V pressed on the game-over/victory
+    // overlay, which update() never consumed) so it can't leak into the run.
+    this.inputManager.clearEdges();
     this.arrows = [];
     this.lastArrowTime = 0;
     this.stamina.reset();
@@ -219,9 +228,14 @@ export class Game {
     this.globalWaveScheduler = this.createScheduler();
     this.levelStartedAt = performance.now();
     this.lastSampleFrame = this.frameCount;
+    // Clear any stale boss-arena state from a prior run (e.g. dying inside the
+    // boss room) before re-entering anchor 1. The fresh scheduler is unpaused.
+    this.inBossArena = false;
+    this.callbacks.onBossArenaChange?.(false);
 
     // Enter anchor 1 at the centre spawn. enterRoom wires the room's level,
-    // wave bands, and HUD signals.
+    // wave bands, and HUD signals. Anchor 1 is never the boss room, so this
+    // leaves inBossArena false.
     this.enterRoom({ ...this.runMap.startCoord }, { ...CENTER_SPAWN });
 
     this.callbacks.onStateChange('playing');
@@ -266,6 +280,15 @@ export class Game {
 
   private roomKey(coord: RoomGridCoord): number {
     return coord.row * this.runMap.cols + coord.col;
+  }
+
+  // True if `coord` is the boss room (anchor 10). bossCoord is anchor
+  // ANCHOR_COUNT-1's placement (see RunMap), set fresh by each regenerateMap().
+  private isBossRoom(coord: RoomGridCoord): boolean {
+    return (
+      coord.col === this.runMap.bossCoord.col &&
+      coord.row === this.runMap.bossCoord.row
+    );
   }
 
   // Wrap a room's collision/render data in a Level. Connectors carry no
@@ -333,14 +356,28 @@ export class Game {
     this.arrows = []; // arrows don't carry across a hard cut
     this.hasLineOfSight = false;
     this.globalWaveScheduler?.setBands(this.bandsForRoom(def));
+
+    // Boss-arena entry/exit (Step 9). Track + signal only on change so the
+    // overlay and log stay edge-driven. The wave-timer pause that must hold for
+    // the whole visit is owned by doTransition (it has the rAF `now`).
+    const inBoss = this.isBossRoom(coord);
+    if (inBoss !== this.inBossArena) {
+      this.inBossArena = inBoss;
+      this.callbacks.onBossArenaChange?.(inBoss);
+      this.logger.log('level', inBoss ? 'bossArenaEnter' : 'bossArenaExit', {
+        room: { ...coord },
+      });
+    }
+
     this.callbacks.onRoomChange({ ...coord });
     this.callbacks.onEnemiesChange(this.enemies.length);
   }
 
-  // The wave timer pauses while transitioning (and, later, in the boss arena)
-  // so its run-long cadence isn't disrupted. For a hard cut start/end share the
-  // same frame time, so the pause is effectively zero-length here; the hooks
-  // exist for Step 9's boss-arena pause.
+  // The wave timer pauses while transitioning so its run-long cadence isn't
+  // disrupted. For a hard cut start/end share the same frame time, so the pause
+  // is effectively zero-length for an ordinary room-to-room move. The boss
+  // arena (Step 9) reuses these hooks: doTransition pauses on entry and skips
+  // the resume, so the timer stays frozen for the whole boss visit.
   private onRoomTransitionStart(now: number) {
     this.globalWaveScheduler?.pause(now);
   }
@@ -434,15 +471,24 @@ export class Game {
     // and now chase across rooms via updateHunters).
     this.hunt.onPlayerLeftRoom(this.enemies);
     this.roomEnemies.set(this.roomKey(this.currentRoomCoord), this.enemies);
-    this.enterRoom(t.dest, t.entry);
+    this.enterRoom(t.dest, t.entry); // sets inBossArena for the destination
     // Entering the destination: hunters that already reached it rejoin the
-    // in-room pursuit (active), and dormant sitters begin their aggro delay.
+    // in-room pursuit (active), and dormant sitters begin their aggro delay
+    // (Step 4). For the boss room this.enemies is empty, so it's a no-op there.
     this.hunt.onPlayerEnteredRoom(this.enemies, now);
-    this.onRoomTransitionEnd(now);
+    // Resume the wave timer on arrival — UNLESS we just entered the boss arena,
+    // where it stays paused for the whole visit (roadmap §5.4). pause() is
+    // idempotent and resume() shifts deadlines by the paused span, so leaving
+    // the arena (this branch runs) credits back the entire boss-fight duration
+    // and the run-long cadence resumes intact.
+    if (!this.inBossArena) {
+      this.onRoomTransitionEnd(now);
+    }
     this.logger.log('level', 'roomTransition', {
       edge: t.edge,
       to: t.dest,
       enemies: this.enemies.length,
+      bossArena: this.inBossArena,
     });
   }
 
@@ -847,6 +893,16 @@ export class Game {
       }
     }
 
+    // Win-condition STUB (Step 9). Boss combat is deferred (roadmap §5.15);
+    // until it lands, pressing V inside the boss arena ends the run as a
+    // victory so the reach-the-boss loop is playable end to end. Consume the
+    // edge every frame (clears a stale press made outside the arena); act only
+    // while in the boss room.
+    if (this.inputManager.consumeWinStubPress() && this.inBossArena) {
+      this.victory();
+      return;
+    }
+
     // Room transition (LTTP hard cut). Checked once movement + dash have
     // settled the player's position. On a transition we swap rooms and skip
     // the rest of this frame so the new room simulates cleanly next tick.
@@ -1232,6 +1288,22 @@ export class Game {
       nearestType,
       msSinceLevelStart,
     };
+  }
+
+  // Win the run. Step 9 reintroduces this (dormant since Step 3 removed the
+  // per-level clear flow): today it fires only from the boss-room V win-stub,
+  // and later from real boss-defeat logic. Like gameOver it just freezes the
+  // sim into a terminal state — the gameLoop stops calling update() once the
+  // state leaves 'playing'.
+  private victory() {
+    if (this.gameState === 'victory') return;
+    this.gameState = 'victory';
+    this.callbacks.onStateChange('victory');
+    this.logger.log('state', 'victory', {
+      room: { ...this.currentRoomCoord },
+      score: this.score,
+    });
+    this.soundManager.play('victory');
   }
 
   private sampleTick(input: InputState, deltaTime: number) {

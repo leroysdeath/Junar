@@ -23,6 +23,10 @@ export class InputManager {
   // dual-purpose: this fires a one-shot dash on press while continuing to
   // register as held-state left movement.
   private dashPressed = false;
+  // Edge-triggered win-stub flag (Step 9). Set on V keydown (same dedup
+  // pattern). A temporary boss-room win input until boss combat lands
+  // (roadmap §5.15); Game only acts on it while in the boss arena.
+  private winStubPressed = false;
   private onBlurClear?: InputBlurCallback;
 
   private readonly handleKeyDown = (e: KeyboardEvent) => {
@@ -35,6 +39,9 @@ export class InputManager {
       (e.code === 'KeyA' && !this.keys.has('KeyA'))
     ) {
       this.dashPressed = true;
+    }
+    if (e.code === 'KeyV' && !this.keys.has('KeyV')) {
+      this.winStubPressed = true;
     }
     this.keys.add(e.code);
     this.updateInputState();
@@ -63,6 +70,7 @@ export class InputManager {
     this.virtual.right = false;
     this.burstPressed = false;
     this.dashPressed = false;
+    this.winStubPressed = false;
     this.updateInputState();
     this.onBlurClear?.(cleared);
   };
@@ -115,6 +123,24 @@ export class InputManager {
     return r;
   }
 
+  // Read + clear the win-stub edge flag (Step 9 boss-room win). Called once
+  // per frame from Game.update(); Game only honors it inside the boss arena.
+  consumeWinStubPress(): boolean {
+    const r = this.winStubPressed;
+    this.winStubPressed = false;
+    return r;
+  }
+
+  // Drop any pending one-shot edges (burst / dash / win-stub) without touching
+  // held-movement state. Game.restart() calls this so an edge pressed on a
+  // terminal overlay (e.g. V on the game-over screen, where update() isn't
+  // running to consume it) can't carry into the next run.
+  clearEdges() {
+    this.burstPressed = false;
+    this.dashPressed = false;
+    this.winStubPressed = false;
+  }
+
   // For diagnostics: lets the logger snapshot the raw key Set, not just
   // the WASD/arrow projection. Surfaces phantom-stuck keys.
   getPressedKeys(): string[] {
@@ -128,5 +154,6 @@ export class InputManager {
     this.keys.clear();
     this.burstPressed = false;
     this.dashPressed = false;
+    this.winStubPressed = false;
   }
 }
