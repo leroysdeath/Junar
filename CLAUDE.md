@@ -37,9 +37,9 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 3. Arrows auto-fire every 500ms at the nearest enemy within 450px with an unobstructed center-to-center raycast (any angle).
 4. Avoid contact — every enemy is melee, and any AABB overlap with the player is instant death.
 5. Walk to a room-edge opening that connects to a neighbor → **LTTP hard-cut transition** into that room. One run-long wave scheduler keeps spawning into whichever room you currently occupy.
-6. Traverse the grid to reach the **boss room (anchor 10)**. Death regenerates the whole map and respawns you in a new anchor 1. (Boss fight + win condition land in a later refactor step; today, reaching anchor 10 is just another room.)
+6. Traverse the grid to reach the **boss room (anchor 10)**. Entering it pauses the wave timer (no new spawns in the arena) and shows a "Reached Boss" banner; the run otherwise keeps playing (movement, auto-fire, contact-death all live), and walking back out resumes the waves. Death regenerates the whole map and respawns you in a new anchor 1. (Boss combat is still deferred per `docs/ROADMAP-traversable-maps.md` §5.15; until it lands, pressing **V** inside the boss room triggers a stub victory.)
 
-> **Note (traversable-maps refactor):** §4 describes the post-refactor room-grid loop (Step 3, 2026-05-30). The legacy per-level "clear all enemies → Level Complete → next level" loop is gone. The full design lives in `docs/ROADMAP-traversable-maps.md`.
+> **Note (traversable-maps refactor):** §4 describes the post-refactor room-grid loop (Step 3, 2026-05-30; boss-room gating added in Step 9). The legacy per-level "clear all enemies → Level Complete → next level" loop is gone. The full design lives in `docs/ROADMAP-traversable-maps.md`.
 
 ## 5. Mechanics reference
 

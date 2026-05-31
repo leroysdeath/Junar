@@ -22,6 +22,11 @@ export interface GameCallbacks {
   // the global scheduler advances its run-long wave number.
   onRoomChange: (coord: RoomGridCoord) => void;
   onWaveChange?: (waveNum: number) => void;
+  // Boss-arena sub-state (Step 9). Fires true when the player enters the boss
+  // room (anchor 10) and false when they leave it (or on run start/restart).
+  // The game stays in the 'playing' state throughout — this drives a
+  // non-blocking "Reached Boss" overlay, not a state switch.
+  onBossArenaChange?: (active: boolean) => void;
   onScoreChange: (score: number) => void;
   onEnemiesChange: (count: number) => void;
   // Stamina + burst signals. isLow is bundled with value to avoid a
