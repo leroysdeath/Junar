@@ -199,6 +199,14 @@ export interface RoomGridCoord {
   row: number; // 0..ROOM_GRID_ROWS-1
 }
 
+// Hunt state machine (Step 4, roadmap §5.12). Lives on each Enemy; driven by
+// Hunt.ts off the gameLoop currentTime and room-grid position.
+//   dormant    — a placed static, asleep until the player enters its room
+//   activating — woken; counting down STATIC_AGGRO_DELAY_MS before it pursues
+//   active     — pursuing the player inside the player's current room
+//   hunting    — pursuing the player across rooms (player has left its room)
+export type HuntState = 'dormant' | 'activating' | 'active' | 'hunting';
+
 export type RoomKind = 'anchor' | 'connector';
 
 // A resolved room placed in the grid. Connectors are drawn from the connector

@@ -444,6 +444,10 @@ export const HUNT_RANGE = 2;  // Manhattan, in room-grid coords
 
 **Hunt indefinite within range.** No time-based de-aggro. As long as Manhattan ≤ 2, the hunter is hunting. Hiding doesn't work.
 
+**Wake-while-absent race (Step 4 resolution).** The table above doesn't say what happens if an `activating` sitter's 1 s delay completes *after* the player has already left its room. Resolution: on wake, if the enemy is in the player's current room it becomes `active` (in-room pursuit); otherwise it becomes `hunting` (commits straight to the cross-room chase). Without this room check a static the player briefly poked then walked away from before 1 s would strand as a frozen, never-hunting parked `active`. Implemented in `Hunt.tick` (the `activating → active`/`hunting` branch).
+
+**Step 4 implementation status (2026-05-30).** The 4-state machine lives in `src/game/Hunt.ts` (pure logic, driven by gameLoop `currentTime`; holds no listeners/timers, so no disposal). Wave spawns are born `active`; the `active → hunting` flip fires when the player leaves a room (`onPlayerLeftRoom`), and parked hunters are walked room-to-room toward the player by `Game.updateHunters` (BFS routing via `RoomGrid.findPath`, one cached BFS per hunter-room per frame). De-aggro settlement uses a registered callback; Step 4 ships an **in-place stub** — Step 5+6 owns the real map-wide BFS placement (§5.13) and the runtime wiring that creates `dormant` statics + calls `startActivating` on room entry. Known deferred edge: a hunter crossing into the player's current room can contact-kill on its arrival frame if the player loiters in that exact doorway (no arrival telegraph yet — folds into the deferred telegraph work, §9).
+
 ### 5.13 No despawn (anti-exploit)
 
 **Rule.** Spawned enemies **never despawn**. The only way an enemy leaves the world is by being killed by the player.
