@@ -380,13 +380,23 @@ export class Game {
     // First entry rolls this room's per-run statics from the template
     // candidates (§5.10) and buckets them as dormant sitters; locked thereafter
     // (no re-roll on revisit, §5.13). The doTransition caller then runs
-    // Hunt.onPlayerEnteredRoom, which starts each sitter's 1 s aggro delay.
+    // Hunt.onPlayerEnteredRoom, which starts each sitter's 1 s aggro delay and
+    // flips any parked hunter back to active.
     // Anchors (incl. the boss arena) carry no candidates, so this is a no-op there.
     const key = this.roomKey(coord);
     if (!this.enteredRooms.has(key)) {
       this.enteredRooms.add(key);
       const statics = this.rollRoomStatics(coord, def);
-      if (statics.length > 0) this.roomEnemies.set(key, statics);
+      // MERGE into any bucket already parked here — never replace it. A cross-
+      // room hunter (settleHunterIntoRoom) or a de-aggroed settler
+      // (rebucketSettledEnemy) can occupy a room BEFORE the player first enters
+      // it, and neither path touches enteredRooms; overwriting the bucket would
+      // silently despawn that enemy (violates §5.13, no-despawn).
+      if (statics.length > 0) {
+        const bucket = this.roomEnemies.get(key);
+        if (bucket) bucket.push(...statics);
+        else this.roomEnemies.set(key, statics);
+      }
     }
     this.enemies = this.roomEnemies.get(key) ?? [];
     this.arrows = []; // arrows don't carry across a hard cut
