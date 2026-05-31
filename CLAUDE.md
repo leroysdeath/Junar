@@ -57,6 +57,8 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal step.
 
+Enemies also carry a **Hunt state** (`src/game/Hunt.ts`, traversable-maps Step 4): `dormant → activating → active → hunting`. Wave spawns start `active` (in-room pursuit); when the player leaves a room its active enemies become `hunting` and chase the player room-to-room through openings (no despawn), de-aggroing back to a dormant static once the player's room is more than 2 rooms (Manhattan) away. Dormant/activating sitters hold position until woken. See `docs/ROADMAP-traversable-maps.md` §5.11–5.12. (Static placement + the de-aggro BFS settlement land in Step 5+6.)
+
 Each type has its own **collision AABB** (`ENEMY_AABB_PX` in `constants.ts`: bear 34, panther 21, gibbon 15, snake 4 px), centered inside the 32 px cell — so a bear can't fit a 1-tile corridor while a snake's 4 px footprint lets many pack per tile. Enemies can't overlap each other (snake-vs-snake is the one exception — snakes stack); a step that would overlap jitters to a free cardinal direction, else holds. The 32 px cell stays the positioning/render unit and the arrow-hit box, so auto-fire targeting and arrow collision are unchanged. See `docs/ROADMAP-traversable-maps.md` §5.7–5.8.
 
 **No new enemy type may be added without explicit owner approval.** Tigers, monkeys, crocodiles, wild dogs, etc. are *unapproved*; ask before implementing.

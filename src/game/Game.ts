@@ -7,6 +7,7 @@ import { SoundManager } from './SoundManager';
 import { CollisionManager } from './CollisionManager';
 import { CrashLogger, CrashSnapshot } from './Logger';
 import { GlobalWaveScheduler, SpawnRequest } from './WaveScheduler';
+import { Hunt } from './Hunt';
 import { Stamina } from './Stamina';
 import {
   GameState,
@@ -31,6 +32,7 @@ import {
   oppositeEdge,
   roomsConnect,
   rangesOverlap,
+  findPath,
 } from './RoomGrid';
 import {
   CANVAS_WIDTH,
@@ -88,9 +90,10 @@ export class Game {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private player!: Player;
-  // Enemies in the CURRENT room. Other rooms' enemies are parked in
-  // roomEnemies (no despawn — they wait where the player left them; cross-room
-  // hunting arrives in Step 4).
+  // Enemies in the CURRENT room (all 'active'). Other rooms' enemies are parked
+  // in roomEnemies — 'dormant'/'activating' sitters wait, and 'hunting' enemies
+  // are walked across rooms toward the player each frame (Step 4, updateHunters).
+  // No despawn: an enemy only leaves the world by being killed (roadmap §5.13).
   private enemies: Enemy[] = [];
   private level!: Level;
   private inputManager: InputManager;
@@ -135,10 +138,18 @@ export class Game {
   private globalWaveScheduler: GlobalWaveScheduler | null = null;
   // Boss-arena sub-state (Step 9). True while the player occupies the boss room
   // (anchor 10). It is NOT a separate GameState — the run stays 'playing' so
-  // movement, auto-fire, contact-death and (future) cross-room hunters all keep
+  // movement, auto-fire, contact-death and cross-room hunters (Step 4) all keep
   // running; only the wave timer is held paused (roadmap §5.4, §5.15). Drives
   // the "Reached Boss" overlay and gates the V win-stub.
   private inBossArena = false;
+  // Hunt 4-state machine (Step 4, roadmap §5.12). Stateless across runs (the
+  // activation clock lives on each Enemy; it owns no listeners/timers), so it's
+  // built once and needs no disposal or per-run reset.
+  private hunt = new Hunt();
+  // Lazily-built Level wrappers for parked rooms, so hunting enemies in other
+  // rooms get wall collision without rebuilding a Level every frame. Keyed by
+  // roomKey; cleared whenever the map regenerates.
+  private roomLevels = new Map<number, Level>();
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -200,6 +211,7 @@ export class Game {
   private regenerateMap() {
     this.runMap = generateRunMap();
     this.currentRoomCoord = { ...this.runMap.startCoord };
+    this.roomLevels.clear(); // parked-room Levels belong to the old map
     this.level = this.levelFromRoom(this.currentRoomDef());
     this.player = new Player({ ...CENTER_SPAWN });
   }
@@ -454,9 +466,16 @@ export class Game {
     t: { edge: Edge; dest: RoomGridCoord; entry: Vector2 },
   ) {
     this.onRoomTransitionStart(now);
-    // Park the current room's enemies (no despawn — they stay put).
+    // The player is leaving: active enemies in this room become cross-room
+    // hunters (Step 4). Then park them (no despawn — they keep their position
+    // and now chase across rooms via updateHunters).
+    this.hunt.onPlayerLeftRoom(this.enemies);
     this.roomEnemies.set(this.roomKey(this.currentRoomCoord), this.enemies);
     this.enterRoom(t.dest, t.entry); // sets inBossArena for the destination
+    // Entering the destination: hunters that already reached it rejoin the
+    // in-room pursuit (active), and dormant sitters begin their aggro delay
+    // (Step 4). For the boss room this.enemies is empty, so it's a no-op there.
+    this.hunt.onPlayerEnteredRoom(this.enemies, now);
     // Resume the wave timer on arrival — UNLESS we just entered the boss arena,
     // where it stays paused for the whole visit (roadmap §5.4). pause() is
     // idempotent and resume() shifts deadlines by the paused span, so leaving
@@ -471,6 +490,264 @@ export class Game {
       enemies: this.enemies.length,
       bossArena: this.inBossArena,
     });
+  }
+
+  // ── Hunt: cross-room hunters (Step 4, roadmap §5.12) ──────────────────────
+
+  // All enemies the Hunt machine should evaluate this frame: the current
+  // room's (for activating→active) plus every parked room's (for hunting
+  // de-aggro). The current room key is excluded from the parked sweep because
+  // a revisited room's bucket is the very same array as this.enemies
+  // (enterRoom aliases it), which would otherwise double-count those enemies.
+  private managedEnemies(): Enemy[] {
+    const out: Enemy[] = [...this.enemies];
+    const curKey = this.roomKey(this.currentRoomCoord);
+    for (const [key, list] of this.roomEnemies) {
+      if (key === curKey) continue;
+      for (const enemy of list) out.push(enemy);
+    }
+    return out;
+  }
+
+  // Inverse of roomKey: decode a room bucket key back to its grid coordinate.
+  private roomFromKey(key: number): RoomGridCoord {
+    return { col: key % this.runMap.cols, row: Math.floor(key / this.runMap.cols) };
+  }
+
+  // Lazily build + cache a Level for a parked room so hunters crossing it get
+  // wall collision without rebuilding a Level every frame. Cleared on map
+  // regeneration (regenerateMap).
+  private levelForRoomKey(key: number): Level {
+    let level = this.roomLevels.get(key);
+    if (!level) {
+      level = this.levelFromRoom(roomAt(this.runMap, this.roomFromKey(key)));
+      this.roomLevels.set(key, level);
+    }
+    return level;
+  }
+
+  // Walk every parked 'hunting' enemy toward the player through room openings,
+  // crossing room boundaries as they reach doors. The current room is skipped
+  // (its enemies are 'active', updated by the main loop). At most one room
+  // crossing per enemy per frame — far less than an enemy traverses a room in.
+  private updateHunters(deltaTime: number) {
+    const curKey = this.roomKey(this.currentRoomCoord);
+    const crossings: Array<{
+      enemy: Enemy;
+      fromKey: number;
+      dest: RoomGridCoord;
+      edge: Edge;
+      opening: RoomOpening;
+    }> = [];
+    // The player's room is fixed for this frame, so every hunter in a given
+    // room routes the same way. Memoize findPath by hunter-room key so a packed
+    // room costs one BFS, not one per enemy (the result is shared, read-only).
+    const pathCache = new Map<number, RoomGridCoord[] | null>();
+
+    for (const [key, list] of this.roomEnemies) {
+      if (key === curKey) continue;
+      const room = this.roomFromKey(key);
+      const level = this.levelForRoomKey(key);
+      for (const enemy of list) {
+        if (enemy.getHuntState() !== 'hunting') continue;
+        const step = this.hunterDoorStep(room, key, this.currentRoomCoord, enemy, pathCache);
+        if (!step) continue; // no route this frame — hold
+        enemy.update(deltaTime, step.doorTarget, level, list);
+        if (this.hunterAtDoor(enemy, step.edge, step.opening)) {
+          crossings.push({
+            enemy,
+            fromKey: key,
+            dest: step.dest,
+            edge: step.edge,
+            opening: step.opening,
+          });
+        }
+      }
+    }
+
+    // Apply crossings after the read pass so we never splice a room's list (or
+    // add a Map key) while iterating the Map.
+    let enteredCurrent = false;
+    for (const c of crossings) {
+      const src = this.roomEnemies.get(c.fromKey);
+      if (src) {
+        const i = src.indexOf(c.enemy);
+        if (i >= 0) src.splice(i, 1);
+      }
+      if (this.settleHunterIntoRoom(c.enemy, c.dest, c.edge, c.opening)) {
+        enteredCurrent = true;
+      }
+    }
+    if (enteredCurrent) this.callbacks.onEnemiesChange(this.enemies.length);
+  }
+
+  // Pick the next room a hunter should step toward and the door (opening +
+  // target cell) to walk to. Uses the room-grid BFS (findPath) so a hunter
+  // never stalls in a dead-end — it routes toward the player through connected
+  // openings. Returns null only if the player's room is unreachable, in which
+  // case the hunter holds this frame.
+  private hunterDoorStep(
+    hunterRoom: RoomGridCoord,
+    hunterRoomKey: number,
+    playerRoom: RoomGridCoord,
+    enemy: Enemy,
+    pathCache: Map<number, RoomGridCoord[] | null>,
+  ): { edge: Edge; dest: RoomGridCoord; opening: RoomOpening; doorTarget: Vector2 } | null {
+    // One BFS per hunter-room per frame (playerRoom is fixed across the frame),
+    // shared by every hunter in that room via the caller's pathCache.
+    let path = pathCache.get(hunterRoomKey);
+    if (path === undefined) {
+      path = findPath(this.runMap.cells, hunterRoom, playerRoom);
+      pathCache.set(hunterRoomKey, path);
+    }
+    if (!path || path.length < 2) return null;
+    const next = path[1];
+    const dc = next.col - hunterRoom.col;
+    const dr = next.row - hunterRoom.row;
+    const edge: Edge = dc === 1 ? 'E' : dc === -1 ? 'W' : dr === 1 ? 'S' : 'N';
+
+    const def = roomAt(this.runMap, hunterRoom);
+    const destDef = roomAt(this.runMap, next);
+    const destOpenings = openingsOnEdge(destDef, oppositeEdge(edge));
+    // Openings on `edge` that actually connect to the next room (overlap a
+    // dest opening). findPath guarantees at least one — the rooms connect.
+    const passable = openingsOnEdge(def, edge).filter((o) =>
+      destOpenings.some((d) =>
+        rangesOverlap(o.rangeStart, o.rangeEnd, d.rangeStart, d.rangeEnd),
+      ),
+    );
+    if (passable.length === 0) return null;
+
+    // Aim for the connecting opening nearest the hunter's position along the
+    // edge axis, so it doesn't cross the room to a far door when a near one works.
+    const pos = enemy.getPosition();
+    const along =
+      edge === 'E' || edge === 'W'
+        ? (pos.y + TILE_SIZE / 2) / TILE_SIZE
+        : (pos.x + TILE_SIZE / 2) / TILE_SIZE;
+    let opening = passable[0];
+    let bestDist = Infinity;
+    for (const o of passable) {
+      const center = (o.rangeStart + o.rangeEnd) / 2;
+      const d = Math.abs(center - along);
+      if (d < bestDist) {
+        bestDist = d;
+        opening = o;
+      }
+    }
+
+    return { edge, dest: next, opening, doorTarget: this.doorTargetCell(edge, opening) };
+  }
+
+  // The cell top-left a hunter walks to in order to exit through `opening`: the
+  // edge cell at the opening's mid-tile.
+  private doorTargetCell(edge: Edge, opening: RoomOpening): Vector2 {
+    const mid = Math.floor((opening.rangeStart + opening.rangeEnd) / 2);
+    switch (edge) {
+      case 'N':
+        return { x: mid * TILE_SIZE, y: 0 };
+      case 'S':
+        return { x: mid * TILE_SIZE, y: (GRID_HEIGHT - 1) * TILE_SIZE };
+      case 'W':
+        return { x: 0, y: mid * TILE_SIZE };
+      case 'E':
+        return { x: (GRID_WIDTH - 1) * TILE_SIZE, y: mid * TILE_SIZE };
+      default: {
+        const exhaustive: never = edge;
+        throw new Error(`doorTargetCell: unhandled edge ${String(exhaustive)}`);
+      }
+    }
+  }
+
+  // True once the hunter has reached the edge cell of `opening` it's heading
+  // for — ready to cross into the next room.
+  private hunterAtDoor(enemy: Enemy, edge: Edge, opening: RoomOpening): boolean {
+    const pos = enemy.getPosition();
+    const col = Math.floor((pos.x + TILE_SIZE / 2) / TILE_SIZE);
+    const row = Math.floor((pos.y + TILE_SIZE / 2) / TILE_SIZE);
+    const inSpan = (v: number) => v >= opening.rangeStart && v <= opening.rangeEnd;
+    switch (edge) {
+      case 'N':
+        return row <= 0 && inSpan(col);
+      case 'S':
+        return row >= GRID_HEIGHT - 1 && inSpan(col);
+      case 'W':
+        return col <= 0 && inSpan(row);
+      case 'E':
+        return col >= GRID_WIDTH - 1 && inSpan(row);
+      default: {
+        const exhaustive: never = edge;
+        throw new Error(`hunterAtDoor: unhandled edge ${String(exhaustive)}`);
+      }
+    }
+  }
+
+  // Move a hunter that reached a door into the next room: drop it at the
+  // destination's matching opening, update its room, and re-bucket it. Returns
+  // true if it landed in the player's current room (rejoining live pursuit as
+  // 'active'); otherwise it stays a parked hunter.
+  private settleHunterIntoRoom(
+    enemy: Enemy,
+    dest: RoomGridCoord,
+    exitEdge: Edge,
+    srcOpening: RoomOpening,
+  ): boolean {
+    const destDef = roomAt(this.runMap, dest);
+    enemy.setPosition(
+      this.hunterEntryPosition(exitEdge, srcOpening, destDef, enemy.getPosition()),
+    );
+    enemy.setCurrentRoom(dest);
+    // Just teleported across a room border: drop the stale cached door target
+    // so the hunter re-targets toward the player in the new room next frame.
+    enemy.resetPathfinding();
+    const destKey = this.roomKey(dest);
+    if (destKey === this.roomKey(this.currentRoomCoord)) {
+      enemy.setHuntState('active');
+      this.enemies.push(enemy);
+      // KNOWN EDGE (deferred): the hunter materializes at the entry opening and
+      // checkCollisions runs later this same tick, so a player loitering
+      // motionless in that exact doorway can be contact-killed the frame the
+      // hunter arrives, with no rendered frame of it first (parked-room enemies
+      // aren't drawn). Narrow precondition; the fix (a one-frame arrival
+      // telegraph / grace) belongs with the deferred static-spawn telegraph
+      // work (roadmap §9) and Step 5+6's settlement pass — not Step 4.
+      return true;
+    }
+    const list = this.roomEnemies.get(destKey);
+    if (list) list.push(enemy);
+    else this.roomEnemies.set(destKey, [enemy]);
+    return false;
+  }
+
+  // Enemy analogue of entryPosition: place a crossing hunter just inside the
+  // destination's opposite edge, aligned to the matching opening so it lands on
+  // floor. PLAYER_SIZE === TILE_SIZE, so this mirrors the player's transition
+  // landing math with the enemy's 32 px cell.
+  private hunterEntryPosition(
+    exitEdge: Edge,
+    srcOpening: RoomOpening,
+    destDef: RoomDef,
+    pos: Vector2,
+  ): Vector2 {
+    const destOpenings = openingsOnEdge(destDef, oppositeEdge(exitEdge));
+    const match =
+      destOpenings.find((o) =>
+        rangesOverlap(o.rangeStart, o.rangeEnd, srcOpening.rangeStart, srcOpening.rangeEnd),
+      ) ?? destOpenings[0];
+    if (!match) return { ...CENTER_SPAWN };
+
+    const lo = match.rangeStart * TILE_SIZE;
+    const hi = (match.rangeEnd + 1) * TILE_SIZE - TILE_SIZE;
+    if (exitEdge === 'E' || exitEdge === 'W') {
+      return {
+        x: exitEdge === 'E' ? 0 : CANVAS_WIDTH - TILE_SIZE,
+        y: Math.max(lo, Math.min(pos.y, hi)),
+      };
+    }
+    return {
+      x: Math.max(lo, Math.min(pos.x, hi)),
+      y: exitEdge === 'S' ? 0 : CANVAS_HEIGHT - TILE_SIZE,
+    };
   }
 
   private gameLoop(currentTime: number) {
@@ -683,11 +960,19 @@ export class Game {
       this.lastArrowTime = currentTime;
     }
 
-    // Update enemies. Pass the live enemy list so each can enforce
-    // enemy-vs-enemy no-overlap at its movement step (Enemy.update).
+    // Update the current room's enemies (all 'active'). Pass the live enemy
+    // list so each can enforce enemy-vs-enemy no-overlap at its movement step.
     this.enemies.forEach(enemy => {
       enemy.update(deltaTime, this.player.getPosition(), this.level, this.enemies);
     });
+
+    // Hunt machine (Step 4, roadmap §5.12). tick() advances activation timers
+    // and de-aggros hunters whose room is now out of range; then updateHunters
+    // walks the remaining cross-room hunters toward the player through the
+    // room openings. De-aggro runs before movement so an out-of-range hunter
+    // settles instead of getting one more free step toward the player.
+    this.hunt.tick(currentTime, this.managedEnemies(), this.currentRoomCoord);
+    this.updateHunters(deltaTime);
 
     // Update arrows
     this.arrows = this.arrows.filter(arrow => {
@@ -767,13 +1052,18 @@ export class Game {
   // already computes the off-canvas position and entry direction from the
   // chosen band/template/cell, so this is a thin Enemy-construction step.
   private spawnFromRequest(req: SpawnRequest): Enemy {
-    return new Enemy(
+    const enemy = new Enemy(
       { ...req.position },
       req.type,
       this.nextEnemyId++,
       undefined,
       { direction: { ...req.entryDirection } },
     );
+    // Wave spawns are born in (and into) the player's current room and pursue
+    // immediately — huntState defaults to 'active'; stamp the room so the Hunt
+    // machine can track it once the player moves on.
+    enemy.setCurrentRoom(this.currentRoomCoord);
+    return enemy;
   }
 
   // Scan all enemies and return the nearest one within MAX_DETECTION_RANGE

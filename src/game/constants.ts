@@ -124,3 +124,19 @@ export const ENEMY_AABB_PX: Record<EnemyType, number> = {
   gibbon: 15, // 0.65 ft
   snake: 4, // 0.165 ft
 };
+
+// --- Hunt system (Step 4 of the traversable-maps refactor) ---
+// See docs/ROADMAP-traversable-maps.md §5.11 (static aggro) and §5.12 (the
+// 4-state Hunt machine). All Hunt timing flows from the gameLoop currentTime
+// (never Date.now — Invariant 8).
+
+// Delay between the player entering a room and its dormant sitters waking
+// (dormant → activating → active). One second per §5.11.
+export const STATIC_AGGRO_DELAY_MS = 1000;
+
+// Hunt range, in Manhattan room-grid distance. A 'hunting' enemy keeps
+// pursuing across rooms as long as its room is within this many rooms of the
+// player's; once the player's room is MORE than HUNT_RANGE away the hunter
+// de-aggros and settles back to a static (§5.12). Hunting is indefinite within
+// range — hiding doesn't work.
+export const HUNT_RANGE = 2;

@@ -1,4 +1,4 @@
-import { Vector2, EnemyType, Rectangle } from './types';
+import { Vector2, EnemyType, Rectangle, HuntState, RoomGridCoord } from './types';
 import { Level } from './Level';
 import {
   CANVAS_WIDTH,
@@ -23,6 +23,21 @@ export class Enemy {
   // movement. We bypass collision until the enemy is fully inside.
   private entering: boolean;
   private entryDirection: Vector2;
+
+  // Hunt state machine (Step 4, roadmap §5.12). Driven by Hunt.ts off the
+  // gameLoop currentTime + room position; see docs/ROADMAP-traversable-maps.md.
+  //   • huntState defaults to 'active': the only enemies built today are
+  //     wave spawns, which pursue immediately. Placed statics (Step 5+6) are
+  //     constructed then set 'dormant'. Dormant + activating enemies hold
+  //     position (the movement guard in update()); active + hunting pursue.
+  //   • currentRoom is the room-grid cell this enemy occupies. Game stamps it
+  //     on spawn and updates it as a hunter crosses rooms; it must always
+  //     match the room bucket the enemy is parked in.
+  //   • activatingSince is the currentTime at which an aggro delay began
+  //     (only meaningful while huntState === 'activating').
+  private huntState: HuntState = 'active';
+  private currentRoom: RoomGridCoord = { col: 0, row: 0 };
+  private activatingSince = 0;
 
   constructor(
     startPosition: Vector2,
@@ -89,6 +104,15 @@ export class Enemy {
     level: Level,
     others: Enemy[] = [],
   ) {
+    // Dormant + activating enemies hold position — a placed static waits to be
+    // aggroed, and a waking one stays put during its STATIC_AGGRO_DELAY_MS
+    // before pursuing. Movement begins only once Hunt promotes it to 'active'
+    // (or, on the player leaving, 'hunting'). Neither state is ever 'entering'
+    // (statics are placed in-room, not walked in off-canvas), so this guard is
+    // safe ahead of the entry branch. For cross-room hunters, `playerPosition`
+    // is the door target Game steers them toward, not the literal player.
+    if (this.huntState === 'dormant' || this.huntState === 'activating') return;
+
     if (this.entering) {
       // Free movement along the entry vector while the cell straddles OOB.
       const dist = this.speed * (deltaTime / 1000);
@@ -317,11 +341,58 @@ export class Enemy {
     return { ...this.position };
   }
 
+  // Hard-set the cell top-left. Used by hunter room transitions and by the
+  // Hunt de-aggro settlement to relocate the enemy (mirrors Player.setPosition).
+  // Caller is responsible for choosing a wall-free landing spot.
+  setPosition(pos: Vector2): void {
+    this.position = { ...pos };
+  }
+
+  // Discard the cached pursuit target so the next update() re-polls immediately.
+  // Called after a hard teleport (a hunter crossing into a new room) — the
+  // pathfind throttle would otherwise keep steering toward the previous room's
+  // door cell (a stale point in the shared canvas frame) for one ~200 ms
+  // window. Resetting both fields makes the relocated hunter re-target its new
+  // in-room goal on the very next frame.
+  resetPathfinding(): void {
+    this.lastPathfindTime = 0;
+    this.targetPosition = { ...this.position };
+  }
+
   getType(): EnemyType {
     return this.type;
   }
 
   getId(): number {
     return this.id;
+  }
+
+  // --- Hunt state machine accessors (Step 4, roadmap §5.12) ---
+
+  getHuntState(): HuntState {
+    return this.huntState;
+  }
+
+  setHuntState(state: HuntState): void {
+    this.huntState = state;
+  }
+
+  // The room-grid cell this enemy occupies. Returned by reference for the
+  // per-frame Manhattan check; treat it as read-only (use setCurrentRoom to
+  // move the enemy between rooms).
+  getCurrentRoom(): RoomGridCoord {
+    return this.currentRoom;
+  }
+
+  setCurrentRoom(coord: RoomGridCoord): void {
+    this.currentRoom = { col: coord.col, row: coord.row };
+  }
+
+  getActivatingSince(): number {
+    return this.activatingSince;
+  }
+
+  setActivatingSince(currentTime: number): void {
+    this.activatingSince = currentTime;
   }
 }
