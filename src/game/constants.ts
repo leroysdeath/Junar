@@ -140,3 +140,45 @@ export const STATIC_AGGRO_DELAY_MS = 1000;
 // de-aggros and settles back to a static (§5.12). Hunting is indefinite within
 // range — hiding doesn't work.
 export const HUNT_RANGE = 2;
+
+// --- Static density (Steps 5+6 of the traversable-maps refactor) ---
+// See docs/ROADMAP-traversable-maps.md §5.9 (static semantics) and §5.10 (the
+// B+C density formula). On the player's FIRST entry to a connector room its
+// statics are rolled from the template's `s`/`S` candidate tiles and locked for
+// the run (no re-roll on revisit, no despawn — §5.13).
+//
+//   target_density = STATIC_BASE_DENSITY
+//                  + max(0, BOSS_HALO_RADIUS - manhattan(room, bossRoom))  // B
+//                  + floor(waveNum / WAVE_PER_C_INCREMENT)                 // C
+//   actual_density = min(target_density, candidate_count)
+//
+// B (proximity) makes rooms denser the closer they sit to the boss; C
+// (progress) makes the whole map denser as the run wears on. The boss arena
+// itself has no candidates, so it never rolls statics.
+
+// Baseline statics in a connector far from the boss, early in the run (B=C=0).
+// NOTE — resolves a contradiction in roadmap §5.10: the prose there sets
+// `base = template.candidate_count` AND clamps `actual = min(target,
+// candidate_count)`, which collapses to "always spawn every candidate" (B and C
+// become dead code) and erases the sparse-far / dense-near gradient the same
+// section's table, the §5.10 narrative, and the Step 5+6 acceptance check all
+// require. A small explicit baseline (with candidate_count kept only as the
+// per-room cap) is the reading that satisfies those. Starting value; tune in
+// playtest alongside BOSS_HALO_RADIUS / WAVE_PER_C_INCREMENT (roadmap §9).
+export const STATIC_BASE_DENSITY = 1;
+
+// Extra statics added within this many rooms of the boss (the "halo"): the
+// B modifier is max(0, BOSS_HALO_RADIUS - boss_distance), so a room ON the boss
+// (distance 0) would get +BOSS_HALO_RADIUS, tapering to 0 at the halo edge.
+export const BOSS_HALO_RADIUS = 6;
+
+// Run-progress cadence: +1 to target density per this many global waves
+// (C modifier = floor(waveNum / WAVE_PER_C_INCREMENT)). ~+1 static per 2
+// triplets.
+export const WAVE_PER_C_INCREMENT = 6;
+
+// Weighting for a small ('s') static candidate: P(snake) vs P(gibbon). §5.9
+// specifies "snake heavier, gibbon lighter" without a ratio — this 80/20 split
+// is a chosen starting value (tune in playtest). 'S' (any) candidates ignore
+// this and roll snake/gibbon/panther uniformly instead.
+export const STATIC_SMALL_SNAKE_WEIGHT = 0.8;
