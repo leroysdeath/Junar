@@ -53,6 +53,8 @@ import {
   BOSS_HALO_RADIUS,
   WAVE_PER_C_INCREMENT,
   STATIC_SMALL_SNAKE_WEIGHT,
+  ENTRY_BAND_GRACE_MIN_MS,
+  ENTRY_BAND_GRACE_MAX_MS,
 } from './constants';
 
 type GameOverReason =
@@ -368,6 +370,61 @@ export class Game {
     });
   }
 
+  // Push the player off any enemy occupying their landing position. Steps inward
+  // along the entry axis (away from the edge they arrived at) to the first tile
+  // whose 32 px AABB clears every enemy and isn't a wall; bails (keeps the
+  // original landing) if none is found within the room — vanishingly unlikely.
+  // Overlap is tested with the exact center-distance rule checkCollisions uses,
+  // so a cleared tile is genuinely non-lethal this frame.
+  private clearLandingZone(entryPos: Vector2): void {
+    if (this.enemies.length === 0) return;
+    const overlapsEnemy = (p: Vector2): boolean => {
+      const cx = p.x + TILE_SIZE / 2;
+      const cy = p.y + TILE_SIZE / 2;
+      for (const e of this.enemies) {
+        const ep = e.getPosition();
+        if (
+          Math.abs(ep.x + TILE_SIZE / 2 - cx) < TILE_SIZE / 2 &&
+          Math.abs(ep.y + TILE_SIZE / 2 - cy) < TILE_SIZE / 2
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+    if (!overlapsEnemy(entryPos)) return;
+
+    // Inward normal from the edge the player landed flush against (mirrors
+    // bandsForRoom's entryDirection). No flush edge (e.g. CENTER_SPAWN) → no
+    // inward axis to walk, so leave the player put.
+    let dx = 0;
+    let dy = 0;
+    if (entryPos.x <= 0) dx = 1;
+    else if (entryPos.x >= CANVAS_WIDTH - PLAYER_SIZE) dx = -1;
+    else if (entryPos.y <= 0) dy = 1;
+    else if (entryPos.y >= CANVAS_HEIGHT - PLAYER_SIZE) dy = -1;
+    if (dx === 0 && dy === 0) return;
+
+    const col0 = Math.floor((entryPos.x + TILE_SIZE / 2) / TILE_SIZE);
+    const row0 = Math.floor((entryPos.y + TILE_SIZE / 2) / TILE_SIZE);
+    for (let step = 1; step < GRID_WIDTH; step++) {
+      const col = col0 + dx * step;
+      const row = row0 + dy * step;
+      if (col < 0 || row < 0 || col >= GRID_WIDTH || row >= GRID_HEIGHT) break;
+      if (this.level.isWall(col, row)) break;
+      const candidate = { x: col * TILE_SIZE, y: row * TILE_SIZE };
+      if (!overlapsEnemy(candidate)) {
+        this.player.setPosition(candidate);
+        this.logger.log('level', 'landingNudge', {
+          from: { x: round2(entryPos.x), y: round2(entryPos.y) },
+          to: candidate,
+        });
+        return;
+      }
+    }
+    // Nothing clear inward — leave the player at the doorway (unchanged).
+  }
+
   // Switch the active room. Loads the room's level, wave bands and parked
   // enemies, drops the player at `entryPos`, and emits HUD signals. Used at run
   // start (entryPos = CENTER_SPAWN) and on every transition.
@@ -399,6 +456,14 @@ export class Game {
       }
     }
     this.enemies = this.roomEnemies.get(key) ?? [];
+    // Landing safety: if the player materializes on top of an enemy already
+    // parked at the entry opening (a dormant static rolled onto the doorway, or
+    // a hunter parked there), nudge the PLAYER one tile inward to the first
+    // clear floor tile. Covers the "walked in and instantly touched a sitter"
+    // death that the entry-band grace (fresh spawns only) can't. No enemy is
+    // moved/despawned and no i-frames are granted, so the contact-death
+    // contract is untouched. No-op at run start (empty room) and clear doorways.
+    this.clearLandingZone(entryPos);
     this.arrows = []; // arrows don't carry across a hard cut
     this.hasLineOfSight = false;
     this.globalWaveScheduler?.setBands(this.bandsForRoom(def));
@@ -529,6 +594,23 @@ export class Game {
     // and the run-long cadence resumes intact.
     if (!this.inBossArena) {
       this.onRoomTransitionEnd(now);
+      // Spawn grace for the opening the player just walked through. The wave
+      // timer resumes on the same frame as the hard cut, so without this a wave
+      // could drip into the entry band right on top of the arriving player
+      // (unfair death). Hold only the entry-edge band(s) for a fresh 3-5 s roll
+      // each transition; the room's other openings stay live. Skipped for the
+      // boss arena, where spawns are already frozen for the whole visit.
+      const entryEdge = oppositeEdge(t.edge);
+      const entryBandIndices: number[] = [];
+      this.currentRoomDef().openings.forEach((o, i) => {
+        if (o.edge === entryEdge) entryBandIndices.push(i);
+      });
+      if (entryBandIndices.length > 0) {
+        const graceMs =
+          ENTRY_BAND_GRACE_MIN_MS +
+          Math.random() * (ENTRY_BAND_GRACE_MAX_MS - ENTRY_BAND_GRACE_MIN_MS);
+        this.globalWaveScheduler?.delayBands(entryBandIndices, now + graceMs);
+      }
     }
     this.logger.log('level', 'roomTransition', {
       edge: t.edge,

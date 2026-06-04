@@ -64,6 +64,15 @@ export const DEFAULT_SPAWN_INTERVAL_MS = 1500;
 // Grace period after the player enters the first room before wave 1 fires.
 export const RUN_START_GRACE_MS = 10_000;
 
+// Spawn grace for the opening the player just walked through on a room-to-room
+// transition. A hard cut resumes the wave timer on the same frame the player
+// lands, so without this a wave can drip into the entry band right on top of
+// the arriving player — an unfair death (death-is-the-player's-mistake pillar).
+// Rolled uniformly in [min, max] each transition; only the entry-edge band is
+// held, so the room's other openings keep spawning.
+export const ENTRY_BAND_GRACE_MIN_MS = 3000;
+export const ENTRY_BAND_GRACE_MAX_MS = 5000;
+
 // Random pause between triplets, rolled uniformly in [min, max] each time a
 // triplet's third (test) wave finishes emitting.
 export const TRIPLET_BREAK_MIN_MS = 15_000;
