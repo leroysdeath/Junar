@@ -95,6 +95,18 @@ class BandDripper {
     }
   }
 
+  // Push the ready deadline of specific bands forward to `untilMs` (rAF clock),
+  // never bringing an already-later deadline earlier. Used on room entry to give
+  // the opening the player just walked through a brief spawn grace so a wave
+  // can't drip in on top of the arriving player. Out-of-range indices ignored.
+  delayBands(indices: number[], untilMs: number): void {
+    for (const i of indices) {
+      if (i >= 0 && i < this.bandReadyAtMs.length) {
+        this.bandReadyAtMs[i] = Math.max(this.bandReadyAtMs[i], untilMs);
+      }
+    }
+  }
+
   // Indices of bands ready to accept a new group's front row right now.
   readyBands(nowMs: number): number[] {
     const out: number[] = [];
@@ -460,6 +472,13 @@ export class GlobalWaveScheduler {
       this.spawnedInWave - this.dripper.pendingEnemyCount(),
     );
     this.dripper.setBands(bands);
+  }
+
+  // Apply a spawn grace to specific bands of the current set (by index into the
+  // bands last passed to setBands). See BandDripper.delayBands. Called by
+  // Game on room entry to hold the opening the player just arrived through.
+  delayBands(indices: number[], untilMs: number): void {
+    this.dripper.delayBands(indices, untilMs);
   }
 
   // Current 1-indexed wave number (0 during the run-start grace).
