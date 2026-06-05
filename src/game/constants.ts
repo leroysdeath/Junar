@@ -64,6 +64,20 @@ export const DEFAULT_SPAWN_INTERVAL_MS = 1500;
 // Grace period after the player enters the first room before wave 1 fires.
 export const RUN_START_GRACE_MS = 10_000;
 
+// Exit-band spawn grace — the departure-side counterpart to the arrival-side
+// entry-band grace (ENTRY_BAND_GRACE_*), which lands with the sibling room-entry
+// change and is not defined on this branch yet. When the player
+// is approaching a room exit — within EXIT_APPROACH_RANGE_PX of an edge opening
+// AND pressing outward toward it — that one opening's spawn band is held for
+// EXIT_DEPART_GRACE_MS so a wave can't drip into the doorway in their face as
+// they leave. Applied as a rolling per-frame clamp via delayBands (Math.max, so
+// it never accumulates) and lapsing once they stop approaching. Like the entry
+// grace it delays — never cancels — and is scoped to the single approached band,
+// so the wave still arrives through the room's other openings: camping an exit
+// gains nothing.
+export const EXIT_APPROACH_RANGE_PX = 96; // 3 tiles from the edge arms approach
+export const EXIT_DEPART_GRACE_MS = 1000; // small rolling hold while approaching
+
 // Random pause between triplets, rolled uniformly in [min, max] each time a
 // triplet's third (test) wave finishes emitting.
 export const TRIPLET_BREAK_MIN_MS = 15_000;

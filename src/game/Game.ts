@@ -48,6 +48,8 @@ import {
   DASH_DISTANCE_PX,
   DEFAULT_INTER_WAVE_LULL_MS,
   CENTER_SPAWN,
+  EXIT_APPROACH_RANGE_PX,
+  EXIT_DEPART_GRACE_MS,
 } from './constants';
 
 type GameOverReason =
@@ -386,20 +388,28 @@ export class Game {
     this.globalWaveScheduler?.resume(now);
   }
 
-  // If the player is pressing outward while pinned to a room edge inside an
-  // opening that connects to a neighbor, return the transition to take.
-  private detectTransition(
+  // Select the edge the player is pressing outward toward while within `margin`
+  // px of it, plus the opening on that edge their centre tile sits inside and
+  // that opening's band index. bandsForRoom emits one band per opening in
+  // def.openings order, so an opening's index in def.openings IS its band index.
+  // Shared by detectTransition (margin = EDGE_EPS_PX — pinned to the boundary)
+  // and applyExitBandGrace (margin = EXIT_APPROACH_RANGE_PX — still approaching).
+  // Returns null unless the player is pressing into a near edge inside one of its
+  // openings; matching on edge AND the centre-tile range resolves the correct
+  // opening (and band) when an edge carries several.
+  private approachedOpening(
     input: InputState,
-  ): { edge: Edge; dest: RoomGridCoord; entry: Vector2 } | null {
+    margin: number,
+  ): { edge: Edge; opening: RoomOpening; bandIndex: number } | null {
     const pos = this.player.getPosition();
     const maxX = CANVAS_WIDTH - PLAYER_SIZE;
     const maxY = CANVAS_HEIGHT - PLAYER_SIZE;
 
     let edge: Edge | null = null;
-    if (input.right && pos.x >= maxX - EDGE_EPS_PX) edge = 'E';
-    else if (input.left && pos.x <= EDGE_EPS_PX) edge = 'W';
-    else if (input.up && pos.y <= EDGE_EPS_PX) edge = 'N';
-    else if (input.down && pos.y >= maxY - EDGE_EPS_PX) edge = 'S';
+    if (input.right && pos.x >= maxX - margin) edge = 'E';
+    else if (input.left && pos.x <= margin) edge = 'W';
+    else if (input.up && pos.y <= margin) edge = 'N';
+    else if (input.down && pos.y >= maxY - margin) edge = 'S';
     if (!edge) return null;
 
     const def = this.currentRoomDef();
@@ -408,10 +418,23 @@ export class Game {
     const centerCol = Math.floor((pos.x + PLAYER_SIZE / 2) / TILE_SIZE);
     const centerRow = Math.floor((pos.y + PLAYER_SIZE / 2) / TILE_SIZE);
     const along = edge === 'E' || edge === 'W' ? centerRow : centerCol;
-    const opening = openingsOnEdge(def, edge).find(
-      (o) => along >= o.rangeStart && along <= o.rangeEnd,
+    const bandIndex = def.openings.findIndex(
+      (o) => o.edge === edge && along >= o.rangeStart && along <= o.rangeEnd,
     );
-    if (!opening) return null;
+    if (bandIndex < 0) return null;
+    return { edge, opening: def.openings[bandIndex], bandIndex };
+  }
+
+  // If the player is pressing outward while pinned to a room edge inside an
+  // opening that connects to a neighbor, return the transition to take.
+  private detectTransition(
+    input: InputState,
+  ): { edge: Edge; dest: RoomGridCoord; entry: Vector2 } | null {
+    const found = this.approachedOpening(input, EDGE_EPS_PX);
+    if (!found) return null;
+    const { edge, opening } = found;
+    const pos = this.player.getPosition();
+    const def = this.currentRoomDef();
 
     const dest: RoomGridCoord = {
       col: this.currentRoomCoord.col + (edge === 'E' ? 1 : edge === 'W' ? -1 : 0),
@@ -429,6 +452,24 @@ export class Game {
     if (!roomsConnect(def, edge, destDef)) return null;
 
     return { edge, dest, entry: this.entryPosition(edge, opening, destDef, pos) };
+  }
+
+  // Departure-side spawn grace — the counterpart to an arrival-side entry-band
+  // grace (the sibling room-entry change wires that into doTransition; it is not
+  // present on this branch). When the player is approaching an exit (within
+  // EXIT_APPROACH_RANGE_PX of an edge opening AND pressing outward toward it),
+  // hold that ONE opening's spawn band for a short rolling EXIT_DEPART_GRACE_MS
+  // so a wave can't drip into the doorway in their face as they leave. It's a
+  // delay, never a cancel: the wave budget is untouched and it still arrives via
+  // the room's other openings, so camping an exit gains nothing. Re-applied every
+  // frame the player keeps approaching — delayBands clamps with Math.max so it
+  // never accumulates, and it lapses once they stop. No-op in the boss arena,
+  // where spawns are already frozen for the whole visit.
+  private applyExitBandGrace(input: InputState, now: number): void {
+    if (this.inBossArena) return;
+    const found = this.approachedOpening(input, EXIT_APPROACH_RANGE_PX);
+    if (!found) return;
+    this.globalWaveScheduler?.delayBands([found.bandIndex], now + EXIT_DEPART_GRACE_MS);
   }
 
   // Place the player just inside the destination's opposite edge, preserving
@@ -923,6 +964,15 @@ export class Game {
       this.stamina.tryActivateBurst(currentTime);
     }
     this.stamina.tick(currentTime);
+
+    // Exit-band grace: if the player is approaching a room exit, hold that
+    // opening's spawn band so a wave can't drip into the doorway as they leave
+    // (the departure counterpart to the arrival-side entry-band grace that lands
+    // on the sibling room-entry branch). Runs after
+    // detectTransition — a transition short-circuits the frame before here — and
+    // just before the scheduler tick so the hold is in place for this tick's
+    // draw. Rolling clamp; lapses on its own once they stop approaching.
+    this.applyExitBandGrace(input, currentTime);
 
     // Global wave-driven spawns. Each tick may emit zero, one, or many spawn
     // requests — group templates land row-by-row, so a single tick can release
