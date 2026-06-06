@@ -249,13 +249,27 @@ export function MobileControls({
         forceLandscape={forceLandscape}
       />
 
-      {/* Actions: A (dash) / B (burst) pinned to the upper-right, semi-transparent
+      {/* Actions: A (dash) / B (burst) pinned to the lower-right, semi-transparent
           (Task 5). z-50 keeps them above the mobile HUD (z-auto) and the
-          "Reached Boss" banner (z-10, also pointer-events-none); the top offset
-          clears the top HUD bar. When the root is force-rotated into landscape
-          these `fixed` buttons re-anchor to that rotated frame, so "upper-right"
-          stays upper-right of the landscape view. */}
-      <div className="fixed top-24 right-3 z-50 flex gap-3 select-none">
+          "Reached Boss" banner (z-10, also pointer-events-none). When the root
+          is force-rotated into landscape these `fixed` buttons re-anchor to that
+          rotated frame, so "lower-right" stays lower-right of the landscape view.
+          In the force-rotated frame the landscape's right edge maps to the
+          physical bottom of the phone — where Safari's bottom toolbar / home
+          indicator live — so we inset the right side generously (safe-area
+          bottom inset + toolbar clearance) to keep both buttons fully on-screen
+          instead of clipped under the browser chrome. */}
+      <div
+        className="fixed z-50 flex gap-3 select-none"
+        style={{
+          bottom: forceLandscape
+            ? 'calc(env(safe-area-inset-left, 0px) + 1rem)'
+            : '1.5rem',
+          right: forceLandscape
+            ? 'calc(env(safe-area-inset-bottom, 0px) + 5rem)'
+            : '0.75rem',
+        }}
+      >
         <ActionButton action="a" label="A" onActionPress={onActionPress} />
         <ActionButton action="b" label="B" onActionPress={onActionPress} />
       </div>
