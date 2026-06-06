@@ -360,9 +360,11 @@ function App() {
     >
       {/* Task 1 CSS fallback: when the orientation lock is unavailable (iOS
           Safari) and the device is held portrait mid-run, prompt a rotate
-          rather than squashing the fixed-aspect canvas. Gated off the menu so
-          the player can still reach "Start Adventure" (which fires the lock). */}
-      {isMobile && isPortrait && gameState !== 'menu' && (
+          rather than squashing the fixed-aspect canvas. Gated to 'playing'
+          only: the menu and the Game Over / Victory screens are portrait-
+          friendly decision menus, and covering them would hide their buttons
+          (only 'playing' has a live fixed-aspect canvas that needs landscape). */}
+      {isMobile && isPortrait && gameState === 'playing' && (
         <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col items-center justify-center text-center px-8 select-none">
           <RotateCw size={56} className="text-amber-400 mb-4 animate-pulse" />
           <p className="text-amber-200 text-xl font-bold font-mono">
