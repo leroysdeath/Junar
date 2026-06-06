@@ -12,8 +12,11 @@ import {
   RUN_START_GRACE_MS,
   TRIPLET_BREAK_MIN_MS,
   TRIPLET_BREAK_MAX_MS,
+  INTER_WAVE_LULL_MIN_MS,
+  INTER_WAVE_LULL_MAX_MS,
   WAVE_ENEMYCOUNT_CAP,
-  TYPE_UNLOCK_BEAR_WAVE,
+  WAVE_POOL_MID_UNLOCK,
+  WAVE_POOL_LATE_UNLOCK,
 } from './constants';
 
 export interface SpawnRequest {
@@ -360,9 +363,9 @@ export class WaveScheduler {
 // listeners or timers, so it needs no disposal.
 
 export interface GlobalSchedulerConfig {
-  snakePantherPool: SpawnTemplate[];      // waves 1–6
-  snakePantherBearPool: SpawnTemplate[];  // waves TYPE_UNLOCK_BEAR_WAVE+
-  interWaveLullMs: number;                // short lull within a triplet
+  earlyPool: SpawnTemplate[];  // waves 1 .. WAVE_POOL_MID_UNLOCK-1
+  midPool: SpawnTemplate[];    // waves WAVE_POOL_MID_UNLOCK .. WAVE_POOL_LATE_UNLOCK-1
+  latePool: SpawnTemplate[];   // waves WAVE_POOL_LATE_UNLOCK+
 }
 
 export interface GlobalSchedulerCallbacks {
@@ -553,9 +556,10 @@ export class GlobalWaveScheduler {
           this.phaseDeadlineMs = nowMs + breakMs;
           this.callbacks.onTripletBreak?.(breakMs);
         } else {
+          const lullMs = this.rollInterWaveLull();
           this.phase = 'lull';
-          this.phaseDeadlineMs = nowMs + this.config.interWaveLullMs;
-          this.callbacks.onInterWaveLull?.(this.config.interWaveLullMs);
+          this.phaseDeadlineMs = nowMs + lullMs;
+          this.callbacks.onInterWaveLull?.(lullMs);
         }
       }
     } else if (this.phase === 'lull' || this.phase === 'break') {
@@ -577,9 +581,11 @@ export class GlobalWaveScheduler {
     this.currentEnemyCount = params.enemyCount;
     this.currentIntervalMs = params.spawnIntervalMs;
     this.currentPool =
-      n >= TYPE_UNLOCK_BEAR_WAVE
-        ? this.config.snakePantherBearPool
-        : this.config.snakePantherPool;
+      n >= WAVE_POOL_LATE_UNLOCK
+        ? this.config.latePool
+        : n >= WAVE_POOL_MID_UNLOCK
+          ? this.config.midPool
+          : this.config.earlyPool;
     this.callbacks.onWaveStart?.(n, params.triplet, params.beatRole);
   }
 
@@ -587,6 +593,13 @@ export class GlobalWaveScheduler {
     return (
       TRIPLET_BREAK_MIN_MS +
       Math.random() * (TRIPLET_BREAK_MAX_MS - TRIPLET_BREAK_MIN_MS)
+    );
+  }
+
+  private rollInterWaveLull(): number {
+    return (
+      INTER_WAVE_LULL_MIN_MS +
+      Math.random() * (INTER_WAVE_LULL_MAX_MS - INTER_WAVE_LULL_MIN_MS)
     );
   }
 

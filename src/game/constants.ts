@@ -62,7 +62,7 @@ export const DEFAULT_SPAWN_INTERVAL_MS = 1500;
 // Date.now) — Invariant 8.
 
 // Grace period after the player enters the first room before wave 1 fires.
-export const RUN_START_GRACE_MS = 10_000;
+export const RUN_START_GRACE_MS = 2_000;
 
 // Spawn grace for the opening the player just walked through on a room-to-room
 // transition. A hard cut resumes the wave timer on the same frame the player
@@ -88,16 +88,24 @@ export const EXIT_DEPART_GRACE_MS = 1000; // small rolling hold while approachin
 
 // Random pause between triplets, rolled uniformly in [min, max] each time a
 // triplet's third (test) wave finishes emitting.
-export const TRIPLET_BREAK_MIN_MS = 15_000;
-export const TRIPLET_BREAK_MAX_MS = 60_000;
+export const TRIPLET_BREAK_MIN_MS = 10_000;
+export const TRIPLET_BREAK_MAX_MS = 30_000;
+
+// Random lull between waves within a triplet (setup→add, add→test), rolled
+// uniformly in [min, max] each time a non-test wave finishes emitting.
+export const INTER_WAVE_LULL_MIN_MS = 2_000;
+export const INTER_WAVE_LULL_MAX_MS = 6_000;
 
 // Soft cap on per-wave enemy count. Soft: when the last group drawn pushes
 // the running total over the cap, the whole group still spawns (overshoot).
 export const WAVE_ENEMYCOUNT_CAP = 25;
 
-// Global wave number at which bears unlock in the spawn pool. Waves 1–6 are
-// snake+panther only; waves 7+ (triplet 3 onward) add bears.
-export const TYPE_UNLOCK_BEAR_WAVE = 7;
+// Global wave numbers at which the spawn pool widens (tiered by wave number):
+//   waves 1–4  : 3-snake, 6-snake, 1-panther
+//   waves 5–8  : + 2-panther, 1-panther+6-snake, 9-snake
+//   waves 9+   : + 1-bear, 12-snake   (bears unlock here)
+export const WAVE_POOL_MID_UNLOCK = 5;
+export const WAVE_POOL_LATE_UNLOCK = 9;
 
 // --- Room grid (Step 3 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §4 (glossary), §5.1 (run structure).
