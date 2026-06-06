@@ -145,12 +145,12 @@ function App() {
   const [bossArena, setBossArena] = useState(false);
   const isMobile = useIsMobile();
   const isPortrait = useIsPortrait();
-  // Force-landscape: on a touch device held portrait during live play, rotate
-  // the whole game 90° via CSS so the fixed-aspect canvas always reads as
-  // landscape (the standard web fallback where orientation.lock is rejected).
-  // Gated to 'playing' — the menu and Game Over / Victory screens are portrait-
-  // friendly decision menus and stay upright.
-  const forceLandscape = isMobile && isPortrait && gameState === 'playing';
+  // Force-landscape: on a touch device held portrait, rotate the whole game 90°
+  // via CSS so the fixed-aspect canvas always reads as landscape (the standard
+  // web fallback where orientation.lock is rejected). Applied across every
+  // state — menu, play, and Game Over / Victory all stay landscape so the
+  // orientation never flips between screens.
+  const forceLandscape = isMobile && isPortrait;
 
   // On mobile during play, cap the canvas so the *whole* board fits the
   // landscape frame instead of being sized purely by width (which overflowed
@@ -160,7 +160,7 @@ function App() {
   // force-rotated the frame 90°. p-4 (1rem each side) is subtracted so the
   // board clears the root padding.
   const canvasFitStyle =
-    isMobile && gameState === 'playing'
+    isMobile
       ? {
           maxWidth: forceLandscape
             ? 'min(calc(100vh - 2rem), calc((100vw - 2rem) * 928 / 544))'
@@ -427,17 +427,6 @@ function App() {
           : undefined
       }
     >
-      {/* Game Over / Victory are portrait-friendly decision menus and stay as a
-          block above the canvas on mobile. The playing HUD is NOT here anymore —
-          it's a semi-transparent overlay on the canvas (below), so it no longer
-          steals layout height and break the landscape frame. */}
-      {isMobile && (gameState === 'gameOver' || gameState === 'victory') && (
-        <div className="w-full max-w-[936px]">
-          {gameState === 'gameOver' && renderGameOverContent()}
-          {gameState === 'victory' && renderVictoryContent()}
-        </div>
-      )}
-
       <div
         className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden w-full max-w-[936px]"
         style={canvasFitStyle}
@@ -540,15 +529,16 @@ function App() {
           </div>
         )}
 
-        {/* Game Over Screen (desktop only — mobile renders above the canvas) */}
-        {!isMobile && gameState === 'gameOver' && (
+        {/* Game Over Screen — overlays the canvas on both desktop and mobile so
+            it sits inside the (force-rotated) landscape frame. */}
+        {gameState === 'gameOver' && (
           <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
             {renderGameOverContent()}
           </div>
         )}
 
-        {/* Victory Screen (desktop only — mobile renders above the canvas) */}
-        {!isMobile && gameState === 'victory' && (
+        {/* Victory Screen — overlays the canvas on both desktop and mobile. */}
+        {gameState === 'victory' && (
           <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
             {renderVictoryContent()}
           </div>
