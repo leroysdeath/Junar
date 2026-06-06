@@ -28,6 +28,10 @@ export interface GameCallbacks {
   // non-blocking "Reached Boss" overlay, not a state switch.
   onBossArenaChange?: (active: boolean) => void;
   onScoreChange: (score: number) => void;
+  // Total enemies killed this run (monotonic; resets on a new run). Mirrors
+  // onScoreChange. Distinct from onEnemiesChange, which reports the live in-room
+  // enemy count — see Game.enemiesKilled.
+  onKillsChange: (kills: number) => void;
   onEnemiesChange: (count: number) => void;
   // Stamina + burst signals. isLow is bundled with value to avoid a
   // render race between the bar value and its low-state styling.

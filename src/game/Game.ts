@@ -107,6 +107,10 @@ export class Game {
 
   private gameState: GameState = 'menu';
   private score = 0;
+  // Total enemies killed this run. Distinct from onEnemiesChange's live in-room
+  // count: this is a monotonic run tally (HUD "Killed"), reset only on a new run
+  // (startRun), mirroring score. Surfaced via onKillsChange.
+  private enemiesKilled = 0;
   private lastTime = 0;
   private animationId: number | null = null;
   private frameCount = 0;
@@ -221,6 +225,7 @@ export class Game {
   private startRun() {
     this.gameState = 'playing';
     this.score = 0;
+    this.enemiesKilled = 0;
     this.nextEnemyId = 0;
     this.arrows = [];
     this.lastArrowTime = 0;
@@ -242,6 +247,7 @@ export class Game {
 
     this.callbacks.onStateChange('playing');
     this.callbacks.onScoreChange(this.score);
+    this.callbacks.onKillsChange(this.enemiesKilled);
     this.callbacks.onWaveChange?.(0);
     this.logger.log('level', 'startRun', {
       start: this.runMap.startCoord,
@@ -1250,7 +1256,9 @@ export class Game {
           const enemyType = enemy.getType();
           this.enemies.splice(i, 1);
           this.score += 10;
+          this.enemiesKilled += 1;
           this.callbacks.onScoreChange(this.score);
+          this.callbacks.onKillsChange(this.enemiesKilled);
           this.callbacks.onEnemiesChange(this.enemies.length);
           this.logger.log('hit', 'arrow->enemy', {
             type: enemyType,

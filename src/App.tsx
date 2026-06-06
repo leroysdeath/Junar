@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, Trophy, Target, Zap } from 'lucide-react';
+import { Play, RotateCcw, RotateCw, Volume2, VolumeX, Target, Zap } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
@@ -26,14 +26,105 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
+// Track portrait orientation so we can prompt the player to rotate when the
+// orientation lock is unavailable (e.g. iOS Safari) — the CSS fallback that
+// keeps us from squashing the fixed-aspect canvas.
+function useIsPortrait(): boolean {
+  const query = '(orientation: portrait)';
+  const get = () =>
+    typeof window !== 'undefined' && window.matchMedia(query).matches;
+  const [isPortrait, setIsPortrait] = useState<boolean>(get);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setIsPortrait(e.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  return isPortrait;
+}
+
+// --- Immersive-mode helpers (mobile landscape) --------------------------------
+// Fullscreen + orientation lock are best-effort: feature-detected and wrapped in
+// try/catch so SSR/desktop and browsers that reject them (notably iOS Safari,
+// which supports neither element fullscreen nor orientation.lock) degrade to a
+// no-op. Each must be invoked from inside the user gesture or the browser
+// rejects it. The useIsPortrait "rotate your device" overlay is the fallback
+// when the lock is unavailable.
+async function enterFullscreen(el: Element): Promise<void> {
+  try {
+    if (
+      typeof el.requestFullscreen === 'function' &&
+      !document.fullscreenElement
+    ) {
+      await el.requestFullscreen();
+    }
+  } catch {
+    // Rejected (no gesture / unsupported) — stay windowed.
+  }
+}
+
+async function exitFullscreen(): Promise<void> {
+  try {
+    if (
+      typeof document !== 'undefined' &&
+      document.fullscreenElement &&
+      typeof document.exitFullscreen === 'function'
+    ) {
+      await document.exitFullscreen();
+    }
+  } catch {
+    // Nothing actionable if the browser refuses to exit.
+  }
+}
+
+// screen.orientation.lock/unlock are non-standard and absent from the DOM
+// typings, so reach them through a narrow structural cast rather than `any`.
+function orientationApi():
+  | { lock?: (o: string) => Promise<void>; unlock?: () => void }
+  | null {
+  if (typeof screen === 'undefined' || !screen.orientation) return null;
+  return screen.orientation as unknown as {
+    lock?: (o: string) => Promise<void>;
+    unlock?: () => void;
+  };
+}
+
+async function lockLandscape(): Promise<void> {
+  try {
+    const o = orientationApi();
+    if (o && typeof o.lock === 'function') {
+      await o.lock('landscape');
+    }
+  } catch {
+    // iOS Safari/desktop reject — the rotate overlay covers this case.
+  }
+}
+
+function unlockOrientation(): void {
+  try {
+    orientationApi()?.unlock?.();
+  } catch {
+    // No-op if unsupported.
+  }
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
+  // Root container — the fullscreen target on mobile (Task 1).
+  const rootRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<GameState>('menu');
   const [roomCoord, setRoomCoord] = useState<RoomGridCoord>({ col: 0, row: 0 });
   const [waveNum, setWaveNum] = useState(0);
   const [score, setScore] = useState(0);
-  const [enemiesRemaining, setEnemiesRemaining] = useState(0);
+  const [kills, setKills] = useState(0);
+  // Live in-room enemy count from onEnemiesChange. Kept wired (the signal is
+  // used elsewhere in the game) but no longer shown in the HUD — only the
+  // setter is needed, so the value binding is dropped to satisfy noUnusedLocals.
+  const [, setEnemiesRemaining] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
@@ -42,6 +133,7 @@ function App() {
   // Drives the non-blocking "Reached Boss" banner; the game stays in 'playing'.
   const [bossArena, setBossArena] = useState(false);
   const isMobile = useIsMobile();
+  const isPortrait = useIsPortrait();
 
   const handleMobilePress = useCallback((dir: Direction) => {
     gameRef.current?.setVirtualInput(dir, true);
@@ -57,6 +149,22 @@ function App() {
     }
   }, []);
 
+  // Task 1: on touch devices, request fullscreen on the root container and lock
+  // to landscape. Must run inside the start/restart gesture (browsers reject
+  // these outside a user gesture); both are best-effort no-ops elsewhere.
+  // Desktop keeps its current windowed behavior.
+  const enterImmersive = useCallback(() => {
+    if (!isMobile) return;
+    const el = rootRef.current;
+    // Enter fullscreen first, then lock the orientation: several browsers
+    // (e.g. Chrome on Android) reject orientation.lock unless the document is
+    // already fullscreen. enterFullscreen never rejects (it swallows its own
+    // errors), so the lock is always attempted; both are best-effort no-ops
+    // where unsupported. Still kicked off from inside the gesture handler.
+    const fullscreen = el ? enterFullscreen(el) : Promise.resolve();
+    void fullscreen.then(() => lockLandscape());
+  }, [isMobile]);
+
   const initGame = useCallback(() => {
     if (canvasRef.current && !gameRef.current) {
       gameRef.current = new Game(canvasRef.current, {
@@ -65,6 +173,7 @@ function App() {
         onWaveChange: (n) => setWaveNum(n),
         onBossArenaChange: (active) => setBossArena(active),
         onScoreChange: setScore,
+        onKillsChange: setKills,
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
@@ -75,6 +184,7 @@ function App() {
   }, [soundEnabled]);
 
   const startGame = () => {
+    enterImmersive();
     if (gameRef.current) {
       gameRef.current.restart();
     } else {
@@ -83,6 +193,7 @@ function App() {
   };
 
   const restartGame = () => {
+    enterImmersive();
     gameRef.current?.restart();
   };
 
@@ -101,6 +212,23 @@ function App() {
       gameRef.current = null;
     };
   }, [initGame]);
+
+  // Task 1: leave fullscreen and release the orientation lock whenever we return
+  // to the menu, and on unmount — so the app never gets stuck in forced landscape
+  // fullscreen. Both calls are no-ops when nothing is locked / fullscreen.
+  useEffect(() => {
+    if (gameState === 'menu') {
+      void exitFullscreen();
+      unlockOrientation();
+    }
+  }, [gameState]);
+
+  useEffect(() => {
+    return () => {
+      void exitFullscreen();
+      unlockOrientation();
+    };
+  }, []);
 
   const renderHud = () => {
     // Stamina bar fill — red when low, warm gold while bursting, amber
@@ -123,7 +251,7 @@ function App() {
             Wave: {waveNum}
           </div>
           <div className="text-xs text-amber-300">
-            Enemies: {enemiesRemaining}
+            Killed: {kills}
           </div>
         </div>
 
@@ -155,13 +283,6 @@ function App() {
               Burst {burst.multiplier.toFixed(2)}×
             </div>
           )}
-        </div>
-
-        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-          <div className="flex items-center gap-2 text-sm">
-            <Trophy size={16} className="text-yellow-400" />
-            <span>Score: {score}</span>
-          </div>
         </div>
 
         <button
@@ -233,7 +354,26 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4">
+    <div
+      ref={rootRef}
+      className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4"
+    >
+      {/* Task 1 CSS fallback: when the orientation lock is unavailable (iOS
+          Safari) and the device is held portrait mid-run, prompt a rotate
+          rather than squashing the fixed-aspect canvas. Gated off the menu so
+          the player can still reach "Start Adventure" (which fires the lock). */}
+      {isMobile && isPortrait && gameState !== 'menu' && (
+        <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col items-center justify-center text-center px-8 select-none">
+          <RotateCw size={56} className="text-amber-400 mb-4 animate-pulse" />
+          <p className="text-amber-200 text-xl font-bold font-mono">
+            Rotate your device
+          </p>
+          <p className="text-amber-300/80 text-sm font-mono mt-2">
+            Jungle Archer plays in landscape
+          </p>
+        </div>
+      )}
+
       {isMobile && gameState !== 'menu' && (
         <div className="w-full max-w-[936px]">
           {gameState === 'playing' && renderHud()}
