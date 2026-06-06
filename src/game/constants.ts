@@ -62,7 +62,7 @@ export const DEFAULT_SPAWN_INTERVAL_MS = 1500;
 // Date.now) — Invariant 8.
 
 // Grace period after the player enters the first room before wave 1 fires.
-export const RUN_START_GRACE_MS = 10_000;
+export const RUN_START_GRACE_MS = 2_000;
 
 // Spawn grace for the opening the player just walked through on a room-to-room
 // transition. A hard cut resumes the wave timer on the same frame the player
