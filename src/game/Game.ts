@@ -47,7 +47,6 @@ import {
   ARROW_COOLDOWN_MS,
   STAMINA_MAX,
   DASH_DISTANCE_PX,
-  DEFAULT_INTER_WAVE_LULL_MS,
   CENTER_SPAWN,
   EXIT_APPROACH_RANGE_PX,
   EXIT_DEPART_GRACE_MS,
@@ -288,7 +287,6 @@ export class Game {
         earlyPool: WAVE_POOL_EARLY,
         midPool: WAVE_POOL_MID,
         latePool: WAVE_POOL_LATE,
-        interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
       },
       {
         onGraceStart: (durMs) =>

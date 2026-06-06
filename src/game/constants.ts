@@ -88,8 +88,13 @@ export const EXIT_DEPART_GRACE_MS = 1000; // small rolling hold while approachin
 
 // Random pause between triplets, rolled uniformly in [min, max] each time a
 // triplet's third (test) wave finishes emitting.
-export const TRIPLET_BREAK_MIN_MS = 15_000;
-export const TRIPLET_BREAK_MAX_MS = 60_000;
+export const TRIPLET_BREAK_MIN_MS = 10_000;
+export const TRIPLET_BREAK_MAX_MS = 30_000;
+
+// Random lull between waves within a triplet (setup→add, add→test), rolled
+// uniformly in [min, max] each time a non-test wave finishes emitting.
+export const INTER_WAVE_LULL_MIN_MS = 2_000;
+export const INTER_WAVE_LULL_MAX_MS = 6_000;
 
 // Soft cap on per-wave enemy count. Soft: when the last group drawn pushes
 // the running total over the cap, the whole group still spawns (overshoot).
