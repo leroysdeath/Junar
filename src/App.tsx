@@ -152,6 +152,22 @@ function App() {
   // friendly decision menus and stay upright.
   const forceLandscape = isMobile && isPortrait && gameState === 'playing';
 
+  // On mobile during play, cap the canvas so the *whole* board fits the
+  // landscape frame instead of being sized purely by width (which overflowed
+  // the rotated frame's height and clipped the top/bottom of the board). The
+  // cap is the smaller of the frame's width and the width implied by fitting
+  // the 928×544 board into the frame's height; the two axes swap when we've
+  // force-rotated the frame 90°. p-4 (1rem each side) is subtracted so the
+  // board clears the root padding.
+  const canvasFitStyle =
+    isMobile && gameState === 'playing'
+      ? {
+          maxWidth: forceLandscape
+            ? 'min(calc(100vh - 2rem), calc((100vw - 2rem) * 928 / 544))'
+            : 'min(calc(100vw - 2rem), calc((100vh - 2rem) * 928 / 544))',
+        }
+      : undefined;
+
   const handleMobilePress = useCallback((dir: Direction) => {
     gameRef.current?.setVirtualInput(dir, true);
   }, []);
@@ -411,15 +427,21 @@ function App() {
           : undefined
       }
     >
-      {isMobile && gameState !== 'menu' && (
+      {/* Game Over / Victory are portrait-friendly decision menus and stay as a
+          block above the canvas on mobile. The playing HUD is NOT here anymore —
+          it's a semi-transparent overlay on the canvas (below), so it no longer
+          steals layout height and break the landscape frame. */}
+      {isMobile && (gameState === 'gameOver' || gameState === 'victory') && (
         <div className="w-full max-w-[936px]">
-          {gameState === 'playing' && renderHud()}
           {gameState === 'gameOver' && renderGameOverContent()}
           {gameState === 'victory' && renderVictoryContent()}
         </div>
       )}
 
-      <div className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden w-full max-w-[936px]">
+      <div
+        className="relative bg-black rounded-lg shadow-2xl border-4 border-amber-600 overflow-hidden w-full max-w-[936px]"
+        style={canvasFitStyle}
+      >
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -428,9 +450,12 @@ function App() {
           style={{ imageRendering: 'pixelated' }}
         />
 
-        {/* Game UI Overlay (desktop only — mobile renders above the canvas) */}
-        {!isMobile && gameState === 'playing' && (
-          <div className="absolute top-4 left-4 right-4">
+        {/* Game UI Overlay — semi-transparent stats drawn on top of the canvas,
+            on both desktop and mobile. On mobile the extra right padding keeps
+            the stamina/sound cluster clear of the A/B action buttons pinned
+            top-right. */}
+        {gameState === 'playing' && (
+          <div className={`absolute top-4 left-4 right-4 ${isMobile ? 'pr-32' : ''}`}>
             {renderHud()}
           </div>
         )}
