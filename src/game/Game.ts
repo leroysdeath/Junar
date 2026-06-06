@@ -25,7 +25,7 @@ import {
   LevelData,
   StaticCandidateKind,
 } from './types';
-import { SNAKE_PANTHER_POOL, SNAKE_PANTHER_BEAR_POOL } from './levels';
+import { WAVE_POOL_EARLY, WAVE_POOL_MID, WAVE_POOL_LATE } from './levels';
 import {
   generateRunMap,
   roomAt,
@@ -285,8 +285,9 @@ export class Game {
   private createScheduler(): GlobalWaveScheduler {
     return new GlobalWaveScheduler(
       {
-        snakePantherPool: SNAKE_PANTHER_POOL,
-        snakePantherBearPool: SNAKE_PANTHER_BEAR_POOL,
+        earlyPool: WAVE_POOL_EARLY,
+        midPool: WAVE_POOL_MID,
+        latePool: WAVE_POOL_LATE,
         interWaveLullMs: DEFAULT_INTER_WAVE_LULL_MS,
       },
       {

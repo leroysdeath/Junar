@@ -13,7 +13,8 @@ import {
   TRIPLET_BREAK_MIN_MS,
   TRIPLET_BREAK_MAX_MS,
   WAVE_ENEMYCOUNT_CAP,
-  TYPE_UNLOCK_BEAR_WAVE,
+  WAVE_POOL_MID_UNLOCK,
+  WAVE_POOL_LATE_UNLOCK,
 } from './constants';
 
 export interface SpawnRequest {
@@ -360,9 +361,10 @@ export class WaveScheduler {
 // listeners or timers, so it needs no disposal.
 
 export interface GlobalSchedulerConfig {
-  snakePantherPool: SpawnTemplate[];      // waves 1–6
-  snakePantherBearPool: SpawnTemplate[];  // waves TYPE_UNLOCK_BEAR_WAVE+
-  interWaveLullMs: number;                // short lull within a triplet
+  earlyPool: SpawnTemplate[];  // waves 1 .. WAVE_POOL_MID_UNLOCK-1
+  midPool: SpawnTemplate[];    // waves WAVE_POOL_MID_UNLOCK .. WAVE_POOL_LATE_UNLOCK-1
+  latePool: SpawnTemplate[];   // waves WAVE_POOL_LATE_UNLOCK+
+  interWaveLullMs: number;     // short lull within a triplet
 }
 
 export interface GlobalSchedulerCallbacks {
@@ -577,9 +579,11 @@ export class GlobalWaveScheduler {
     this.currentEnemyCount = params.enemyCount;
     this.currentIntervalMs = params.spawnIntervalMs;
     this.currentPool =
-      n >= TYPE_UNLOCK_BEAR_WAVE
-        ? this.config.snakePantherBearPool
-        : this.config.snakePantherPool;
+      n >= WAVE_POOL_LATE_UNLOCK
+        ? this.config.latePool
+        : n >= WAVE_POOL_MID_UNLOCK
+          ? this.config.midPool
+          : this.config.earlyPool;
     this.callbacks.onWaveStart?.(n, params.triplet, params.beatRole);
   }
 

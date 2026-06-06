@@ -146,6 +146,17 @@ const T_1PANTHER_6SNAKE: SpawnTemplate = {
     ['snake', 'snake'],
   ],
 };
+const T_3SNAKE: SpawnTemplate = {
+  id: 'g-3snake',
+  rows: [['snake', 'snake', 'snake']],
+};
+const T_6SNAKE: SpawnTemplate = {
+  id: 'g-6snake',
+  rows: [
+    ['snake', 'snake', 'snake'],
+    ['snake', 'snake', 'snake'],
+  ],
+};
 const T_9SNAKE: SpawnTemplate = {
   id: 'g-9snake',
   rows: [
@@ -180,10 +191,10 @@ const T_2PANTHER_1BEAR: SpawnTemplate = {
   rows: [['panther', 'bear', 'panther']],
 };
 
-// Type-gated group pools. SNAKE_PANTHER_POOL has no bears (used by L1 and,
-// in the global scheduler, by waves 1–6). SNAKE_PANTHER_BEAR_POOL adds the
-// bear groups (used by L2/L3 and, globally, by waves 7+). Exported so the
-// GlobalWaveScheduler can select by global wave number (TYPE_UNLOCK_BEAR_WAVE).
+// Type-gated group pools. SNAKE_PANTHER_POOL has no bears; SNAKE_PANTHER_BEAR_POOL
+// adds the bear groups. These remain the pools for the legacy per-level
+// LevelData (L1 uses snake+panther, L2/L3 add bears); the global scheduler now
+// uses the wave-tiered pools below instead.
 export const SNAKE_PANTHER_POOL: SpawnTemplate[] = [
   T_1PANTHER,
   T_2PANTHER,
@@ -196,6 +207,28 @@ export const SNAKE_PANTHER_BEAR_POOL: SpawnTemplate[] = [
   T_1BEAR,
   T_1BEAR_4SNAKE,
   T_2PANTHER_1BEAR,
+];
+
+// Wave-tiered group pools for the GlobalWaveScheduler. It selects by global
+// wave number (constants WAVE_POOL_MID_UNLOCK / WAVE_POOL_LATE_UNLOCK):
+//   waves 1–4  : EARLY  — 3-snake, 6-snake, 1-panther only
+//   waves 5–8  : MID    — adds 2-panther, 1-panther+6-snake, 9-snake
+//   waves 9+   : LATE   — adds 1-bear, 12-snake (bears unlock here)
+export const WAVE_POOL_EARLY: SpawnTemplate[] = [
+  T_3SNAKE,
+  T_6SNAKE,
+  T_1PANTHER,
+];
+export const WAVE_POOL_MID: SpawnTemplate[] = [
+  ...WAVE_POOL_EARLY,
+  T_2PANTHER,
+  T_1PANTHER_6SNAKE,
+  T_9SNAKE,
+];
+export const WAVE_POOL_LATE: SpawnTemplate[] = [
+  ...WAVE_POOL_MID,
+  T_1BEAR,
+  T_12SNAKE,
 ];
 
 // L1 wave 1's very first draw is restricted to a 2-option mini-pool so

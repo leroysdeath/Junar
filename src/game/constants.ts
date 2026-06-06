@@ -95,9 +95,12 @@ export const TRIPLET_BREAK_MAX_MS = 60_000;
 // the running total over the cap, the whole group still spawns (overshoot).
 export const WAVE_ENEMYCOUNT_CAP = 25;
 
-// Global wave number at which bears unlock in the spawn pool. Waves 1–6 are
-// snake+panther only; waves 7+ (triplet 3 onward) add bears.
-export const TYPE_UNLOCK_BEAR_WAVE = 7;
+// Global wave numbers at which the spawn pool widens (tiered by wave number):
+//   waves 1–4  : 3-snake, 6-snake, 1-panther
+//   waves 5–8  : + 2-panther, 1-panther+6-snake, 9-snake
+//   waves 9+   : + 1-bear, 12-snake   (bears unlock here)
+export const WAVE_POOL_MID_UNLOCK = 5;
+export const WAVE_POOL_LATE_UNLOCK = 9;
 
 // --- Room grid (Step 3 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §4 (glossary), §5.1 (run structure).
