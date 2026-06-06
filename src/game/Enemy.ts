@@ -187,6 +187,18 @@ export class Enemy {
     return this.aabbAt(this.position.x, this.position.y);
   }
 
+  // True if this enemy's centred AABB would sit free of walls and of other
+  // enemies at the given cell top-left (snake-snake overlap exempt, §5.8 — via
+  // overlapsEnemy). Used by the Hunt de-aggro settlement (Step 5+6) to test
+  // candidate landing tiles before relocating a de-aggroing hunter, reusing the
+  // exact Step 2 collision rules rather than duplicating them in Game.
+  canSettleAt(cellX: number, cellY: number, level: Level, others: Enemy[]): boolean {
+    return (
+      !this.collidesWall(cellX, cellY, level) &&
+      !this.overlapsEnemy(cellX, cellY, others)
+    );
+  }
+
   private aabbAt(cellX: number, cellY: number): Rectangle {
     const offset = (TILE_SIZE - this.size) / 2;
     return {

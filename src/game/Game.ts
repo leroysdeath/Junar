@@ -23,6 +23,7 @@ import {
   RunMap,
   BandSpec,
   LevelData,
+  StaticCandidateKind,
 } from './types';
 import { SNAKE_PANTHER_POOL, SNAKE_PANTHER_BEAR_POOL } from './levels';
 import {
@@ -50,6 +51,12 @@ import {
   CENTER_SPAWN,
   EXIT_APPROACH_RANGE_PX,
   EXIT_DEPART_GRACE_MS,
+  STATIC_BASE_DENSITY,
+  BOSS_HALO_RADIUS,
+  WAVE_PER_C_INCREMENT,
+  STATIC_SMALL_SNAKE_WEIGHT,
+  ENTRY_BAND_GRACE_MIN_MS,
+  ENTRY_BAND_GRACE_MAX_MS,
 } from './constants';
 
 type GameOverReason =
@@ -87,6 +94,16 @@ const dashDirectionFromFacing = (facing: Facing): Vector2 => {
       return { x: -1, y: 0 };
   }
 };
+
+// Room-grid step directions (edge + grid delta), used by the de-aggro
+// settlement BFS to walk outward through connected rooms. Mirrors RoomGrid's
+// internal DIRS, kept local because that one isn't exported.
+const ROOM_DIRS: ReadonlyArray<readonly [Edge, number, number]> = [
+  ['N', 0, -1],
+  ['S', 0, 1],
+  ['W', -1, 0],
+  ['E', 1, 0],
+];
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -156,6 +173,9 @@ export class Game {
   // rooms get wall collision without rebuilding a Level every frame. Keyed by
   // roomKey; cleared whenever the map regenerates.
   private roomLevels = new Map<number, Level>();
+  // Room keys whose per-run statics have already been rolled (§5.10). First
+  // entry rolls + locks them; revisits never re-roll (§5.13). Reset each run.
+  private enteredRooms = new Set<number>();
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -173,6 +193,11 @@ export class Game {
     this.renderer = new Renderer(this.ctx);
     this.soundManager = new SoundManager(callbacks.soundEnabled);
     this.collisionManager = new CollisionManager();
+
+    // Replace Hunt's settle-in-place stub with the map-wide BFS placement
+    // (Steps 5+6, §5.13). Registered once; Hunt holds the reference for the
+    // life of the Game instance (no per-run reset — Hunt is stateless across runs).
+    this.hunt.registerSettlementCallback((enemy) => this.settleDeaggroedHunter(enemy));
 
     // Build an initial map so the menu backdrop shows the real anchor-1 room.
     this.regenerateMap();
@@ -230,6 +255,7 @@ export class Game {
     this.arrows = [];
     this.lastArrowTime = 0;
     this.roomEnemies = new Map();
+    this.enteredRooms = new Set();
     this.enemies = [];
     this.hasLineOfSight = false;
     this.globalWaveScheduler = this.createScheduler();
@@ -352,6 +378,61 @@ export class Game {
     });
   }
 
+  // Push the player off any enemy occupying their landing position. Steps inward
+  // along the entry axis (away from the edge they arrived at) to the first tile
+  // whose 32 px AABB clears every enemy and isn't a wall; bails (keeps the
+  // original landing) if none is found within the room — vanishingly unlikely.
+  // Overlap is tested with the exact center-distance rule checkCollisions uses,
+  // so a cleared tile is genuinely non-lethal this frame.
+  private clearLandingZone(entryPos: Vector2): void {
+    if (this.enemies.length === 0) return;
+    const overlapsEnemy = (p: Vector2): boolean => {
+      const cx = p.x + TILE_SIZE / 2;
+      const cy = p.y + TILE_SIZE / 2;
+      for (const e of this.enemies) {
+        const ep = e.getPosition();
+        if (
+          Math.abs(ep.x + TILE_SIZE / 2 - cx) < TILE_SIZE / 2 &&
+          Math.abs(ep.y + TILE_SIZE / 2 - cy) < TILE_SIZE / 2
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+    if (!overlapsEnemy(entryPos)) return;
+
+    // Inward normal from the edge the player landed flush against (mirrors
+    // bandsForRoom's entryDirection). No flush edge (e.g. CENTER_SPAWN) → no
+    // inward axis to walk, so leave the player put.
+    let dx = 0;
+    let dy = 0;
+    if (entryPos.x <= 0) dx = 1;
+    else if (entryPos.x >= CANVAS_WIDTH - PLAYER_SIZE) dx = -1;
+    else if (entryPos.y <= 0) dy = 1;
+    else if (entryPos.y >= CANVAS_HEIGHT - PLAYER_SIZE) dy = -1;
+    if (dx === 0 && dy === 0) return;
+
+    const col0 = Math.floor((entryPos.x + TILE_SIZE / 2) / TILE_SIZE);
+    const row0 = Math.floor((entryPos.y + TILE_SIZE / 2) / TILE_SIZE);
+    for (let step = 1; step < GRID_WIDTH; step++) {
+      const col = col0 + dx * step;
+      const row = row0 + dy * step;
+      if (col < 0 || row < 0 || col >= GRID_WIDTH || row >= GRID_HEIGHT) break;
+      if (this.level.isWall(col, row)) break;
+      const candidate = { x: col * TILE_SIZE, y: row * TILE_SIZE };
+      if (!overlapsEnemy(candidate)) {
+        this.player.setPosition(candidate);
+        this.logger.log('level', 'landingNudge', {
+          from: { x: round2(entryPos.x), y: round2(entryPos.y) },
+          to: candidate,
+        });
+        return;
+      }
+    }
+    // Nothing clear inward — leave the player at the doorway (unchanged).
+  }
+
   // Switch the active room. Loads the room's level, wave bands and parked
   // enemies, drops the player at `entryPos`, and emits HUD signals. Used at run
   // start (entryPos = CENTER_SPAWN) and on every transition.
@@ -360,7 +441,37 @@ export class Game {
     const def = this.currentRoomDef();
     this.level = this.levelFromRoom(def);
     this.player.setPosition(entryPos);
-    this.enemies = this.roomEnemies.get(this.roomKey(coord)) ?? [];
+
+    // First entry rolls this room's per-run statics from the template
+    // candidates (§5.10) and buckets them as dormant sitters; locked thereafter
+    // (no re-roll on revisit, §5.13). The doTransition caller then runs
+    // Hunt.onPlayerEnteredRoom, which starts each sitter's 1 s aggro delay and
+    // flips any parked hunter back to active.
+    // Anchors (incl. the boss arena) carry no candidates, so this is a no-op there.
+    const key = this.roomKey(coord);
+    if (!this.enteredRooms.has(key)) {
+      this.enteredRooms.add(key);
+      const statics = this.rollRoomStatics(coord, def);
+      // MERGE into any bucket already parked here — never replace it. A cross-
+      // room hunter (settleHunterIntoRoom) or a de-aggroed settler
+      // (rebucketSettledEnemy) can occupy a room BEFORE the player first enters
+      // it, and neither path touches enteredRooms; overwriting the bucket would
+      // silently despawn that enemy (violates §5.13, no-despawn).
+      if (statics.length > 0) {
+        const bucket = this.roomEnemies.get(key);
+        if (bucket) bucket.push(...statics);
+        else this.roomEnemies.set(key, statics);
+      }
+    }
+    this.enemies = this.roomEnemies.get(key) ?? [];
+    // Landing safety: if the player materializes on top of an enemy already
+    // parked at the entry opening (a dormant static rolled onto the doorway, or
+    // a hunter parked there), nudge the PLAYER one tile inward to the first
+    // clear floor tile. Covers the "walked in and instantly touched a sitter"
+    // death that the entry-band grace (fresh spawns only) can't. No enemy is
+    // moved/despawned and no i-frames are granted, so the contact-death
+    // contract is untouched. No-op at run start (empty room) and clear doorways.
+    this.clearLandingZone(entryPos);
     this.arrows = []; // arrows don't carry across a hard cut
     this.hasLineOfSight = false;
     this.globalWaveScheduler?.setBands(this.bandsForRoom(def));
@@ -530,6 +641,23 @@ export class Game {
     // and the run-long cadence resumes intact.
     if (!this.inBossArena) {
       this.onRoomTransitionEnd(now);
+      // Spawn grace for the opening the player just walked through. The wave
+      // timer resumes on the same frame as the hard cut, so without this a wave
+      // could drip into the entry band right on top of the arriving player
+      // (unfair death). Hold only the entry-edge band(s) for a fresh 3-5 s roll
+      // each transition; the room's other openings stay live. Skipped for the
+      // boss arena, where spawns are already frozen for the whole visit.
+      const entryEdge = oppositeEdge(t.edge);
+      const entryBandIndices: number[] = [];
+      this.currentRoomDef().openings.forEach((o, i) => {
+        if (o.edge === entryEdge) entryBandIndices.push(i);
+      });
+      if (entryBandIndices.length > 0) {
+        const graceMs =
+          ENTRY_BAND_GRACE_MIN_MS +
+          Math.random() * (ENTRY_BAND_GRACE_MAX_MS - ENTRY_BAND_GRACE_MIN_MS);
+        this.globalWaveScheduler?.delayBands(entryBandIndices, now + graceMs);
+      }
     }
     this.logger.log('level', 'roomTransition', {
       edge: t.edge,
@@ -795,6 +923,188 @@ export class Game {
       x: Math.max(lo, Math.min(pos.x, hi)),
       y: exitEdge === 'S' ? 0 : CANVAS_HEIGHT - TILE_SIZE,
     };
+  }
+
+  // ── Static spawning + de-aggro settlement (Steps 5+6, roadmap §5.9–5.13) ──
+
+  // Roll a connector room's per-run statics on first entry (§5.10). Picks
+  // `actual` candidate tiles uniformly at random and rolls a type for each,
+  // returning dormant Enemies stamped with this room. Empty when the room has
+  // no candidates (anchors, including the boss arena — which never gains
+  // statics, since the boss is the whole encounter).
+  private rollRoomStatics(coord: RoomGridCoord, def: RoomDef): Enemy[] {
+    const candidates = def.candidates;
+    if (candidates.length === 0) return [];
+
+    // B+C density (§5.10). bossDist drives the proximity halo (B); the global
+    // wave number drives the run-progress ramp (C). STATIC_BASE_DENSITY carries
+    // the §5.10 base-vs-cap reconciliation (candidate_count is the per-room cap).
+    const bossDist =
+      Math.abs(coord.col - this.runMap.bossCoord.col) +
+      Math.abs(coord.row - this.runMap.bossCoord.row);
+    const waveNum = this.globalWaveScheduler?.currentWaveNum() ?? 0;
+    const bMod = Math.max(0, BOSS_HALO_RADIUS - bossDist);
+    const cMod = Math.floor(waveNum / WAVE_PER_C_INCREMENT);
+    const target = STATIC_BASE_DENSITY + bMod + cMod;
+    const actual = Math.min(target, candidates.length);
+
+    // Uniform random pick of `actual` candidates: a partial Fisher–Yates over a
+    // shallow copy, then take the first `actual`. Math.random is spawn-placement
+    // randomness, not simulation timing, so Invariant 8 (no Date.now in the sim)
+    // doesn't apply — same rationale as Enemy.jitter's shuffle.
+    const pool = candidates.slice();
+    for (let i = 0; i < actual; i++) {
+      const j = i + Math.floor(Math.random() * (pool.length - i));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    const statics: Enemy[] = [];
+    for (let i = 0; i < actual; i++) {
+      const cand = pool[i];
+      const enemy = new Enemy(
+        { ...cand.tile },
+        this.rollStaticType(cand.kind),
+        this.nextEnemyId++,
+      );
+      enemy.setHuntState('dormant');
+      enemy.setCurrentRoom(coord);
+      statics.push(enemy);
+    }
+
+    this.logger.log('spawn', 'statics', {
+      room: { ...coord },
+      bossDist,
+      waveNum,
+      candidates: candidates.length,
+      rolled: actual,
+    });
+    return statics;
+  }
+
+  // Roll a static's type from its candidate kind (§5.9). 's' (small) favours
+  // snakes over gibbons 80/20; 'S' (any 1-tile type) is snake/gibbon/panther
+  // uniform. Bears (34 px) are never placed statically — they exceed a tile and
+  // come only from waves.
+  private rollStaticType(kind: StaticCandidateKind): EnemyType {
+    if (kind === 'small') {
+      return Math.random() < STATIC_SMALL_SNAKE_WEIGHT ? 'snake' : 'gibbon';
+    }
+    const roll = Math.floor(Math.random() * 3);
+    return roll === 0 ? 'snake' : roll === 1 ? 'gibbon' : 'panther';
+  }
+
+  // Settlement resolver for a de-aggroing hunter (registered with Hunt,
+  // replacing its settle-in-place stub). Per §5.13: take the nearest
+  // AABB-compatible open tile in the hunter's current room; if none fits there,
+  // BFS outward through connected rooms (the same overlap adjacency the player's
+  // transitions use) and accept the first room with a fit. Re-buckets the enemy
+  // + syncs its currentRoom when it lands in a different room — Hunt only writes
+  // the returned position and flips the state to dormant afterward. No despawn:
+  // if nothing fits anywhere reachable it holds in place (§5.13).
+  private settleDeaggroedHunter(enemy: Enemy): Vector2 {
+    const startRoom = enemy.getCurrentRoom();
+    const startKey = this.roomKey(startRoom);
+    const curKey = this.roomKey(this.currentRoomCoord);
+
+    const seen = new Set<number>([startKey]);
+    const queue: RoomGridCoord[] = [{ ...startRoom }];
+    let head = 0;
+    while (head < queue.length) {
+      const room = queue[head++];
+      const key = this.roomKey(room);
+      // Never settle into the room the player currently occupies. That room is
+      // "live" — its enemies are active and aliased by this.enemies, not parked
+      // in roomEnemies — so dropping a de-aggroed (dormant) hunter there would
+      // both strand a frozen, never-waking sitter in the player's lap and desync
+      // the obstacle list findFreeTileInRoom reads. The hunter de-aggroed because
+      // it is far from the player (startRoom is Manhattan > HUNT_RANGE away), so
+      // it rests away from them; we still traverse THROUGH the current room to
+      // reach rooms beyond it. (Only reachable under impossible full saturation.)
+      if (key !== curKey) {
+        const spot = this.findFreeTileInRoom(enemy, key);
+        if (spot) {
+          if (key !== startKey) this.rebucketSettledEnemy(enemy, startKey, key, room);
+          // Just teleported: drop the stale pursuit target so it re-paths cleanly
+          // if it ever re-aggros.
+          enemy.resetPathfinding();
+          return spot;
+        }
+      }
+      const def = roomAt(this.runMap, room);
+      for (const [edge, dc, dr] of ROOM_DIRS) {
+        const nc = room.col + dc;
+        const nr = room.row + dr;
+        if (nc < 0 || nr < 0 || nc >= this.runMap.cols || nr >= this.runMap.rows) {
+          continue;
+        }
+        const next: RoomGridCoord = { col: nc, row: nr };
+        const nk = this.roomKey(next);
+        if (seen.has(nk)) continue;
+        if (!roomsConnect(def, edge, roomAt(this.runMap, next))) continue;
+        seen.add(nk);
+        queue.push(next);
+      }
+    }
+
+    // Unreachable in practice (a room holds ~200 floor tiles and a snake is
+    // 4 px), but never despawn (§5.13): leave the hunter exactly where it is.
+    return enemy.getPosition();
+  }
+
+  // Nearest open tile (cell top-left) in the room keyed by `key` whose centred
+  // AABB fits `enemy` clear of walls and of that room's other enemies
+  // (snake-snake exempt), ranked by squared pixel distance from the enemy's
+  // current position. null if the room offers no fit. The enemy may itself be
+  // parked in this room's bucket — canSettleAt's overlap test skips self by
+  // identity, so it never blocks itself.
+  // Precondition: `key` is never the player's CURRENT room (settleDeaggroedHunter
+  // skips it). That matters because a statics-free current room isn't bucketed in
+  // roomEnemies — its live enemies are aliased by this.enemies (see managedEnemies)
+  // — so roomEnemies.get(key) is the authoritative obstacle list only for the
+  // parked / unvisited rooms this is actually called on.
+  private findFreeTileInRoom(enemy: Enemy, key: number): Vector2 | null {
+    const level = this.levelForRoomKey(key);
+    const others = this.roomEnemies.get(key) ?? [];
+    const from = enemy.getPosition();
+
+    let best: Vector2 | null = null;
+    let bestDist = Infinity;
+    for (let row = 0; row < GRID_HEIGHT; row++) {
+      for (let col = 0; col < GRID_WIDTH; col++) {
+        if (level.isWall(col, row)) continue;
+        const x = col * TILE_SIZE;
+        const y = row * TILE_SIZE;
+        const d = (x - from.x) ** 2 + (y - from.y) ** 2;
+        if (d >= bestDist) continue;
+        if (!enemy.canSettleAt(x, y, level, others)) continue;
+        bestDist = d;
+        best = { x, y };
+      }
+    }
+    return best;
+  }
+
+  // Move a settled hunter out of its old room bucket and into `toRoom`'s,
+  // syncing its currentRoom. Settlement never targets the player's current room
+  // (settleDeaggroedHunter skips it), so toRoom is always a parked room — the
+  // enemy goes into that room's bucket (created if it's the first occupant).
+  // Only invoked when settlement relocates the enemy across rooms (the common
+  // in-place settle never re-buckets).
+  private rebucketSettledEnemy(
+    enemy: Enemy,
+    fromKey: number,
+    toKey: number,
+    toRoom: RoomGridCoord,
+  ): void {
+    const fromList = this.roomEnemies.get(fromKey);
+    if (fromList) {
+      const i = fromList.indexOf(enemy);
+      if (i >= 0) fromList.splice(i, 1);
+    }
+    enemy.setCurrentRoom(toRoom);
+    const toList = this.roomEnemies.get(toKey);
+    if (toList) toList.push(enemy);
+    else this.roomEnemies.set(toKey, [enemy]);
   }
 
   private gameLoop(currentTime: number) {
