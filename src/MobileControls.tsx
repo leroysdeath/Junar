@@ -7,6 +7,36 @@ interface MobileControlsProps {
   onPress: (dir: Direction) => void;
   onRelease: (dir: Direction) => void;
   onActionPress: (action: Action) => void;
+  // True when App has force-rotated the game 90° CW into landscape (portrait
+  // phone, no real orientation lock). The joystick anchors to that rotated root,
+  // so pointer coordinates must be re-mapped to keep the stick under the finger
+  // and the swipe directions aligned with the landscape view.
+  forceLandscape: boolean;
+}
+
+// Re-express a screen-space point in the force-rotated root's local coordinate
+// frame so a `fixed` child renders under the finger. The root is rotated 90° CW
+// and anchored at left:100vw/top:0, which makes screen (x, y) → local
+// (left: y, top: innerWidth − x). Identity when not rotated.
+function screenPointToLocal(
+  x: number,
+  y: number,
+  forceLandscape: boolean
+): { left: number; top: number } {
+  if (!forceLandscape) return { left: x, top: y };
+  return { left: y, top: window.innerWidth - x };
+}
+
+// Map a screen-space displacement to the game frame (gx→right, gy→down). The
+// same 90° CW rotation swaps the axes: screen (dx, dy) → game (dy, −dx), so a
+// swipe toward the top of the landscape image registers as "up" in play.
+function vectorToGameFrame(
+  dx: number,
+  dy: number,
+  forceLandscape: boolean
+): { gx: number; gy: number } {
+  if (!forceLandscape) return { gx: dx, gy: dy };
+  return { gx: dy, gy: -dx };
 }
 
 // --- Floating-joystick tuning (Task 4) ---------------------------------------
@@ -49,13 +79,14 @@ function dirsFromVector(dx: number, dy: number): Record<Direction, boolean> {
 interface JoystickZoneProps {
   onPress: (dir: Direction) => void;
   onRelease: (dir: Direction) => void;
+  forceLandscape: boolean;
 }
 
 // The left portion of the screen is a touch zone. pointerdown spawns the
 // floating joystick at the touch point; the stick follows the finger (clamped),
 // and we keep pointer capture so drift off the origin (even onto the right half)
 // keeps tracking until the finger lifts.
-function JoystickZone({ onPress, onRelease }: JoystickZoneProps) {
+function JoystickZone({ onPress, onRelease, forceLandscape }: JoystickZoneProps) {
   const pointerIdRef = useRef<number | null>(null);
   const originRef = useRef<{ x: number; y: number } | null>(null);
   // Which cardinals are currently asserted, so we only emit press/release on
@@ -101,7 +132,11 @@ function JoystickZone({ onPress, onRelease }: JoystickZoneProps) {
     const dy = e.clientY - originRef.current.y;
     const mag = Math.hypot(dx, dy);
     const scale = mag > JOYSTICK_MAX_RADIUS_PX ? JOYSTICK_MAX_RADIUS_PX / mag : 1;
-    applyDirections(dirsFromVector(dx, dy));
+    // Directions are computed in the game frame so swipes match what the player
+    // sees; the visual stick still tracks the raw screen displacement (sx/sy),
+    // re-mapped to the rotated root only at render time.
+    const { gx, gy } = vectorToGameFrame(dx, dy, forceLandscape);
+    applyDirections(dirsFromVector(gx, gy));
     setStick((prev) =>
       prev ? { ...prev, sx: dx * scale, sy: dy * scale } : prev
     );
@@ -134,30 +169,41 @@ function JoystickZone({ onPress, onRelease }: JoystickZoneProps) {
       onPointerCancel={endPointer}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {stick && (
-        <>
-          <div
-            className="fixed rounded-full border-2 border-amber-300/50 bg-amber-200/10 pointer-events-none"
-            style={{
-              left: stick.ox,
-              top: stick.oy,
-              width: JOYSTICK_BASE_PX,
-              height: JOYSTICK_BASE_PX,
-              transform: 'translate(-50%, -50%)',
-            }}
-          />
-          <div
-            className="fixed rounded-full bg-amber-400/60 border-2 border-amber-200/70 pointer-events-none"
-            style={{
-              left: stick.ox + stick.sx,
-              top: stick.oy + stick.sy,
-              width: JOYSTICK_STICK_PX,
-              height: JOYSTICK_STICK_PX,
-              transform: 'translate(-50%, -50%)',
-            }}
-          />
-        </>
-      )}
+      {stick && (() => {
+        // ox/oy and the clamped sx/sy are stored in screen space; map both the
+        // ring origin and the stick tip into the (possibly rotated) root frame
+        // so they render under the finger in landscape and portrait alike.
+        const base = screenPointToLocal(stick.ox, stick.oy, forceLandscape);
+        const tip = screenPointToLocal(
+          stick.ox + stick.sx,
+          stick.oy + stick.sy,
+          forceLandscape
+        );
+        return (
+          <>
+            <div
+              className="fixed rounded-full border-2 border-amber-300/50 bg-amber-200/10 pointer-events-none"
+              style={{
+                left: base.left,
+                top: base.top,
+                width: JOYSTICK_BASE_PX,
+                height: JOYSTICK_BASE_PX,
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+            <div
+              className="fixed rounded-full bg-amber-400/60 border-2 border-amber-200/70 pointer-events-none"
+              style={{
+                left: tip.left,
+                top: tip.top,
+                width: JOYSTICK_STICK_PX,
+                height: JOYSTICK_STICK_PX,
+                transform: 'translate(-50%, -50%)',
+              }}
+            />
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -192,17 +238,23 @@ export function MobileControls({
   onPress,
   onRelease,
   onActionPress,
+  forceLandscape,
 }: MobileControlsProps) {
   return (
     <>
       {/* Movement: floating joystick over the left half of the screen (Task 4). */}
-      <JoystickZone onPress={onPress} onRelease={onRelease} />
+      <JoystickZone
+        onPress={onPress}
+        onRelease={onRelease}
+        forceLandscape={forceLandscape}
+      />
 
       {/* Actions: A (dash) / B (burst) pinned to the upper-right, semi-transparent
           (Task 5). z-50 keeps them above the mobile HUD (z-auto) and the
           "Reached Boss" banner (z-10, also pointer-events-none); the top offset
-          clears the top HUD bar. The rotate-device overlay (z-60) still covers
-          them in portrait, which is intended. */}
+          clears the top HUD bar. When the root is force-rotated into landscape
+          these `fixed` buttons re-anchor to that rotated frame, so "upper-right"
+          stays upper-right of the landscape view. */}
       <div className="fixed top-24 right-3 z-50 flex gap-3 select-none">
         <ActionButton action="a" label="A" onActionPress={onActionPress} />
         <ActionButton action="b" label="B" onActionPress={onActionPress} />
