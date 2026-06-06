@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, RotateCw, Volume2, VolumeX, Target, Zap } from 'lucide-react';
+import { Play, RotateCcw, Volume2, VolumeX, Target, Zap } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
@@ -26,9 +26,9 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
-// Track portrait orientation so we can prompt the player to rotate when the
-// orientation lock is unavailable (e.g. iOS Safari) — the CSS fallback that
-// keeps us from squashing the fixed-aspect canvas.
+// Track portrait orientation so we can force the canvas into landscape via a CSS
+// rotation when the device is held portrait and the real orientation lock is
+// unavailable (e.g. iOS Safari, which rejects screen.orientation.lock).
 function useIsPortrait(): boolean {
   const query = '(orientation: portrait)';
   const get = () =>
@@ -38,9 +38,20 @@ function useIsPortrait(): boolean {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mql = window.matchMedia(query);
-    const onChange = (e: MediaQueryListEvent) => setIsPortrait(e.matches);
-    mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
+    // Re-read the media query rather than trusting the change event's payload:
+    // iOS Safari has historically fired stale/no MediaQueryList change events on
+    // rotation, which left the old "rotate your device" prompt stuck on screen
+    // after the user turned the phone. Listening to resize/orientationchange as
+    // well and recomputing from matchMedia keeps the flag honest everywhere.
+    const sync = () => setIsPortrait(get());
+    mql.addEventListener('change', sync);
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', sync);
+    return () => {
+      mql.removeEventListener('change', sync);
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+    };
   }, []);
 
   return isPortrait;
@@ -51,8 +62,8 @@ function useIsPortrait(): boolean {
 // try/catch so SSR/desktop and browsers that reject them (notably iOS Safari,
 // which supports neither element fullscreen nor orientation.lock) degrade to a
 // no-op. Each must be invoked from inside the user gesture or the browser
-// rejects it. The useIsPortrait "rotate your device" overlay is the fallback
-// when the lock is unavailable.
+// rejects it. When the lock is unavailable (iOS Safari), the CSS force-rotate
+// driven by useIsPortrait keeps the game in landscape regardless.
 async function enterFullscreen(el: Element): Promise<void> {
   try {
     if (
@@ -99,7 +110,7 @@ async function lockLandscape(): Promise<void> {
       await o.lock('landscape');
     }
   } catch {
-    // iOS Safari/desktop reject — the rotate overlay covers this case.
+    // iOS Safari/desktop reject — the CSS force-rotate covers this case.
   }
 }
 
@@ -134,6 +145,12 @@ function App() {
   const [bossArena, setBossArena] = useState(false);
   const isMobile = useIsMobile();
   const isPortrait = useIsPortrait();
+  // Force-landscape: on a touch device held portrait during live play, rotate
+  // the whole game 90° via CSS so the fixed-aspect canvas always reads as
+  // landscape (the standard web fallback where orientation.lock is rejected).
+  // Gated to 'playing' — the menu and Game Over / Victory screens are portrait-
+  // friendly decision menus and stay upright.
+  const forceLandscape = isMobile && isPortrait && gameState === 'playing';
 
   const handleMobilePress = useCallback((dir: Direction) => {
     gameRef.current?.setVirtualInput(dir, true);
@@ -229,6 +246,22 @@ function App() {
       unlockOrientation();
     };
   }, []);
+
+  // While force-rotated, the root is anchored off-screen pre-transform; pin the
+  // document so that overflow never shows up as a stray scrollbar. Restored when
+  // we leave forced landscape (rotate back, return to menu, or unmount).
+  useEffect(() => {
+    if (typeof document === 'undefined' || !forceLandscape) return;
+    const root = document.documentElement;
+    const prevRoot = root.style.overflow;
+    const prevBody = document.body.style.overflow;
+    root.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      root.style.overflow = prevRoot;
+      document.body.style.overflow = prevBody;
+    };
+  }, [forceLandscape]);
 
   const renderHud = () => {
     // Stamina bar fill — red when low, warm gold while bursting, amber
@@ -356,26 +389,28 @@ function App() {
   return (
     <div
       ref={rootRef}
-      className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4"
+      className={`bg-gradient-to-br from-green-900 via-green-800 to-amber-900 flex flex-col items-center justify-center p-4 gap-4 ${
+        forceLandscape ? 'overflow-hidden' : 'min-h-screen'
+      }`}
+      // Force-landscape transform: anchor the root off the right edge, give it
+      // the viewport's swapped dimensions (100vh wide × 100vw tall), then rotate
+      // 90° clockwise about the top-left so it fills the portrait screen as a
+      // landscape frame. `fixed` descendants (the mobile joystick + action
+      // buttons) re-anchor to this transformed root and rotate along with it.
+      style={
+        forceLandscape
+          ? {
+              position: 'fixed',
+              top: 0,
+              left: '100vw',
+              width: '100vh',
+              height: '100vw',
+              transformOrigin: 'top left',
+              transform: 'rotate(90deg)',
+            }
+          : undefined
+      }
     >
-      {/* Task 1 CSS fallback: when the orientation lock is unavailable (iOS
-          Safari) and the device is held portrait mid-run, prompt a rotate
-          rather than squashing the fixed-aspect canvas. Gated to 'playing'
-          only: the menu and the Game Over / Victory screens are portrait-
-          friendly decision menus, and covering them would hide their buttons
-          (only 'playing' has a live fixed-aspect canvas that needs landscape). */}
-      {isMobile && isPortrait && gameState === 'playing' && (
-        <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col items-center justify-center text-center px-8 select-none">
-          <RotateCw size={56} className="text-amber-400 mb-4 animate-pulse" />
-          <p className="text-amber-200 text-xl font-bold font-mono">
-            Rotate your device
-          </p>
-          <p className="text-amber-300/80 text-sm font-mono mt-2">
-            Jungle Archer plays in landscape
-          </p>
-        </div>
-      )}
-
       {isMobile && gameState !== 'menu' && (
         <div className="w-full max-w-[936px]">
           {gameState === 'playing' && renderHud()}
@@ -500,6 +535,7 @@ function App() {
           onPress={handleMobilePress}
           onRelease={handleMobileRelease}
           onActionPress={handleActionPress}
+          forceLandscape={forceLandscape}
         />
       )}
     </div>
