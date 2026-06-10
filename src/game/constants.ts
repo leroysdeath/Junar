@@ -95,12 +95,23 @@ export const EXIT_DEPART_GRACE_MS = 1000; // small rolling hold while approachin
 // by-input window during which only the player-kill pass is held — auto-fire,
 // movement, walls, and arrow hits all keep running.
 
-// Player-side: suppress the contact-kill pass for this long after every room
+// Player-side: suppress the contact-kill pass for this long after a room
 // transition. The landing nudge (Game.clearLandingZone) only clears an exact
 // same-tick overlap; a fast chaser parked just inside the door could otherwise
-// kill ~2-3 frames after the cut. Too short for room-hopping abuse — enemies
-// persist per-room and hunters keep following.
+// kill ~2-3 frames after the cut.
 export const ARRIVAL_KILL_GRACE_MS = 300;
+
+// Re-arm gap for the player-side grace. A hard cut lands the player flush on
+// the destination edge still inside the opening, so the return transition is
+// available within a frame — an unconditional stamp would let doorway
+// ping-pong chain 300 ms windows into sustained contact-kill immunity while
+// auto-fire keeps farming (input-renewable i-frames, banned by the
+// los-contract skill). doTransition therefore grants a fresh window only when
+// the previous one was armed at least this long ago. Honest traversal always
+// satisfies the gap (crossing a room at 150 px/s takes well over 2 s); only
+// an immediate hop back through the same doorway goes ungraced — and those
+// threats were already on screen.
+export const ARRIVAL_GRACE_REARM_MS = 2000;
 
 // Enemy-side: a cross-room hunter that crosses into the player's CURRENT room
 // materializes at the entry opening mid-tick (parked-room enemies are never

@@ -60,6 +60,7 @@ import {
   BOSS_GROWTH_TRIGGER_PX,
   PLAYER_HURTBOX_PX,
   ARRIVAL_KILL_GRACE_MS,
+  ARRIVAL_GRACE_REARM_MS,
   HUNTER_ARRIVAL_GRACE_MS,
 } from './constants';
 
@@ -182,9 +183,13 @@ export class Game {
   private enteredRooms = new Set<number>();
   // Player-side doorway kill grace (owner-approved 2026-06-10): gameLoop-
   // currentTime deadline before which the contact-kill pass is held, stamped
-  // by doTransition on every room entry. NOT general i-frames — auto-fire,
+  // by doTransition on room entry. NOT general i-frames — auto-fire,
   // movement, and arrow hits keep running; see ARRIVAL_KILL_GRACE_MS.
+  // arrivalGraceArmedAt records when the window was last granted: a new one
+  // is armed only after ARRIVAL_GRACE_REARM_MS, so doorway ping-pong can't
+  // chain windows into sustained immunity (0 = never armed this run).
   private arrivalKillGraceUntil = 0;
+  private arrivalGraceArmedAt = 0;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -270,6 +275,7 @@ export class Game {
     // Drop any doorway kill grace left over from the previous run (e.g. dying
     // right after a transition, then restarting within the window).
     this.arrivalKillGraceUntil = 0;
+    this.arrivalGraceArmedAt = 0;
     this.globalWaveScheduler = this.createScheduler();
     this.levelStartedAt = performance.now();
     this.lastSampleFrame = this.frameCount;
@@ -641,9 +647,21 @@ export class Game {
     // contact-kill pass briefly after the hard cut. The landing nudge in
     // enterRoom only clears an exact same-tick overlap — a fast chaser parked
     // just inside the door could otherwise kill ~2-3 frames after the cut,
-    // an effectively invisible death. Applies to every transition, boss arena
-    // included (contact death is live there too).
-    this.arrivalKillGraceUntil = now + ARRIVAL_KILL_GRACE_MS;
+    // an effectively invisible death. Applies in the boss arena too (contact
+    // death is live there). Re-arm gated: the hard cut lands the player flush
+    // on the destination edge still inside the opening, so the return
+    // transition re-fires within a frame — an unconditional stamp would let
+    // doorway ping-pong chain windows into sustained contact-kill immunity
+    // (input-renewable i-frames). Grant a fresh window only when the last one
+    // was armed ≥ ARRIVAL_GRACE_REARM_MS ago; an immediate hop back through
+    // the same door goes ungraced, where the threats were already on screen.
+    if (
+      this.arrivalGraceArmedAt === 0 ||
+      now - this.arrivalGraceArmedAt >= ARRIVAL_GRACE_REARM_MS
+    ) {
+      this.arrivalKillGraceUntil = now + ARRIVAL_KILL_GRACE_MS;
+      this.arrivalGraceArmedAt = now;
+    }
     // Entering the destination: hunters that already reached it rejoin the
     // in-room pursuit (active), and dormant sitters begin their aggro delay
     // (Step 4). For the boss room this.enemies is empty, so it's a no-op there.
@@ -1715,8 +1733,10 @@ export class Game {
 
   // True when the player's 32 px AABB overlaps the corrupted growth's heart
   // (BOSS_GROWTH_TRIGGER_PX box centred on BOSS_GROWTH_CENTER). Standard AABB
-  // overlap expressed as a center-distance test, the same shape
-  // clearLandingZone uses. Only meaningful inside the boss arena — the
+  // overlap expressed as a center-distance test. Deliberately uses the full
+  // PLAYER_SIZE cell — a walk-on win trigger should be generous; the
+  // contact-kill check is the one that uses the smaller PLAYER_HURTBOX_PX
+  // core (enemyTouchesPlayer). Only meaningful inside the boss arena — the
   // caller gates on inBossArena.
   private isTouchingGrowthHeart(): boolean {
     const p = this.player.getPosition();
