@@ -86,6 +86,29 @@ export const ENTRY_BAND_GRACE_MAX_MS = 5000;
 export const EXIT_APPROACH_RANGE_PX = 96; // 3 tiles from the edge arms approach
 export const EXIT_DEPART_GRACE_MS = 1000; // small rolling hold while approaching
 
+// --- Doorway contact-kill graces (owner-approved 2026-06-10) ---
+// Two narrow fairness windows on the contact-kill check, in the same spirit as
+// the spawn-band graces above: a hard cut (or a hunter materializing) gives the
+// player zero rendered frames to react, and an invisible death breaks the
+// "death is the player's mistake" pillar. These are NOT general i-frames (still
+// banned per the los-contract skill): each is a short, positional, untunable-
+// by-input window during which only the player-kill pass is held — auto-fire,
+// movement, walls, and arrow hits all keep running.
+
+// Player-side: suppress the contact-kill pass for this long after every room
+// transition. The landing nudge (Game.clearLandingZone) only clears an exact
+// same-tick overlap; a fast chaser parked just inside the door could otherwise
+// kill ~2-3 frames after the cut. Too short for room-hopping abuse — enemies
+// persist per-room and hunters keep following.
+export const ARRIVAL_KILL_GRACE_MS = 300;
+
+// Enemy-side: a cross-room hunter that crosses into the player's CURRENT room
+// materializes at the entry opening mid-tick (parked-room enemies are never
+// drawn), so without this it could kill on the very tick it first becomes
+// visible. While the window runs the hunter cannot contact-kill and the
+// renderer draws a materialize flash over it (Renderer.renderEnemies).
+export const HUNTER_ARRIVAL_GRACE_MS = 350;
+
 // Random pause between triplets, rolled uniformly in [min, max] each time a
 // triplet's third (test) wave finishes emitting.
 export const TRIPLET_BREAK_MIN_MS = 10_000;
@@ -154,6 +177,19 @@ export const ENEMY_AABB_PX: Record<EnemyType, number> = {
   gibbon: 15, // 0.65 ft
   snake: 4, // 0.165 ft
 };
+
+// Player contact-kill hurtbox extent (px), centred inside the PLAYER_SIZE cell.
+// The kill test (Game.checkCollisions) is a true AABB overlap of this box
+// against the enemy's ENEMY_AABB_PX box, so the per-axis kill distance is
+// (PLAYER_HURTBOX_PX + enemy) / 2: bear 25, panther 18.5, gibbon 15.5,
+// snake 10. Owner-approved 2026-06-10, replacing the flat enemy-centre-
+// within-16px rule (which ignored the per-type footprints entirely): 16 keeps
+// the mid-roster at the old feel while the extremes diverge — the bear's bulk
+// reaches farther, the snake's sliver demands near-touch. The small box is the
+// standard one-hit-death fairness convention (deaths read as the player's
+// mistake, pillar §3). Wall collision still uses the full PLAYER_SIZE cell and
+// arrows still hit the full 32 px enemy cell — only the kill test changes.
+export const PLAYER_HURTBOX_PX = 16;
 
 // --- Hunt system (Step 4 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.11 (static aggro) and §5.12 (the
