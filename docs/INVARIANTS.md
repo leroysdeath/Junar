@@ -95,8 +95,8 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 **Source:** CLAUDE.md §9 Guardrails "Lint and typecheck before declaring done"
 
 ### 11. TypeScript type check is clean
-**Rule:** `npx tsc -p tsconfig.app.json --noEmit` exits with status 0 and emits no `error TS` messages.
-**Verify:** `npm install && npx tsc -p tsconfig.app.json --noEmit` — exit code 0; empty stdout.
+**Rule:** `npm run typecheck` (tsc `--noEmit` over tsconfig.app.json, tsconfig.node.json, and tsconfig.api.json — covering `src/`, `vite.config.ts`, and `api/`) exits with status 0 and emits no `error TS` messages.
+**Verify:** `npm install && npm run typecheck` — exit code 0; no `error TS` lines.
 **Source:** CLAUDE.md §9 Guardrails "Lint and typecheck before declaring done"
 
 ### 12. Tauri compatibility — no browser-only escape hatches

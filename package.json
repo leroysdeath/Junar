@@ -1,12 +1,13 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "junar",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.api.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
