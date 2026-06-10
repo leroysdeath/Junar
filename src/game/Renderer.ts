@@ -2,7 +2,7 @@ import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
 import { Facing, Vector2 } from './types';
-import { TILE_SIZE, ENEMY_AABB_PX } from './constants';
+import { TILE_SIZE, ENEMY_AABB_PX, BOSS_GROWTH_CENTER } from './constants';
 // ArMM1998's "Zelda-like tilesets and sprites" pack, CC0 / public domain
 // (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
 // 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
@@ -30,6 +30,16 @@ const SPRITE_DIR_ROW: Record<Facing, number> = {
 // size is allowed to exceed the tiny collision box. Collision itself always
 // uses the true AABB (Enemy.getAABB), independent of this.
 const ENEMY_VISUAL_SCALE_FLOOR = 0.5;
+
+// Corrupted-growth palette — first use of the black-goo accent direction from
+// CLAUDE.md §6 (deep oily black, sickly green/purple highlights). The planned
+// infected-beast accents (§7 roadmap step 4) should reuse these constants.
+const GOO_BLACK = '#0B0A10'; // oily pool mass
+const GOO_TENDRIL = '#1C1426'; // near-black purple tendrils
+const GOO_PURPLE = '#5B2A86'; // sheen highlights on the pool
+const GOO_VEIN = '#6B8E23'; // sickly olive veins feeding the heart
+const GOO_HEART = '#9ACD32'; // glowing heart body
+const GOO_HEART_CORE = '#D9F99D'; // pale core flash at peak pulse
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -331,6 +341,60 @@ export class Renderer {
       
       this.ctx.restore();
     });
+  }
+
+  // Corrupted growth — the boss-arena stub win trigger (and the visual seed
+  // of the eventual plant boss, roadmap §5.15). An oily black goo pool with
+  // purple sheen and a pulsing sickly-green heart at the arena's center tile.
+  // Drawn as a ground feature (under the player) so walking onto it reads.
+  // The glowing heart is the touch target (BOSS_GROWTH_TRIGGER_PX in Game);
+  // the dark fringe is safe to stand on — readable in one frame against the
+  // arena's empty floor. `time` is the gameLoop rAF timestamp (drives the
+  // pulse; never Date.now — Invariant 8).
+  renderCorruptedGrowth(time: number) {
+    const cx = BOSS_GROWTH_CENTER.x;
+    const cy = BOSS_GROWTH_CENTER.y;
+
+    // Goo pool — irregular blob from overlapping rects, oily black.
+    this.ctx.fillStyle = GOO_BLACK;
+    this.ctx.fillRect(cx - 40, cy - 24, 80, 48); // main pool
+    this.ctx.fillRect(cx - 24, cy - 36, 48, 12); // top lobe
+    this.ctx.fillRect(cx - 24, cy + 24, 48, 10); // bottom lobe
+    this.ctx.fillRect(cx - 52, cy - 12, 12, 24); // left lobe
+    this.ctx.fillRect(cx + 40, cy - 12, 12, 24); // right lobe
+
+    // Tendrils creeping outward along the floor (slightly asymmetric so the
+    // mass reads organic, not stamped).
+    this.ctx.fillStyle = GOO_TENDRIL;
+    this.ctx.fillRect(cx - 68, cy - 4, 16, 4);
+    this.ctx.fillRect(cx + 52, cy + 2, 16, 4);
+    this.ctx.fillRect(cx - 6, cy - 48, 4, 12);
+    this.ctx.fillRect(cx + 2, cy + 34, 4, 14);
+
+    // Purple sheen — wet-looking highlights on the pool surface.
+    this.ctx.fillStyle = GOO_PURPLE;
+    this.ctx.fillRect(cx - 32, cy - 16, 10, 4);
+    this.ctx.fillRect(cx + 16, cy + 8, 12, 4);
+    this.ctx.fillRect(cx - 8, cy + 16, 8, 3);
+
+    // Sickly veins feeding the heart.
+    this.ctx.fillStyle = GOO_VEIN;
+    this.ctx.fillRect(cx - 14, cy - 2, 28, 4);
+    this.ctx.fillRect(cx - 2, cy - 14, 4, 28);
+
+    // Pulsing heart — the win touch target. Pulse expands the square 12→20 px
+    // on a slow sine; floored to whole pixels so image-rendering: pixelated
+    // stays crisp.
+    const pulse = Math.floor((Math.sin(time / 350) + 1) * 2); // 0..4
+    const heartSize = 12 + pulse * 2;
+    const half = Math.floor(heartSize / 2);
+    this.ctx.fillStyle = GOO_HEART;
+    this.ctx.fillRect(cx - half, cy - half, heartSize, heartSize);
+    // Pale core flash at peak pulse only — reads as a heartbeat.
+    if (pulse >= 3) {
+      this.ctx.fillStyle = GOO_HEART_CORE;
+      this.ctx.fillRect(cx - 3, cy - 3, 6, 6);
+    }
   }
 
   renderLineOfSightIndicator(player: Player, hasLineOfSight: boolean) {

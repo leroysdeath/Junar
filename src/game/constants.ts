@@ -212,3 +212,20 @@ export const WAVE_PER_C_INCREMENT = 6;
 // is a chosen starting value (tune in playtest). 'S' (any) candidates ignore
 // this and roll snake/gibbon/panther uniformly instead.
 export const STATIC_SMALL_SNAKE_WEIGHT = 0.8;
+
+// --- Boss-arena stub win trigger (input-agnostic walk-on) ---
+// Until boss combat lands (roadmap §5.15), the run is won by walking into the
+// corrupted growth rendered at the boss arena's center tile. Movement is the
+// only verb, so the trigger works identically on keyboard, touch joystick,
+// and any future gamepad — no input binding required. (The V key remains an
+// undocumented desktop debug shortcut for fast testing.)
+// Center = middle tile of the 29×17 playfield (col 14, row 8) → px (464, 272).
+export const BOSS_GROWTH_CENTER: Vector2 = {
+  x: Math.floor(GRID_WIDTH / 2) * TILE_SIZE + TILE_SIZE / 2,
+  y: Math.floor(GRID_HEIGHT / 2) * TILE_SIZE + TILE_SIZE / 2,
+};
+
+// Trigger AABB extent (px), centred on BOSS_GROWTH_CENTER — the growth's
+// glowing heart. Deliberately smaller than the rendered goo mass so victory
+// reads as "stepped into the heart", not "brushed the fringe".
+export const BOSS_GROWTH_TRIGGER_PX = 16;

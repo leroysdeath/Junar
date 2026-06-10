@@ -56,6 +56,8 @@ import {
   STATIC_SMALL_SNAKE_WEIGHT,
   ENTRY_BAND_GRACE_MIN_MS,
   ENTRY_BAND_GRACE_MAX_MS,
+  BOSS_GROWTH_CENTER,
+  BOSS_GROWTH_TRIGGER_PX,
 } from './constants';
 
 type GameOverReason =
@@ -1250,13 +1252,25 @@ export class Game {
     }
 
     // Win-condition STUB (Step 9). Boss combat is deferred (roadmap §5.15);
-    // until it lands, pressing V inside the boss arena ends the run as a
-    // victory so the reach-the-boss loop is playable end to end. Consume the
-    // edge every frame (clears a stale press made outside the arena); act only
-    // while in the boss room.
-    if (this.inputManager.consumeWinStubPress() && this.inBossArena) {
-      this.victory();
-      return;
+    // until it lands, walking into the corrupted growth's heart at the arena
+    // center ends the run as a victory. The trigger is positional so it is
+    // input-agnostic — keyboard, touch joystick, and any future gamepad all
+    // reach it by movement alone (V remains an undocumented desktop debug
+    // shortcut). Checked after movement + dash have settled the position, and
+    // BEFORE checkCollisions below — touching the heart and an enemy on the
+    // same frame resolves as a win, not an unfair last-instant death.
+    // Consume the key edge every frame (clears a stale press made outside the
+    // arena); both paths act only while in the boss room.
+    const winStubPressed = this.inputManager.consumeWinStubPress();
+    if (this.inBossArena) {
+      if (winStubPressed) {
+        this.victory('debug-key');
+        return;
+      }
+      if (this.isTouchingGrowthHeart()) {
+        this.victory('walk-on');
+        return;
+      }
     }
 
     // Room transition (LTTP hard cut). Checked once movement + dash have
@@ -1657,16 +1671,31 @@ export class Game {
     };
   }
 
+  // True when the player's 32 px AABB overlaps the corrupted growth's heart
+  // (BOSS_GROWTH_TRIGGER_PX box centred on BOSS_GROWTH_CENTER). Standard AABB
+  // overlap expressed as a center-distance test, the same shape
+  // clearLandingZone uses. Only meaningful inside the boss arena — the
+  // caller gates on inBossArena.
+  private isTouchingGrowthHeart(): boolean {
+    const p = this.player.getPosition();
+    const reach = (PLAYER_SIZE + BOSS_GROWTH_TRIGGER_PX) / 2;
+    return (
+      Math.abs(p.x + PLAYER_SIZE / 2 - BOSS_GROWTH_CENTER.x) < reach &&
+      Math.abs(p.y + PLAYER_SIZE / 2 - BOSS_GROWTH_CENTER.y) < reach
+    );
+  }
+
   // Win the run. Step 9 reintroduces this (dormant since Step 3 removed the
-  // per-level clear flow): today it fires only from the boss-room V win-stub,
-  // and later from real boss-defeat logic. Like gameOver it just freezes the
-  // sim into a terminal state — the gameLoop stops calling update() once the
-  // state leaves 'playing'.
-  private victory() {
+  // per-level clear flow): today it fires from the boss-room walk-on growth
+  // trigger (or the V debug shortcut), and later from real boss-defeat logic.
+  // Like gameOver it just freezes the sim into a terminal state — the
+  // gameLoop stops calling update() once the state leaves 'playing'.
+  private victory(trigger: 'walk-on' | 'debug-key') {
     if (this.gameState === 'victory') return;
     this.gameState = 'victory';
     this.callbacks.onStateChange('victory');
     this.logger.log('state', 'victory', {
+      trigger,
       room: { ...this.currentRoomCoord },
       score: this.score,
     });
@@ -1705,6 +1734,11 @@ export class Game {
       this.renderer.renderLevel(this.level);
       this.renderer.renderHuts(this.level.getHutPositions());
       this.renderer.renderNpcs(this.level.getNpcPositions());
+      // Corrupted growth (boss-arena stub win trigger). A ground feature, so
+      // it draws under the player — the player visibly steps ONTO it to win.
+      if (this.inBossArena) {
+        this.renderer.renderCorruptedGrowth(this.lastTime);
+      }
       this.renderer.renderPlayer(this.player, this.stamina.isBurstActive(), this.lastTime);
 
       if (this.enemies.length > 0) {

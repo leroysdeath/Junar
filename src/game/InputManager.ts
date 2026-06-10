@@ -24,8 +24,10 @@ export class InputManager {
   // register as held-state left movement.
   private dashPressed = false;
   // Edge-triggered win-stub flag (Step 9). Set on V keydown (same dedup
-  // pattern). A temporary boss-room win input until boss combat lands
-  // (roadmap §5.15); Game only acts on it while in the boss arena.
+  // pattern). An undocumented desktop DEBUG shortcut for the boss-room win —
+  // the real (input-agnostic) trigger is walking into the corrupted growth
+  // at the arena center. Both are stubs until boss combat lands (roadmap
+  // §5.15); Game only acts on this while in the boss arena.
   private winStubPressed = false;
   private onBlurClear?: InputBlurCallback;
 
@@ -123,8 +125,9 @@ export class InputManager {
     return r;
   }
 
-  // Read + clear the win-stub edge flag (Step 9 boss-room win). Called once
-  // per frame from Game.update(); Game only honors it inside the boss arena.
+  // Read + clear the win-stub edge flag (V debug shortcut for the boss-room
+  // win; the player-facing trigger is the walk-on corrupted growth). Called
+  // once per frame from Game.update(); Game only honors it inside the arena.
   consumeWinStubPress(): boolean {
     const r = this.winStubPressed;
     this.winStubPressed = false;
