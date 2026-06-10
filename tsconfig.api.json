@@ -1,0 +1,26 @@
+{
+  // Typechecks api/ — the Vercel Edge functions (crash sink). The Edge
+  // runtime is web-standard (Request/Response/fetch/crypto), not Node, so
+  // lib is ES2022 + WebWorker; process.env is ambient-declared in
+  // api/env.d.ts rather than pulling in @types/node (dependency allow-list,
+  // docs/INVARIANTS.md #9). Run via `npm run typecheck`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["api"]
+}

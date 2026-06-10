@@ -5,7 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'api'] },
+  // Only build output is exempt. api/ (the Vercel Edge crash sink) is
+  // deliberately linted — it receives public-playtest traffic and must sit
+  // under the same quality gates as src/.
+  { ignores: ['dist'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
