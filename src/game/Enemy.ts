@@ -39,6 +39,15 @@ export class Enemy {
   private currentRoom: RoomGridCoord = { col: 0, row: 0 };
   private activatingSince = 0;
 
+  // Doorway-arrival kill grace: a gameLoop-currentTime deadline before which
+  // this enemy cannot contact-kill (Game.checkCollisions skips it) and the
+  // renderer draws a materialize flash over it. Stamped by
+  // Game.settleHunterIntoRoom when a cross-room hunter lands in the player's
+  // current room — it would otherwise appear and kill on the same tick, with
+  // no rendered frame of it first (owner-approved 2026-06-10; see
+  // HUNTER_ARRIVAL_GRACE_MS in constants.ts). 0 = no grace pending.
+  private arrivalGraceUntil = 0;
+
   constructor(
     startPosition: Vector2,
     type: EnemyType,
@@ -406,5 +415,14 @@ export class Enemy {
 
   setActivatingSince(currentTime: number): void {
     this.activatingSince = currentTime;
+  }
+
+  // Doorway-arrival kill-grace deadline (gameLoop currentTime; 0 = none).
+  getArrivalGraceUntil(): number {
+    return this.arrivalGraceUntil;
+  }
+
+  setArrivalGraceUntil(until: number): void {
+    this.arrivalGraceUntil = until;
   }
 }

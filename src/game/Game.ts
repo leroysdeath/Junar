@@ -58,6 +58,10 @@ import {
   ENTRY_BAND_GRACE_MAX_MS,
   BOSS_GROWTH_CENTER,
   BOSS_GROWTH_TRIGGER_PX,
+  PLAYER_HURTBOX_PX,
+  ARRIVAL_KILL_GRACE_MS,
+  ARRIVAL_GRACE_REARM_MS,
+  HUNTER_ARRIVAL_GRACE_MS,
 } from './constants';
 
 type GameOverReason =
@@ -177,6 +181,15 @@ export class Game {
   // Room keys whose per-run statics have already been rolled (§5.10). First
   // entry rolls + locks them; revisits never re-roll (§5.13). Reset each run.
   private enteredRooms = new Set<number>();
+  // Player-side doorway kill grace (owner-approved 2026-06-10): gameLoop-
+  // currentTime deadline before which the contact-kill pass is held, stamped
+  // by doTransition on room entry. NOT general i-frames — auto-fire,
+  // movement, and arrow hits keep running; see ARRIVAL_KILL_GRACE_MS.
+  // arrivalGraceArmedAt records when the window was last granted: a new one
+  // is armed only after ARRIVAL_GRACE_REARM_MS, so doorway ping-pong can't
+  // chain windows into sustained immunity (0 = never armed this run).
+  private arrivalKillGraceUntil = 0;
+  private arrivalGraceArmedAt = 0;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GameCallbacks) {
     this.canvas = canvas;
@@ -259,6 +272,10 @@ export class Game {
     this.enteredRooms = new Set();
     this.enemies = [];
     this.hasLineOfSight = false;
+    // Drop any doorway kill grace left over from the previous run (e.g. dying
+    // right after a transition, then restarting within the window).
+    this.arrivalKillGraceUntil = 0;
+    this.arrivalGraceArmedAt = 0;
     this.globalWaveScheduler = this.createScheduler();
     this.levelStartedAt = performance.now();
     this.lastSampleFrame = this.frameCount;
@@ -381,23 +398,18 @@ export class Game {
 
   // Push the player off any enemy occupying their landing position. Steps inward
   // along the entry axis (away from the edge they arrived at) to the first tile
-  // whose 32 px AABB clears every enemy and isn't a wall; bails (keeps the
-  // original landing) if none is found within the room — vanishingly unlikely.
-  // Overlap is tested with the exact center-distance rule checkCollisions uses,
-  // so a cleared tile is genuinely non-lethal this frame.
+  // that clears every enemy and isn't a wall; bails (keeps the original landing)
+  // if none is found within the room — vanishingly unlikely.
+  // Overlap is tested with the exact AABB kill rule checkCollisions uses
+  // (enemyTouchesPlayer), so a cleared tile is genuinely non-lethal this frame.
+  // The post-transition ARRIVAL_KILL_GRACE_MS window overlaps this, but the
+  // nudge still matters: it moves the player OUT of a lethal overlap instead of
+  // letting the grace lapse with them still inside an enemy's box.
   private clearLandingZone(entryPos: Vector2): void {
     if (this.enemies.length === 0) return;
     const overlapsEnemy = (p: Vector2): boolean => {
-      const cx = p.x + TILE_SIZE / 2;
-      const cy = p.y + TILE_SIZE / 2;
       for (const e of this.enemies) {
-        const ep = e.getPosition();
-        if (
-          Math.abs(ep.x + TILE_SIZE / 2 - cx) < TILE_SIZE / 2 &&
-          Math.abs(ep.y + TILE_SIZE / 2 - cy) < TILE_SIZE / 2
-        ) {
-          return true;
-        }
+        if (this.enemyTouchesPlayer(e, p)) return true;
       }
       return false;
     };
@@ -523,11 +535,24 @@ export class Game {
     const maxX = CANVAS_WIDTH - PLAYER_SIZE;
     const maxY = CANVAS_HEIGHT - PLAYER_SIZE;
 
+    // NET directional intent, matching Player.update's movement arithmetic
+    // (opposed keys cancel to zero motion there). Raw booleans would let a
+    // player holding both keys of an axis "press outward" while standing
+    // still: pinned at a door pair that fires a transition every frame —
+    // ping-ponging A↔B with the rest of the frame short-circuited each time,
+    // freezing the sim indefinitely at zero effort. If the input couldn't be
+    // walking the player outward, it can't transition (or arm the exit-band
+    // grace) outward either.
+    const pressRight = input.right && !input.left;
+    const pressLeft = input.left && !input.right;
+    const pressUp = input.up && !input.down;
+    const pressDown = input.down && !input.up;
+
     let edge: Edge | null = null;
-    if (input.right && pos.x >= maxX - margin) edge = 'E';
-    else if (input.left && pos.x <= margin) edge = 'W';
-    else if (input.up && pos.y <= margin) edge = 'N';
-    else if (input.down && pos.y >= maxY - margin) edge = 'S';
+    if (pressRight && pos.x >= maxX - margin) edge = 'E';
+    else if (pressLeft && pos.x <= margin) edge = 'W';
+    else if (pressUp && pos.y <= margin) edge = 'N';
+    else if (pressDown && pos.y >= maxY - margin) edge = 'S';
     if (!edge) return null;
 
     const def = this.currentRoomDef();
@@ -631,6 +656,25 @@ export class Game {
     this.hunt.onPlayerLeftRoom(this.enemies);
     this.roomEnemies.set(this.roomKey(this.currentRoomCoord), this.enemies);
     this.enterRoom(t.dest, t.entry); // sets inBossArena for the destination
+    // Player-side doorway kill grace (owner-approved 2026-06-10): hold the
+    // contact-kill pass briefly after the hard cut. The landing nudge in
+    // enterRoom only clears an exact same-tick overlap — a fast chaser parked
+    // just inside the door could otherwise kill ~2-3 frames after the cut,
+    // an effectively invisible death. Applies in the boss arena too (contact
+    // death is live there). Re-arm gated: the hard cut lands the player flush
+    // on the destination edge still inside the opening, so the return
+    // transition re-fires within a frame — an unconditional stamp would let
+    // doorway ping-pong chain windows into sustained contact-kill immunity
+    // (input-renewable i-frames). Grant a fresh window only when the last one
+    // was armed ≥ ARRIVAL_GRACE_REARM_MS ago; an immediate hop back through
+    // the same door goes ungraced, where the threats were already on screen.
+    if (
+      this.arrivalGraceArmedAt === 0 ||
+      now - this.arrivalGraceArmedAt >= ARRIVAL_GRACE_REARM_MS
+    ) {
+      this.arrivalKillGraceUntil = now + ARRIVAL_KILL_GRACE_MS;
+      this.arrivalGraceArmedAt = now;
+    }
     // Entering the destination: hunters that already reached it rejoin the
     // in-room pursuit (active), and dormant sitters begin their aggro delay
     // (Step 4). For the boss room this.enemies is empty, so it's a no-op there.
@@ -706,7 +750,7 @@ export class Game {
   // crossing room boundaries as they reach doors. The current room is skipped
   // (its enemies are 'active', updated by the main loop). At most one room
   // crossing per enemy per frame — far less than an enemy traverses a room in.
-  private updateHunters(deltaTime: number) {
+  private updateHunters(deltaTime: number, now: number) {
     const curKey = this.roomKey(this.currentRoomCoord);
     const crossings: Array<{
       enemy: Enemy;
@@ -750,7 +794,7 @@ export class Game {
         const i = src.indexOf(c.enemy);
         if (i >= 0) src.splice(i, 1);
       }
-      if (this.settleHunterIntoRoom(c.enemy, c.dest, c.edge, c.opening)) {
+      if (this.settleHunterIntoRoom(c.enemy, c.dest, c.edge, c.opening, now)) {
         enteredCurrent = true;
       }
     }
@@ -867,6 +911,7 @@ export class Game {
     dest: RoomGridCoord,
     exitEdge: Edge,
     srcOpening: RoomOpening,
+    now: number,
   ): boolean {
     const destDef = roomAt(this.runMap, dest);
     enemy.setPosition(
@@ -879,14 +924,15 @@ export class Game {
     const destKey = this.roomKey(dest);
     if (destKey === this.roomKey(this.currentRoomCoord)) {
       enemy.setHuntState('active');
+      // The hunter materializes at the entry opening mid-tick (parked-room
+      // enemies are never drawn) and checkCollisions runs later this same
+      // tick — without a grace it could contact-kill a player loitering in
+      // that doorway with zero rendered frames of it first. Stamp the
+      // doorway-arrival kill grace (checkCollisions skips it; the renderer
+      // flashes it) so the player gets a readable beat to react.
+      // Owner-approved 2026-06-10; resolves the former KNOWN EDGE here.
+      enemy.setArrivalGraceUntil(now + HUNTER_ARRIVAL_GRACE_MS);
       this.enemies.push(enemy);
-      // KNOWN EDGE (deferred): the hunter materializes at the entry opening and
-      // checkCollisions runs later this same tick, so a player loitering
-      // motionless in that exact doorway can be contact-killed the frame the
-      // hunter arrives, with no rendered frame of it first (parked-room enemies
-      // aren't drawn). Narrow precondition; the fix (a one-frame arrival
-      // telegraph / grace) belongs with the deferred static-spawn telegraph
-      // work (roadmap §9) and Step 5+6's settlement pass — not Step 4.
       return true;
     }
     const list = this.roomEnemies.get(destKey);
@@ -1351,7 +1397,7 @@ export class Game {
     // room openings. De-aggro runs before movement so an out-of-range hunter
     // settles instead of getting one more free step toward the player.
     this.hunt.tick(currentTime, this.managedEnemies(), this.currentRoomCoord);
-    this.updateHunters(deltaTime);
+    this.updateHunters(deltaTime, currentTime);
 
     // Update arrows
     this.arrows = this.arrows.filter(arrow => {
@@ -1372,7 +1418,7 @@ export class Game {
     });
 
     // Check collisions
-    this.checkCollisions();
+    this.checkCollisions(currentTime);
 
     this.emitStaminaTransitions();
   }
@@ -1540,31 +1586,58 @@ export class Game {
     this.soundManager.play('arrow');
   }
 
-  private checkCollisions() {
+  // True if the enemy's per-type AABB (ENEMY_AABB_PX, centred in its cell)
+  // overlaps the player's PLAYER_HURTBOX_PX kill box (centred in the player's
+  // cell) — the contact-kill test, owner-approved 2026-06-10. Unlike wall
+  // collision (full PLAYER_SIZE cell) and arrow hits (full enemy cell), the
+  // kill test uses the true footprints: a bear's bulk reaches farther than a
+  // snake's sliver. Shared by checkCollisions and clearLandingZone so a
+  // "cleared" landing is genuinely non-lethal under the same rule.
+  private enemyTouchesPlayer(enemy: Enemy, playerPos: Vector2): boolean {
+    const off = (PLAYER_SIZE - PLAYER_HURTBOX_PX) / 2;
+    return this.collisionManager.checkCollision(
+      {
+        x: playerPos.x + off,
+        y: playerPos.y + off,
+        width: PLAYER_HURTBOX_PX,
+        height: PLAYER_HURTBOX_PX,
+      },
+      enemy.getAABB(),
+    );
+  }
+
+  private checkCollisions(now: number) {
     const playerPos = this.player.getPosition();
     const playerCenterX = playerPos.x + TILE_SIZE / 2;
     const playerCenterY = playerPos.y + TILE_SIZE / 2;
 
-    // Pass 1: AABB-overlap kill. Contact-only enemies on top of the player
-    // end the run immediately; return on hit so we don't double-report.
-    for (const enemy of this.enemies) {
-      const enemyPos = enemy.getPosition();
-      const dx = enemyPos.x + TILE_SIZE / 2 - playerCenterX;
-      const dy = enemyPos.y + TILE_SIZE / 2 - playerCenterY;
-      if (Math.abs(dx) < TILE_SIZE / 2 && Math.abs(dy) < TILE_SIZE / 2) {
-        this.logger.log('collision', 'overlap-kill', {
-          type: enemy.getType(),
-          dx: round2(dx),
-          dy: round2(dy),
-        });
-        this.gameOver({
-          kind: 'overlap',
-          enemyId: enemy.getId(),
-          enemyType: enemy.getType(),
-          dx,
-          dy,
-        });
-        return;
+    // Pass 1: AABB-overlap kill (enemyTouchesPlayer — per-type footprint vs
+    // the player hurtbox). Contact-only enemies on top of the player end the
+    // run immediately; return on hit so we don't double-report. Two narrow
+    // doorway graces hold this pass only (arrows below still hit): the
+    // player-side post-transition window, and per-enemy windows on hunters
+    // that just materialized in this room (owner-approved 2026-06-10).
+    if (now >= this.arrivalKillGraceUntil) {
+      for (const enemy of this.enemies) {
+        if (now < enemy.getArrivalGraceUntil()) continue;
+        if (this.enemyTouchesPlayer(enemy, playerPos)) {
+          const enemyPos = enemy.getPosition();
+          const dx = enemyPos.x + TILE_SIZE / 2 - playerCenterX;
+          const dy = enemyPos.y + TILE_SIZE / 2 - playerCenterY;
+          this.logger.log('collision', 'overlap-kill', {
+            type: enemy.getType(),
+            dx: round2(dx),
+            dy: round2(dy),
+          });
+          this.gameOver({
+            kind: 'overlap',
+            enemyId: enemy.getId(),
+            enemyType: enemy.getType(),
+            dx,
+            dy,
+          });
+          return;
+        }
       }
     }
 
@@ -1673,8 +1746,10 @@ export class Game {
 
   // True when the player's 32 px AABB overlaps the corrupted growth's heart
   // (BOSS_GROWTH_TRIGGER_PX box centred on BOSS_GROWTH_CENTER). Standard AABB
-  // overlap expressed as a center-distance test, the same shape
-  // clearLandingZone uses. Only meaningful inside the boss arena — the
+  // overlap expressed as a center-distance test. Deliberately uses the full
+  // PLAYER_SIZE cell — a walk-on win trigger should be generous; the
+  // contact-kill check is the one that uses the smaller PLAYER_HURTBOX_PX
+  // core (enemyTouchesPlayer). Only meaningful inside the boss arena — the
   // caller gates on inBossArena.
   private isTouchingGrowthHeart(): boolean {
     const p = this.player.getPosition();
@@ -1742,7 +1817,9 @@ export class Game {
       this.renderer.renderPlayer(this.player, this.stamina.isBurstActive(), this.lastTime);
 
       if (this.enemies.length > 0) {
-        this.renderer.renderEnemies(this.enemies);
+        // lastTime drives the doorway-arrival materialize flash on hunters
+        // that just crossed into this room (same clock as the player sprite).
+        this.renderer.renderEnemies(this.enemies, this.lastTime);
       }
 
       if (this.arrows.length > 0) {

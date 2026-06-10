@@ -11,7 +11,7 @@ See CLAUDE.md §9 ("Use `Date.now()` only for wall-clock things", "Always clean 
 
 ## Time sources
 
-The game loop is `Game.gameLoop(currentTime)` (`Game.ts:1111`), invoked by `requestAnimationFrame`. `currentTime` is a `performance.now()` value that rAF passes in. **That `currentTime`, threaded through `update(deltaTime, currentTime)`, is the canonical clock for in-game timing.**
+The game loop is `Game.gameLoop(currentTime)` (`Game.ts:1157`), invoked by `requestAnimationFrame`. `currentTime` is a `performance.now()` value that rAF passes in. **That `currentTime`, threaded through `update(deltaTime, currentTime)`, is the canonical clock for in-game timing.**
 
 | Use case | Right source |
 |---|---|
@@ -24,14 +24,14 @@ Why it matters: `Date.now()` jumps when the OS clock changes (NTP sync, daylight
 
 ### Known deviations (don't copy these patterns)
 
-- `Enemy.update` reads `Date.now()` for the 200 ms pathfind repoll (`Enemy.ts:136`). It works today but should drift to `currentTime` when the file is touched — the in-code comment there already slates this migration. Don't add new `Date.now()` reads in `src/game/` — thread the loop time down instead.
-- `Game.levelStartedAt` and `Game.classifyGameOver` use `performance.now()` directly rather than the loop's `currentTime` (`Game.ts:263`, `Game.ts:1655`). Same story — works today, but the consistent pattern is to read from the loop.
+- `Enemy.update` reads `Date.now()` for the 200 ms pathfind repoll (`Enemy.ts:145`). It works today but should drift to `currentTime` when the file is touched — the in-code comment there already slates this migration. Don't add new `Date.now()` reads in `src/game/` — thread the loop time down instead.
+- `Game.levelStartedAt` and `Game.classifyGameOver` use `performance.now()` directly rather than the loop's `currentTime` (`Game.ts:280`, `Game.ts:1728`). Same story — works today, but the consistent pattern is to read from the loop.
 
 If you're touching one of these files, prefer migrating to loop time over preserving the deviation.
 
 ## Cleanup discipline
 
-`Game.cleanup()` (`Game.ts:1781`) is called from `App.tsx`'s `useEffect` return when the React component unmounts. **Anything you add that subscribes to `window`/`document` or schedules a timer must be released here**, or React StrictMode (which mounts twice in dev) will leak listeners and confuse input.
+`Game.cleanup()` (`Game.ts:1858`) is called from `App.tsx`'s `useEffect` return when the React component unmounts. **Anything you add that subscribes to `window`/`document` or schedules a timer must be released here**, or React StrictMode (which mounts twice in dev) will leak listeners and confuse input.
 
 Existing examples to match:
 

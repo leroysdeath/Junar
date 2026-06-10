@@ -2,7 +2,12 @@ import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
 import { Facing, Vector2 } from './types';
-import { TILE_SIZE, ENEMY_AABB_PX, BOSS_GROWTH_CENTER } from './constants';
+import {
+  TILE_SIZE,
+  ENEMY_AABB_PX,
+  BOSS_GROWTH_CENTER,
+  HUNTER_ARRIVAL_GRACE_MS,
+} from './constants';
 // ArMM1998's "Zelda-like tilesets and sprites" pack, CC0 / public domain
 // (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
 // 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
@@ -127,7 +132,7 @@ export class Renderer {
     );
   }
 
-  renderEnemies(enemies: Enemy[]) {
+  renderEnemies(enemies: Enemy[], currentTime = 0) {
     enemies.forEach(enemy => {
       const pos = enemy.getPosition();
       const type = enemy.getType();
@@ -163,6 +168,26 @@ export class Renderer {
       }
 
       this.ctx.restore();
+
+      // Doorway-arrival materialize flash: a cross-room hunter that just
+      // crossed into this room is briefly unable to contact-kill (its
+      // arrival grace, Game.settleHunterIntoRoom) — flash a white square
+      // over its cell, brightest at materialize and fading as the grace
+      // runs out, so the player sees it appear before it threatens. Drawn
+      // unscaled over the full cell so the cue reads the same for every
+      // type. currentTime is the gameLoop clock (same as renderPlayer).
+      const graceUntil = enemy.getArrivalGraceUntil();
+      if (graceUntil > 0 && currentTime < graceUntil) {
+        const remaining = Math.min(
+          (graceUntil - currentTime) / HUNTER_ARRIVAL_GRACE_MS,
+          1,
+        );
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.25 + 0.45 * remaining;
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(pos.x + 2, pos.y + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+        this.ctx.restore();
+      }
     });
   }
 
