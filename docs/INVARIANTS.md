@@ -4,7 +4,7 @@
 
 **Purpose:** Gate feature commits. An evaluator applies each "Verify" step and rejects any PR that violates a rule.
 
-**Source:** Consolidated from `README.md` (Pillars, Guardrails), `CLAUDE.md` (Pillars §3, Guardrails §9, Distribution §8), and verified against `src/game/`, `package.json`, and `tsconfig.app.json`.
+**Source:** Consolidated from `CLAUDE.md` (Pillars §3, Guardrails §9, Distribution §8) — `README.md` mirrors the Pillars — and verified against `src/game/`, `package.json`, and the three tsconfigs (app, node, api).
 
 ---
 
@@ -40,13 +40,13 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 **Rule:** `EnemyType` in `src/game/types.ts` is exactly the union `'panther' | 'snake' | 'gibbon' | 'bear'`. No additional types without owner approval.
 **Verify:**
 - `grep -A2 "type EnemyType" src/game/types.ts` shows exactly those four members.
-- `grep -rEi "tiger|crocodile|jackal|wolf|hyena|leopard" src/game/` returns no hits (only acceptable in CLAUDE.md / README guardrails as "not approved" examples).
+- `grep -rEi "tiger|crocodile|jackal|wolf|hyena|leopard" src/game/` returns no hits (only acceptable in CLAUDE.md guardrails, README.md, and docs/ as "not approved" examples).
 **Source:** CLAUDE.md §5 Mechanics; §9 Guardrails "No new enemy type may be added without explicit owner approval"
 
 ### 4. Player is the only sprite-asset entity
 **Rule:** Only the player-rendering code path imports / uses a sprite image. Enemies, NPCs, huts, arrows, walls, HUD, and FX render via procedural Canvas 2D fills.
 **Verify:**
-- `grep -rEn "import.*from.*assets|\\.png|\\.jpg|\\.webp" src/game/` returns only the player-sprite import in `Renderer.ts`.
+- `grep -rEn "import.*from.*assets|\\.png|\\.jpg|\\.webp" src/game/` returns only the player-sprite import (plus comments) in `Renderer.ts`.
 - `Renderer.renderEnemies`, `Renderer.renderNpcs`, `Renderer.renderHuts`, `Renderer.renderArrows` use only `ctx.fillRect`, `ctx.fill`, `ctx.stroke`, `ctx.beginPath` — never `ctx.drawImage`.
 - `Renderer.renderPlayer` is the sole `ctx.drawImage` call site.
 **Source:** CLAUDE.md §3 Pillars "Readable at a glance"; §9 Guardrails "Player is the only entity allowed to use a real sprite asset"
@@ -62,22 +62,23 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 ### 6. No engine migration; Canvas 2D only
 **Rule:** The game runs on `CanvasRenderingContext2D`. No Phaser, Pixi, Three.js, Babylon, Excalibur. No WebGL.
 **Verify:**
-- `grep -iE "phaser|pixi|three|babylon|excalibur" package.json src/` returns no hits.
+- `grep -riE "phaser|pixi|three\\.js|'three'|\"three\"|babylon|excalibur" package.json src/` returns no hits (the `three` pattern is anchored to `three.js` / the quoted package name — plain-English "three waves" / "three openings" comment false-positives are acceptable).
 - `grep -En "webgl|WebGL|WebGL2" src/game/` returns no hits.
 - `Renderer` constructor signature accepts `CanvasRenderingContext2D` only.
 **Source:** CLAUDE.md §3 Pillars; §9 Guardrails "Don't migrate to a game engine"
 
-### 7. Magic numbers live only in `src/game/constants.ts`
-**Rule:** The literals `928`, `544`, `400`, `450`, `500`, and `32`/`16` (when used as canvas / tile geometry) appear only in `src/game/constants.ts`. Other modules import the named constant.
+### 7. No new bare geometry literals outside `src/game/constants.ts`
+**Rule:** PRs must not **add** new bare `928`, `544`, `400`, `450`, `500`, or `32`/`16` literals (when used as canvas / tile geometry) outside `src/game/constants.ts` — new code imports the named constant. Pre-existing hits (`Level.ts` and `Renderer.ts` tile math, `SoundManager.ts` Hz values, `EARLY_DEATH_MS` in `Game.ts`, comments — dozens as of 2026-06) are grandfathered pending the roadmap constants sweep.
 **Verify:**
-- `grep -rEn "\\b(928|544|400|450|500)\\b" src/game/*.ts | grep -v "constants.ts"` returns no hits.
-- `grep -rEn "\\b(32|16)\\b" src/game/*.ts | grep -v -E "constants.ts|TILE_SIZE|PLAYER_SIZE|HALF_TILE"` — remaining hits must be unrelated to canvas / tile geometry (e.g., array math, byte sizes, animation frame indices). Inspect any remaining hit.
+- An evaluator runs `grep -rEn "\\b(928|544|400|450|500)\\b" src/game/*.ts | grep -v "constants.ts"` and checks the **PR diff**, not the whole tree: any hit on a line the PR adds is a violation; pre-existing hits are not.
+- An evaluator runs `grep -rEn "\\b(32|16)\\b" src/game/*.ts | grep -v -E "constants.ts|TILE_SIZE|PLAYER_SIZE|HALF_TILE"` and checks the **PR diff**, not the whole tree — newly added hits must be unrelated to canvas / tile geometry (e.g., array math, byte sizes, animation frame indices). Inspect any newly added hit.
 **Source:** CLAUDE.md §9 Guardrails "Pull magic numbers into named constants"
 
 ### 8. Game timing uses `gameLoop` `currentTime`, never `Date.now()` in simulation code
 **Rule:** All game-simulation timing (loop tick, enemy AI, projectile motion, pathfinding intervals, cooldowns, stamina decay) uses `currentTime` — a `performance.now()` value passed from `requestAnimationFrame` through `gameLoop` into each update method. `Date.now()` is permitted **only** in `src/game/Logger.ts` for wall-clock UI timestamps on the crash overlay.
+**Documented standing exception:** the `Enemy.ts` pathfinding repoll still calls `Date.now()` (the in-code NOTE slates it for migration to `currentTime`). No **new** `Date.now()` call sites outside `Logger.ts`.
 **Verify:**
-- `grep -rn "Date.now()" src/game/ | grep -v "Logger.ts"` returns no hits. Any hit elsewhere is a violation regardless of how it is used; migrate the call site to take `currentTime` as a parameter.
+- `grep -rn "Date.now()" src/game/ | grep -v "Logger.ts"` returns only the documented `Enemy.ts` pathfinding-repoll hit. Any other hit is a violation regardless of how it is used; migrate the call site to take `currentTime` as a parameter.
 - `gameLoop` in `Game.ts` reads `currentTime` from the `requestAnimationFrame` callback parameter and passes it to every `update(deltaTime, currentTime)` call.
 - New modules added to `src/game/` that need time-based logic accept `currentTime` as a parameter — never call `Date.now()` directly.
 **Source:** CLAUDE.md §9 Guardrails "Use Date.now() only for wall-clock things"; `game-loop-time-and-cleanup` skill
@@ -116,7 +117,7 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 ### 14. Cultural representation: no feathered headdresses, no *Jungle Book* character references
 **Rule:** Protagonist and family are Adivasi/tribal-Indian. No feathered-headdress imagery, no "tribal" stereotype cues, no *Jungle Book* character references (Mowgli, Bagheera, Shere Khan, Baloo, Kaa, Akela, Raksha).
 **Verify:**
-- `grep -rEi "feather|headdress|Mowgli|Bagheera|Shere ?Khan|Baloo|\\bKaa\\b|Akela|Raksha" src/ docs/` returns no hits in code or in committed copy (acceptable only in `CLAUDE.md` as guardrails-quoted examples).
+- `grep -rEi "feather|headdress|Mowgli|Bagheera|Shere ?Khan|Baloo|\\bKaa\\b|Akela|Raksha" src/ docs/` — hits in `CLAUDE.md` (guardrails-quoted examples), `docs/INVARIANTS.md` (this rule's own text), and `docs/IDEATION.md` descriptive copy ("no-headdress") are acceptable; `src/` must be clean.
 - Any new sprite asset or `Renderer.renderPlayer` / `Renderer.renderNpcs` visual change is reviewed against the `protagonist-and-family-tone` skill.
 **Source:** CLAUDE.md §6 World & tone; §9 Guardrails "Cultural representation matters"
 
@@ -134,7 +135,8 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 **Verify:**
 - Enumerate registrations: `grep -rEn "addEventListener|setTimeout|setInterval|requestAnimationFrame" src/game/`.
 - For each hit, find the corresponding `removeEventListener` / `clearTimeout` / `clearInterval` / `cancelAnimationFrame` and confirm it is called from `Game.cleanup()` or a method `Game.cleanup()` invokes.
-- Standard tear-downs: `Game.cleanup()` calls `inputManager.dispose()`, `logger.dispose()`, `cancelAnimationFrame(animationId)`, and `clearTimeout(levelTransitionTimeoutId)`.
+- Standard tear-downs: `Game.cleanup()` calls `cancelAnimationFrame(animationId)`, `inputManager.dispose()`, and `logger.dispose()`.
+- **Known standing exceptions:** the canvas `'click'` listener registered in `Game.setupEventListeners` has no `removeEventListener` reachable from `cleanup()` — the canvas element dies with the React component, so it doesn't leak in practice (flagged for a future code fix). `Logger.ts`'s report-abort `window.setTimeout` clears itself in the fetch `.finally`.
 **Source:** CLAUDE.md §9 Guardrails "Always clean up listeners and timers"
 
 ---
@@ -143,18 +145,18 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 
 The following are firm guidance but are design / tuning parameters rather than hard rules. They are documented elsewhere; the evaluator does not gate on them:
 
-- Wave-scheduler tuning (group templates, inter-wave lulls) — `src/game/WaveScheduler.ts`, design decision per level
+- Wave-scheduler tuning (tiered spawn pools, grace/lull/triplet-break timings) — `src/game/constants.ts` + `levels.ts` pools + `WaveScheduler.ts`, run-long balance choice
 - Enemy speed ratios (panther 395, bear 218, snake 68, gibbon 34 px/s) — `src/game/Enemy.ts`, balance choice
 - Stamina drain rates and burst-multiplier decay — `src/game/Stamina.ts`, balance choice
 - Sprite walk-frame timing — `src/game/Renderer.ts`, animation tuning
-- Level 10 boss arena layout — out of scope until implementation
+- Level 10 boss arena layout — arena + corrupted-growth walk-on trigger implemented (`BOSS_GROWTH_CENTER` geometry is a balance choice); boss combat itself (roadmap §5.15) still deferred
 - Multiple-endings system structure — documented direction, no invariant until committed to a build tier
 
 ---
 
 ## Related Docs
 
-- `README.md` — Pillars, Guardrails (canonical source)
+- `README.md` — public front page; mirrors the six Pillars (canonical wording lives in `CLAUDE.md` §3)
 - `CLAUDE.md` — Working knowledge base (§3 Pillars, §8 Distribution, §9 Guardrails)
 - `src/game/constants.ts` — All named magic-number constants
 - `src/game/types.ts` — `EnemyType` union (invariant 3 source of truth)

@@ -1,6 +1,6 @@
 # Junar — Traversable-Maps Refactor Roadmap
 
-**Status:** Design locked, implementation not yet started.
+**Status:** Implemented through Steps 1–6, 8, and 9 (room grid + LTTP transitions, global wave scheduler, per-type AABBs, Hunt cross-room AI, statics + BFS de-aggro settlement, 20-template connector pool, boss-room gating). Remaining: Step 7 (per-anchor static authoring) and boss combat (§5.15).
 **Purpose:** Source of truth for the traversable-maps refactor that replaces the current per-level "clear all enemies → next level" loop with a procedurally-laid room grid, global wave timer, Hunt system, and per-enemy AABB sizing. Every implementation chat for this refactor reads this document first and treats it as the contract.
 
 **Audience:** Future Claude Code chats picking up an implementation step. Each chat should read this doc first, then `CLAUDE.md` and `docs/INVARIANTS.md`, then begin its scoped step.
@@ -49,8 +49,8 @@ Invariants requiring attention during implementation:
 - **Room-grid coordinate** — `{col: 0..28, row: 0..16}` identifying a room's position in the grid. Distinct from in-room tile coordinates.
 - **Anchor** — one of 10 hand-designed rooms with story/gameplay significance. Always includes the boss room (anchor 10).
 - **Connector** — a procedurally-placed room drawn from the connector template pool. Most of the 493 rooms are connectors.
-- **Triplet** — a group of 3 consecutive waves (setup → add → test), with 3 s inter-wave lull. Same shape as current per-level waves.
-- **Triplet break** — random 15-60 s pause between triplets. Statics remain active; no new waves fire.
+- **Triplet** — a group of 3 consecutive waves (setup → add → test), with a random 2-6 s inter-wave lull (`INTER_WAVE_LULL_MIN_MS`/`MAX_MS`, rolled per gap). Same shape as current per-level waves.
+- **Triplet break** — random 10-30 s pause between triplets. Statics remain active; no new waves fire.
 - **Hunter** — an active enemy that's pursuing the player across rooms (not a wave-spawn or sitter type per se, but a state).
 - **Hunt range** — Manhattan distance ≤ 2 in room-grid coords from hunter's current room to the player's current room.
 - **Static** — a dormant enemy sitting in a room, waiting to be aggroed.
@@ -84,9 +84,9 @@ Invariants requiring attention during implementation:
 
 ### 5.2 Connector templates
 
-**Pool size.** ~20 templates.
+**Pool size.** 20 templates.
 
-**Authoring status.** 6 written (T1-T6 below); ~14 remaining (see implementation step 8).
+**Authoring status.** All 20 written (`CONNECTOR_TEMPLATE_POOL` in `RoomTemplates.ts`): T1-T6 below, plus 3 more L-bends, 3 more T-junctions, 6 multi-opening hubs/forks, and 2 interior mazes.
 
 **Dimensions.** Each template is a 29×17 ASCII grid (matching the room dimensions).
 
@@ -100,7 +100,7 @@ Invariants requiring attention during implementation:
 
 Bears (34 px, exceed tile width) are not statically placed via these markers. Bears come only from waves (triplet 3+). If static bears are wanted later, add a `B` marker that reserves a 2×2 footprint — not for the prototype.
 
-**Exit declaration.** Each template declares walkable edges and openings: `{ edge: 'N'|'S'|'E'|'W', rangeStart: number, rangeEnd: number }`. Multi-opening edges produce multiple bands (see §5.5 wave bands).
+**Exit declaration.** Openings are derived from the ASCII walls by `deriveOpenings` (`RoomTemplates.ts`) as `{ edge: 'N'|'S'|'E'|'W', rangeStart: number, rangeEnd: number }` runs — the geometry is the single source of truth. Multi-opening edges produce multiple bands (see §5.5 wave bands).
 
 **First-pass template ASCII** (see source patterns from Labyrinth and Saboteur board games — straight, L-bend, T-junction, cross, dead-end, plus multi-opening variants):
 
@@ -220,22 +220,22 @@ T6 — Dead-end chamber (N only; chamber holds static cache)
 #############################
 ```
 
-Remaining templates to author in step 8: 3 more L-bend rotations (NW, SE, SW), 3 more T-junction rotations (open N, open E, open W), and ~8 multi-opening / interior-maze variants. Total ~20.
+The other 14 templates (authored in step 8, now in `RoomTemplates.ts`): 3 more L-bend rotations (NW, SE, SW), 3 more T-junction rotations (open N, open E, open W), 6 multi-opening hubs/forks, and 2 interior mazes. Total 20.
 
 ### 5.3 Room transitions (LTTP-style)
 
 - **Hard cut** — no slide, no fade.
-- **Exit topology** — declared by the template (see §5.2).
-- **Adjacency constraint** — map generator must place rooms so neighboring exits align positionally. If room A has E exit at row 8, room B (east of A) must have W exit at row 8. If no template fits, regenerate.
+- **Exit topology** — derived from the template's wall geometry (see §5.2).
+- **Adjacency constraint** — map generator must place rooms so neighboring exits align positionally. If room A has E exit at row 8, room B (east of A) must have W exit at row 8. *(As shipped: connector–connector neighbors use opening-set equality where a template fits, with a border-only fallback pool that allows asymmetric one-sided seams — never traversed, because BFS connectivity and runtime transitions both use opening **overlap**, not positional equality. Anchors connect permissively wherever openings overlap. Regeneration happens only when the boss is unreachable, not on per-placement fit failure — see `RoomGrid.pickConnector`.)*
 - **Player position on entry** — opposite edge from exit, aligned by row or column. Exit east at y=240 → enter from west at y=240.
 
 ### 5.4 Wave system (global)
 
 **Replaces** the current per-level `WaveScheduler` binding. One global scheduler across the entire run.
 
-**Run start.** 10-second grace period after the player enters the first room. Wave 1 fires at t=10.
+**Run start.** 2-second grace period after the player enters the first room. Wave 1 fires at t=2.
 
-**Triplet cadence.** 3 waves per triplet (setup → add → test), with 3-second `interWaveLullMs` between waves in a triplet. Then a random 15-60-second triplet break, then the next triplet.
+**Triplet cadence.** 3 waves per triplet (setup → add → test), with a random 2-6-second lull (`INTER_WAVE_LULL_MIN_MS`/`MAX_MS`, rolled per gap) between waves in a triplet. Then a random 10-30-second triplet break, then the next triplet.
 
 **Pause conditions:**
 - Player is mid-transition between rooms: wave timer pauses, resumes on entry to destination room.
@@ -271,29 +271,27 @@ else:
   spawnInterval = max(800, L3_INTERVAL[role] - (triplet - 3) * 50)  // -50 ms per triplet
 ```
 
-**Cap.** 25 per wave. **Soft cap** — when a group template fires near the cap, the whole template's enemies spawn even if it overshoots (see `WaveScheduler.tick` line 86-95). Overshoot can be up to the largest template's enemy count (currently 12 for `T_12SNAKE`).
+**Cap.** 25 per wave. **Soft cap** — when a group template fires near the cap, the whole template's enemies spawn even if it overshoots (see `GlobalWaveScheduler.tick` / `tryDrawGroup` — a whole-template draw credits `spawnedInWave`, allowing overshoot). Overshoot can be up to the largest template's enemy count (currently 12 for `T_12SNAKE`).
 
 **Projection under flat +1** (cap-clamped values):
 
 | Triplet | setup | add | test |
 |---|---|---|---|
 | 1 | 10 | 14 | 20 |
-| 2 | 14 | 20 | 25* |
+| 2 | 14 | 20 | 26 |
 | 3 | 16 | 22 | 25 |
 | 4 | 17 | 23 | 25 |
 | 6 | 19 | 25 | 25 |
 | 9 | 22 | 25 | 25 |
 | 12 | 25 | 25 | 25 |
 
-*Triplet 2 add (was 26 → now 25) and Triplet 2 test (was 26 → now 25): re-tune to the cap. Note this is more aggressive than just "retune L3 W3 = 28→25"; flag the implementation chat to verify if these are intended. **Confirm with owner before implementing.** If only L3 W3 should change, AUTHORED[1][2] stays 26 and the cap only applies starting at the formula branch.
-
-> **Open clarification:** Should the cap of 25 apply to all authored triplets (1-3), or only to the formula-extended ones (4+)? My recommendation when this was discussed was retune L3 W3 only (28→25). If the broader retune of T2 isn't desired, leave AUTHORED rows 1 and 2 untouched.
+As shipped, authored triplets 1-3 fire as-authored — `[10, 14, 20]`, `[14, 20, 26]`, `[16, 22, 25]` (L3 W3 retuned 28→25). The 25 cap clamps only the formula branch (triplet 4+); triplet 2's test wave of 26 stands.
 
 ### 5.5 Wave bands — per opening
 
-Each template declares its openings as `{ edge, rangeStart, rangeEnd }`. The wave-spawn system, at each spawn tick, picks among the **openings** of the current room (not edges). A multi-opening edge produces multiple bands.
+Each template's openings are derived from its ASCII walls by `deriveOpenings` (`RoomTemplates.ts`) as `{ edge, rangeStart, rangeEnd }` runs. The wave-spawn system, at each spawn tick, picks among the **openings** of the current room (not edges). A multi-opening edge produces multiple bands.
 
-Each band sits one tile outside the canvas along the corresponding edge, sized to the opening width. Existing `BandSpec` (`src/game/types.ts:105`) shape is reusable; per-opening generation happens at room-load time from the template.
+Each band sits one tile outside the canvas along the corresponding edge, sized to the opening width. Existing `BandSpec` (`src/game/types.ts`) shape is reusable; per-opening generation happens at room-load time from the template.
 
 ### 5.6 Wave group templates (matrix array)
 
@@ -310,18 +308,20 @@ interface SpawnTemplate {
 
 When a row enters a band, its enemies lay out along the band's orthogonal axis at positions `cumulative_width(prior_enemies) + (enemy.width / 2)`. Row clearance cadence (`bandReadyAt`) uses the slowest enemy in the row, as today.
 
-**Type unlock by wave # (gates the group pool):**
+**Type unlock by wave # (gates the group pool) — three tiered pools:**
 
 ```
-if wave_num <= 6:   pool = SNAKE_PANTHER_POOL
-else:               pool = SNAKE_PANTHER_BEAR_POOL
+if wave_num < WAVE_POOL_MID_UNLOCK:    pool = WAVE_POOL_EARLY
+elif wave_num < WAVE_POOL_LATE_UNLOCK: pool = WAVE_POOL_MID
+else:                                  pool = WAVE_POOL_LATE
 ```
 
-- **Waves 1-6:** snake + panther only.
-- **Waves 7+ (triplet 3+):** bears unlock.
+- **Waves 1-4 (`WAVE_POOL_EARLY`):** snake-heavy (3-snake, 6-snake) plus the 1-panther group.
+- **Waves 5-8 (`WAVE_POOL_MID`):** adds the panther groups (2-panther, 1-panther+6-snake) and 9-snake.
+- **Waves 9+ (`WAVE_POOL_LATE`):** adds the 1-bear group and 12-snake (the 1-bear+4-snake and 2-panther+1-bear groups remain legacy-pool only).
 - **Gibbons:** not in any wave pool yet. Deferred decision.
 
-This means the current `L2_3_GROUP_POOL` (which includes bears) is **not** used for waves 4-6 — those use the snake+panther-only pool. Confirm with owner before implementing if this nerf to current L2 content is undesired.
+Unlock constants: `WAVE_POOL_MID_UNLOCK = 5`, `WAVE_POOL_LATE_UNLOCK = 9`. (The legacy per-level pool with bears is `SNAKE_PANTHER_BEAR_POOL`; it remains for the legacy `LevelData` configs and is not used by the global scheduler.)
 
 ### 5.7 Enemy hitboxes (AABB widths)
 
@@ -379,7 +379,7 @@ export const ENEMY_AABB_PX: Record<EnemyType, number> = {
 
 ```
 on_first_entry(room):
-  base       = template.candidate_count  // total `s` + `S` slots
+  base       = STATIC_BASE_DENSITY       // explicit baseline (currently 1)
   boss_room  = anchor_10.coord
   boss_dist  = manhattan(room.coord, boss_room)
   wave_num   = current global wave number
@@ -395,9 +395,12 @@ on_first_entry(room):
   // each per §5.9 type rules.
 ```
 
+The template's `candidate_count` (total `s` + `S` slots) is a **cap only**, not the base — the NOTE on `STATIC_BASE_DENSITY` in `constants.ts` documents this resolution.
+
 **Constants** (in `constants.ts`):
 
 ```ts
+export const STATIC_BASE_DENSITY = 1;    // baseline statics per connector room
 export const BOSS_HALO_RADIUS = 6;       // extra statics within 6 rooms of boss
 export const WAVE_PER_C_INCREMENT = 6;   // +1 static per ~2 triplets
 ```
@@ -446,7 +449,7 @@ export const HUNT_RANGE = 2;  // Manhattan, in room-grid coords
 
 **Wake-while-absent race (Step 4 resolution).** The table above doesn't say what happens if an `activating` sitter's 1 s delay completes *after* the player has already left its room. Resolution: on wake, if the enemy is in the player's current room it becomes `active` (in-room pursuit); otherwise it becomes `hunting` (commits straight to the cross-room chase). Without this room check a static the player briefly poked then walked away from before 1 s would strand as a frozen, never-hunting parked `active`. Implemented in `Hunt.tick` (the `activating → active`/`hunting` branch).
 
-**Step 4 implementation status (2026-05-30).** The 4-state machine lives in `src/game/Hunt.ts` (pure logic, driven by gameLoop `currentTime`; holds no listeners/timers, so no disposal). Wave spawns are born `active`; the `active → hunting` flip fires when the player leaves a room (`onPlayerLeftRoom`), and parked hunters are walked room-to-room toward the player by `Game.updateHunters` (BFS routing via `RoomGrid.findPath`, one cached BFS per hunter-room per frame). De-aggro settlement uses a registered callback; Step 4 ships an **in-place stub** — Step 5+6 owns the real map-wide BFS placement (§5.13) and the runtime wiring that creates `dormant` statics + calls `startActivating` on room entry. Known deferred edge: a hunter crossing into the player's current room can contact-kill on its arrival frame if the player loiters in that exact doorway (no arrival telegraph yet — folds into the deferred telegraph work, §9).
+**Step 4 implementation status (2026-05-30).** The 4-state machine lives in `src/game/Hunt.ts` (pure logic, driven by gameLoop `currentTime`; holds no listeners/timers, so no disposal). Wave spawns are born `active`; the `active → hunting` flip fires when the player leaves a room (`onPlayerLeftRoom`), and parked hunters are walked room-to-room toward the player by `Game.updateHunters` (BFS routing via `RoomGrid.findPath`, one cached BFS per hunter-room per frame). De-aggro settlement uses a registered callback; **Steps 5+6 (implemented)** register `Game.settleDeaggroedHunter` — the real map-wide BFS placement (§5.13) — over Hunt's default, roll `dormant` statics on the player's first entry to a room, and wake them via `startActivating`. Known deferred edge: a hunter crossing into the player's current room can contact-kill on its arrival frame if the player loiters in that exact doorway (no arrival telegraph yet — folds into the deferred telegraph work, §9).
 
 ### 5.13 No despawn (anti-exploit)
 
@@ -461,11 +464,11 @@ export const HUNT_RANGE = 2;  // Manhattan, in room-grid coords
 
 ### 5.14 Family
 
-Family currently lives in a single anchor room. Family death → run ends (existing rule). Carryover / escort / per-member branching is **deferred**.
+Family currently lives in four anchor rooms (anchors 6-9). Family death → run ends is the design rule per `CLAUDE.md`; in code, family is render-only placeholders with no death triggers yet. Carryover / escort / per-member branching is **deferred**.
 
 ### 5.15 Boss arena (anchor 10)
 
-Deferred. Implement after the loop is solid. Until then, anchor 10 is the empty arena it is today; winning is "reach anchor 10."
+Boss combat is deferred. Implement after the loop is solid. Until then, the arena renders the corrupted growth at its center; winning is walking into the growth's heart — a small trigger AABB at `BOSS_GROWTH_CENTER` with extent `BOSS_GROWTH_TRIGGER_PX`. Entering the arena pauses the wave timer and shows the "Reached Boss" banner. (The **V** key remains an undocumented desktop debug shortcut for fast testing.)
 
 ---
 
@@ -475,8 +478,8 @@ Deferred. Implement after the loop is solid. Until then, anchor 10 is the empty 
 
 - `src/game/constants.ts` — new constants per §5.7, §5.10, §5.11, §5.12.
 - `src/game/Enemy.ts` — variable size per `ENEMY_AABB_PX`; AABB-vs-AABB collision; Hunt state machine; pathfinding jitter on block; entry into room logic.
-- `src/game/WaveScheduler.ts` — refactor to global (no per-level binding); 10 s grace; 3-wave triplets with random 15-60 s break between; pause on transition / boss / death; per-opening band derivation; new `rows: EnemyType[][]` template shape per §5.6.
-- `src/game/levels.ts` — `parseLevel` accepts `s` and `S`; existing levels (anchors) parsed with empty static defaults; introduce connector template pool entries.
+- `src/game/WaveScheduler.ts` — refactor to global (no per-level binding); 2 s grace; 3-wave triplets with random 2-6 s lulls within and a random 10-30 s break between; pause on transition / boss / death; per-opening band derivation; new `rows: EnemyType[][]` template shape per §5.6.
+- `src/game/levels.ts` — *(as shipped, this landed differently:)* `parseLevel` was **not** extended — it still accepts only `#`/`.`/`N`/`H` and throws on `s`/`S`. The `s`/`S` candidate parsing and the connector template pool both live in `RoomTemplates.ts` (`parseRoomTemplate` / `CONNECTOR_TEMPLATE_POOL`); anchor statics are expected via the `authoredStatics` manifest (§5.9, Step 7), not via ASCII markers in `levels.ts`.
 - `src/game/Game.ts` — orchestrator: room grid, transitions, Hunt tracking, wave pause/resume, room first-entry detection (for static rolling), restart-resets-map.
 - `src/game/Renderer.ts` — variable-size enemy rendering; room-transition camera (hard cut).
 - `src/game/types.ts` — `RoomGridCoord`, `RoomTemplate`, `HuntState`, `StaticCandidate`, updated `SpawnTemplate` (rows shape), updated `GameCallbacks` (new signals for room change, etc.).
@@ -533,7 +536,7 @@ Content only. Hand-author static manifests for each of the 10 anchor templates. 
 Each step's PR / branch must:
 
 1. **Lint clean** — `npm run lint` exits 0; no error lines.
-2. **Typecheck clean** — `npx tsc -p tsconfig.app.json --noEmit` exits 0; empty stdout.
+2. **Typecheck clean** — `npm run typecheck` (app, node, and api tsconfigs) exits 0; empty stdout.
 3. **Code review** — invoke the `code-review` skill at high effort; address all findings or document why ignored.
 4. **Manual verify** — run the app and exercise the new behavior in browser. The `verify` skill is the recommended path. If the step is purely refactor with no visible UI change, manual verify confirms no regression in existing flows (player movement, auto-fire, dash, burst, stamina drain, sound).
 5. **Pillar/invariant check** — re-read `CLAUDE.md` §3 and `docs/INVARIANTS.md`. No pillar weakened, no invariant violated. Invoke the `junar-pillars` skill if in doubt.
@@ -558,7 +561,6 @@ These are knowingly out of scope for the refactor itself:
 - **Per-anchor static authoring content** — empty defaults are acceptable for prototype.
 - **Anchor 1 visual marker / minimap / "you're here" indicator** — none for prototype; reconsider after playtest.
 - **Density-formula constants tuning** — `BOSS_HALO_RADIUS = 6`, `WAVE_PER_C_INCREMENT = 6` are starting values; tune in playtest.
-- **Wave-cap retune scope** — confirm whether 25 cap applies to authored triplets 1-3 or only to formula triplets 4+. Roadmap currently retunes only L3 W3 (28 → 25); broader retune of T1/T2 is **not** baked in. See §5.4 note.
 
 ---
 
@@ -585,13 +587,17 @@ export const ANCHOR_COUNT = 10;
 export const MIN_ANCHOR_SPACING = 5; // Manhattan rooms
 
 // Wave system
-export const RUN_START_GRACE_MS = 10_000;
-export const TRIPLET_BREAK_MIN_MS = 15_000;
-export const TRIPLET_BREAK_MAX_MS = 60_000;
+export const RUN_START_GRACE_MS = 2_000;
+export const TRIPLET_BREAK_MIN_MS = 10_000;
+export const TRIPLET_BREAK_MAX_MS = 30_000;
+export const INTER_WAVE_LULL_MIN_MS = 2_000;
+export const INTER_WAVE_LULL_MAX_MS = 6_000;
 export const WAVE_ENEMYCOUNT_CAP = 25;
-export const TYPE_UNLOCK_BEAR_WAVE = 7;
+export const WAVE_POOL_MID_UNLOCK = 5;
+export const WAVE_POOL_LATE_UNLOCK = 9;
 
 // Static density (B+C)
+export const STATIC_BASE_DENSITY = 1;
 export const BOSS_HALO_RADIUS = 6;
 export const WAVE_PER_C_INCREMENT = 6;
 

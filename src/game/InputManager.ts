@@ -59,8 +59,8 @@ export class InputManager {
   // with a movement key held leaves the key "pressed" forever in our Set,
   // and the player runs into walls or appears unable to move on one axis.
   private readonly handleBlur = () => {
-    // Also clear virtual input — a phone backgrounding the tab while a
-    // D-pad button is held would otherwise leave a direction stuck on.
+    // Also clear virtual input — a phone backgrounding the tab while the
+    // joystick is held would otherwise leave a direction stuck on.
     const hadVirtual =
       this.virtual.up || this.virtual.down || this.virtual.left || this.virtual.right;
     if (this.keys.size === 0 && !hadVirtual) return;

@@ -10,7 +10,7 @@ Junar has a structured event log that doubles as a crash reporter. Use it instea
 ## What's in place
 
 - `src/game/Logger.ts` — `CrashLogger` keeps a 1000-event ring buffer of `LogEvent { t, cat, msg, data? }`, hooks `window.error`, `window.unhandledrejection`, and a `keydown` for the post-crash R-to-reload, and exposes `log()`, `captureCrash()`, `reportNonHalting()`, `renderOverlay()`, `dispose()`.
-- `src/game/Game.ts` — owns the logger; calls `log()` at lifecycle moments (`'lifecycle'`, `'level'`, `'state'`, `'fire'`, `'hit'`, `'collision'`, `'input'`, `'wall'`, `'sample'`). The game loop wraps `update`/`render` in `try/catch` and routes errors through `captureCrash`.
+- `src/game/Game.ts` — owns the logger; calls `log()` at lifecycle moments (`'lifecycle'`, `'level'`, `'state'`, `'fire'`, `'hit'`, `'collision'`, `'input'`, `'wall'`, `'sample'`, `'spawn'`, `'stamina'`). The game loop wraps `update`/`render` in `try/catch` and routes errors through `captureCrash`.
 - `api/crash.ts` — Vercel Edge function. Hashes `error|stack[0..1]` to a 10-char fingerprint; opens a new GitHub issue tagged `crash` / `death` / `suspicious-death`, or comments on the existing open one with that fingerprint.
 
 Two flavors of report:
@@ -23,10 +23,10 @@ Two flavors of report:
 
 ```ts
 'lifecycle' | 'level' | 'state' | 'fire' | 'hit' | 'collision'
-| 'input' | 'sample' | 'wall' | 'warn' | 'error'
+| 'input' | 'sample' | 'spawn' | 'stamina' | 'wall' | 'warn' | 'error'
 ```
 
-`CrashPhase` (`Logger.ts:28`) is also closed:
+`CrashPhase` (`Logger.ts:30`) is also closed:
 
 ```ts
 'gameLoop' | 'update' | 'render' | 'global' | 'unhandledRejection'
@@ -41,22 +41,22 @@ Adding a new category or phase means editing `Logger.ts` (the union) — TypeScr
 
 2. **Pick from the existing `LogCategory` first.** Most new events fit one (`'state'` for game-state transitions, `'collision'` for kills, `'fire'` for shots, `'hit'` for damage, `'sample'` for periodic telemetry, `'lifecycle'` for cleanup/restart). Add a new category only when it's a genuinely new dimension and update the union deliberately.
 
-3. **`data` should be plain JSON, small, and round-numbered.** The logger does not stringify objects you forgot about; it just passes them through `JSON.stringify` later. The existing helper is `round2(n) = Math.round(n*100)/100` (`Game.ts:29`) — match that. Don't log raw `Vector2`, `Player`, or `Enemy` instances; pull the fields you actually want.
+3. **`data` should be plain JSON, small, and round-numbered.** The logger does not stringify objects you forgot about; it just passes them through `JSON.stringify` later. The existing helper is `round2(n) = Math.round(n*100)/100` (`Game.ts:82`) — match that. Don't log raw `Vector2`, `Player`, or `Enemy` instances; pull the fields you actually want.
 
-4. **Don't bypass `try/catch` in the game loop.** The `gameLoop` (`Game.ts:139`) calls `captureCrash` on any thrown error inside `update`/`render`. Don't wrap your own `try/catch` that swallows errors silently — let them propagate so the snapshot is built.
+4. **Don't bypass `try/catch` in the game loop.** The `gameLoop` (`Game.ts:1111`) calls `captureCrash` on any thrown error inside `update`/`render`. Don't wrap your own `try/catch` that swallows errors silently — let them propagate so the snapshot is built.
 
 5. **The `CrashSnapshot` shape is a contract.** `api/crash.ts` expects `error`, `stack`, `phase`, `frame`, `uptimeMs`, `state`, `events`, `userAgent`, `url`, `capturedAt`. Changing the shape (renaming fields, changing types) means updating both `Logger.ts` and `api/crash.ts` together.
 
 6. **Don't change the fingerprint algorithm casually.** It's `SHA-1(error|stack[0..1])`, 10 hex chars (`api/crash.ts:fingerprintOf`). Changing it splits existing recurrence threads — every crash starts opening fresh issues. If you do change it, accept the disruption deliberately.
 
-7. **Snapshot provider is bounded.** `Game.snapshotState()` (`Game.ts:152`) wraps each field in its own `try/catch` so a broken player or enemy can't break crash reporting. Match that pattern when adding new fields — the snapshot must succeed even when the game is in a bad state.
+7. **Snapshot provider is bounded.** `Game.snapshotState()` (`Game.ts:1131`) wraps the risky accessors — player position, pressed keys, and enemy positions — in their own `try/catch` blocks so a broken player or enemy can't break crash reporting (the remaining scalar fields are computed bare in the return). Match that pattern when adding new fields that touch game objects — the snapshot must succeed even when the game is in a bad state.
 
 ## Pattern: emitting a new event
 
 ```ts
 this.logger.log('collision', 'family-death', {
   member: 'wife',
-  level: this.currentLevelIndex + 1,
+  room: this.currentRoomCoord,
   msSinceLevelStart: Math.round(performance.now() - this.levelStartedAt),
 });
 ```
@@ -73,4 +73,4 @@ If the new event should also halt the game (like "suspicious"), follow the `game
 
 ## Local testing
 
-`window.__JUNGLE_CRASH__` (`Logger.ts:59`) holds the most recent snapshot in dev. Inspect it in the console after a crash. Press `R` on the crash overlay to reload (`handleReloadKey`).
+`window.__JUNGLE_CRASH__` (`Logger.ts:59`) holds the halting crash snapshot — it's set in any build, not just dev, and non-halting `gameOver` reports don't populate it. Inspect it in the console after a crash. Press `R` on the crash overlay to reload (`handleReloadKey`).
