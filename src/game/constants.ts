@@ -24,6 +24,11 @@ export const ARROW_COOLDOWN_MS = 500;
 // any future buffs can compose against a single source of truth.
 export const PLAYER_SPEED = 150; // pixels per second
 
+// Enemy AI pathfinding repoll cadence: each enemy re-derives its pursuit
+// target at most this often (Enemy.update), moving toward the cached target
+// between repolls. Promoted from an inline literal in Enemy.ts.
+export const ENEMY_PATHFIND_REPOLL_MS = 200;
+
 // Stamina pool — playthrough-wide, no regen, persists across all levels in
 // a run. Resets to STAMINA_MAX only on Game.restart().
 export const STAMINA_MAX = 100;

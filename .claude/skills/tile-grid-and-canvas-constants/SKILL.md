@@ -42,7 +42,6 @@ Most have already been promoted into `constants.ts` (`ARROW_COOLDOWN_MS = 500`, 
 | Value | Meaning | Where |
 |---|---|---|
 | Enemy speeds 395 / 218 / 68 / 34 | panther / bear / snake / gibbon px/s | `Enemy.ts` (per-type `switch`) |
-| Pathfind repoll `200` ms | enemy AI update cadence | `Enemy.ts` |
 | LOS sample step `8` px | raycast granularity (`ceil(distance / 8)`) | `Game.ts` (`hasDirectLineOfSight`) |
 | Enemy count `3 + index*2`, capped at `25` | per-level scaling in the unwired legacy perimeter spawner (`initializeLevels` — never called; its guard skips only `delayedSpawns` levels, currently none) | `levels.ts` |
 

@@ -5,6 +5,7 @@ import {
   CANVAS_HEIGHT,
   TILE_SIZE,
   ENEMY_AABB_PX,
+  ENEMY_PATHFIND_REPOLL_MS,
 } from './constants';
 
 export class Enemy {
@@ -109,6 +110,7 @@ export class Enemy {
 
   update(
     deltaTime: number,
+    currentTime: number,
     playerPosition: Vector2,
     level: Level,
     others: Enemy[] = [],
@@ -139,13 +141,10 @@ export class Enemy {
       return;
     }
 
-    // NOTE: Date.now() here is a pre-existing Invariant 8 item slated for a
-    // separate fix (migrate to gameLoop currentTime); left untouched per the
-    // Step 2 scope.
-    const currentTime = Date.now();
-
-    // Update pathfinding target every 200ms.
-    if (currentTime - this.lastPathfindTime > 200) {
+    // Repoll the pursuit target on the gameLoop clock (Invariant 8 — this
+    // was the last wall-clock timestamp in src/game/ outside Logger.ts; the
+    // rAF clock is immune to pause/resume drift and OS clock changes).
+    if (currentTime - this.lastPathfindTime > ENEMY_PATHFIND_REPOLL_MS) {
       this.targetPosition = this.findPathToPlayer(playerPosition, level);
       this.lastPathfindTime = currentTime;
     }
@@ -170,10 +169,24 @@ export class Enemy {
       if (!this.collidesWall(newX, this.position.y, level)) candX = newX;
       if (!this.collidesWall(candX, newY, level)) candY = newY;
 
+      // Wall-pin escape: a 34 px bear's centred AABB overhangs its 32 px cell
+      // by 1 px, so one parked against a corridor's edge column clips the
+      // adjacent wall column on EVERY step — both axis moves reject and
+      // candX/candY never leave the current position. Assigning that
+      // zero-net-movement "success" below would freeze the bear permanently
+      // (the jitter fallback only fired on enemy-vs-enemy overlap), so an
+      // off-target (distance > 5) step the walls zeroed out routes to the
+      // same jitter-then-hold fallback and the bear slides off the wall
+      // toward the corridor centre. No-op for enemies that fit their cell:
+      // their per-axis resolution only zeroes out in a true dead end, where
+      // jitter holds position anyway.
+      const wallPinned =
+        candX === this.position.x && candY === this.position.y;
+
       // Enemy-vs-enemy no-overlap (snake-snake exempt, §5.8). If the
       // wall-resolved step would overlap another enemy, reject it and jitter
       // to a random clear cardinal; hold position if none is clear.
-      if (!this.overlapsEnemy(candX, candY, others)) {
+      if (!wallPinned && !this.overlapsEnemy(candX, candY, others)) {
         this.position.x = candX;
         this.position.y = candY;
       } else {

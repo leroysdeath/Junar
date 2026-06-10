@@ -772,7 +772,7 @@ export class Game {
         if (enemy.getHuntState() !== 'hunting') continue;
         const step = this.hunterDoorStep(room, key, this.currentRoomCoord, enemy, pathCache);
         if (!step) continue; // no route this frame — hold
-        enemy.update(deltaTime, step.doorTarget, level, list);
+        enemy.update(deltaTime, now, step.doorTarget, level, list);
         if (this.hunterAtDoor(enemy, step.edge, step.opening)) {
           crossings.push({
             enemy,
@@ -1388,7 +1388,7 @@ export class Game {
     // Update the current room's enemies (all 'active'). Pass the live enemy
     // list so each can enforce enemy-vs-enemy no-overlap at its movement step.
     this.enemies.forEach(enemy => {
-      enemy.update(deltaTime, this.player.getPosition(), this.level, this.enemies);
+      enemy.update(deltaTime, currentTime, this.player.getPosition(), this.level, this.enemies);
     });
 
     // Hunt machine (Step 4, roadmap §5.12). tick() advances activation timers
