@@ -535,11 +535,24 @@ export class Game {
     const maxX = CANVAS_WIDTH - PLAYER_SIZE;
     const maxY = CANVAS_HEIGHT - PLAYER_SIZE;
 
+    // NET directional intent, matching Player.update's movement arithmetic
+    // (opposed keys cancel to zero motion there). Raw booleans would let a
+    // player holding both keys of an axis "press outward" while standing
+    // still: pinned at a door pair that fires a transition every frame —
+    // ping-ponging A↔B with the rest of the frame short-circuited each time,
+    // freezing the sim indefinitely at zero effort. If the input couldn't be
+    // walking the player outward, it can't transition (or arm the exit-band
+    // grace) outward either.
+    const pressRight = input.right && !input.left;
+    const pressLeft = input.left && !input.right;
+    const pressUp = input.up && !input.down;
+    const pressDown = input.down && !input.up;
+
     let edge: Edge | null = null;
-    if (input.right && pos.x >= maxX - margin) edge = 'E';
-    else if (input.left && pos.x <= margin) edge = 'W';
-    else if (input.up && pos.y <= margin) edge = 'N';
-    else if (input.down && pos.y >= maxY - margin) edge = 'S';
+    if (pressRight && pos.x >= maxX - margin) edge = 'E';
+    else if (pressLeft && pos.x <= margin) edge = 'W';
+    else if (pressUp && pos.y <= margin) edge = 'N';
+    else if (pressDown && pos.y >= maxY - margin) edge = 'S';
     if (!edge) return null;
 
     const def = this.currentRoomDef();

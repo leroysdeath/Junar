@@ -43,13 +43,13 @@ Adding a new category or phase means editing `Logger.ts` (the union) — TypeScr
 
 3. **`data` should be plain JSON, small, and round-numbered.** The logger does not stringify objects you forgot about; it just passes them through `JSON.stringify` later. The existing helper is `round2(n) = Math.round(n*100)/100` (`Game.ts:86`) — match that. Don't log raw `Vector2`, `Player`, or `Enemy` instances; pull the fields you actually want.
 
-4. **Don't bypass `try/catch` in the game loop.** The `gameLoop` (`Game.ts:1144`) calls `captureCrash` on any thrown error inside `update`/`render`. Don't wrap your own `try/catch` that swallows errors silently — let them propagate so the snapshot is built.
+4. **Don't bypass `try/catch` in the game loop.** The `gameLoop` (`Game.ts:1157`) calls `captureCrash` on any thrown error inside `update`/`render`. Don't wrap your own `try/catch` that swallows errors silently — let them propagate so the snapshot is built.
 
 5. **The `CrashSnapshot` shape is a contract.** `api/crash.ts` expects `error`, `stack`, `phase`, `frame`, `uptimeMs`, `state`, `events`, `userAgent`, `url`, `capturedAt`. Changing the shape (renaming fields, changing types) means updating both `Logger.ts` and `api/crash.ts` together.
 
 6. **Don't change the fingerprint algorithm casually.** It's `SHA-1(error|stack[0..1])`, 10 hex chars (`api/crash.ts:fingerprintOf`). Changing it splits existing recurrence threads — every crash starts opening fresh issues. If you do change it, accept the disruption deliberately.
 
-7. **Snapshot provider is bounded.** `Game.snapshotState()` (`Game.ts:1164`) wraps the risky accessors — player position, pressed keys, and enemy positions — in their own `try/catch` blocks so a broken player or enemy can't break crash reporting (the remaining scalar fields are computed bare in the return). Match that pattern when adding new fields that touch game objects — the snapshot must succeed even when the game is in a bad state.
+7. **Snapshot provider is bounded.** `Game.snapshotState()` (`Game.ts:1177`) wraps the risky accessors — player position, pressed keys, and enemy positions — in their own `try/catch` blocks so a broken player or enemy can't break crash reporting (the remaining scalar fields are computed bare in the return). Match that pattern when adding new fields that touch game objects — the snapshot must succeed even when the game is in a bad state.
 
 ## Pattern: emitting a new event
 
