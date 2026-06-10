@@ -440,11 +440,10 @@ function App() {
         />
 
         {/* Game UI Overlay — semi-transparent stats drawn on top of the canvas,
-            on both desktop and mobile. On mobile the extra right padding keeps
-            the stamina/sound cluster clear of the A/B action buttons pinned
-            top-right. */}
+            on both desktop and mobile. The A/B action buttons sit lower-right
+            (MobileControls), so the HUD needs no clearance padding. */}
         {gameState === 'playing' && (
-          <div className={`absolute top-4 left-4 right-4 ${isMobile ? 'pr-32' : ''}`}>
+          <div className="absolute top-4 left-4 right-4">
             {renderHud()}
           </div>
         )}
@@ -502,7 +501,7 @@ function App() {
                   <ul className="text-sm space-y-2 text-amber-100">
                     <li>
                       <strong>Movement:</strong>{' '}
-                      {isMobile ? 'Use the on-screen D-pad' : 'Arrow Keys (or W/S/D — A is dash)'}
+                      {isMobile ? 'Touch the left half of the screen to move' : 'Arrow Keys (or W/S/D — A is dash)'}
                     </li>
                     <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
                     <li>

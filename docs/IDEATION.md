@@ -40,15 +40,17 @@ backport to Alpha?
 **Status:** Idea under discussion. Spawn-source change only; gibbon stats
 (34 px/s, contact-only, one-hit) stay as designed.
 
-**Sketch:** Currently gibbons spawn at level edges via the perimeter
-randomizer (`levels.ts initializeLevels`). Idea: gibbons emerge from tree
-tiles (`#`) within some radius of the player, simulating a drop from the
-canopy — an ambient threat appearing near the player rather than chasing
-in from off-screen.
+**Sketch:** Currently gibbons enter play only as static spawns rolled at
+connector `s`/`S` candidate tiles (snake/gibbon 80/20 for `s`); they
+appear in no wave pool, and the legacy perimeter randomizer
+(`levels.ts initializeLevels`) is unwired dead code. Idea: gibbons emerge
+from tree tiles (`#`) within some radius of the player, simulating a drop
+from the canopy — an ambient threat appearing near the player rather than
+sitting dormant at fixed candidate tiles.
 
 **Open questions:** Detection radius? Cooldown between drops? Animation /
 visual cue at the drop tile? Do they drop straight down or pick a random
-nearby tree? Do they replace edge-spawn gibbons or supplement?
+nearby tree? Do they replace static-spawn gibbons or supplement?
 
 ---
 
@@ -92,66 +94,40 @@ or reset on level start?
 
 ## 5. Dash / roll
 
-**Status:** Idea under discussion. Compatible with the "where you stand"
-pillar as long as it's positioning-extension, not aim-extension — the
-player still doesn't aim, they reposition.
-
-**Open questions:** Cooldown? Distance (in tiles or pixels)?
-Invulnerability during dash? (recall: today there are no iframes — adding
-them via dash would be a real pillar consideration). Can dash cross walls
-or enemies? Key binding? Does it interact with the auto-fire cooldown?
+**Status:** Shipped 2026-05-10 as the dash teleport (CLAUDE.md §5);
+entry trimmed per the exit process below. What shipped: 3-tile blink
+opposite the player's facing, 0.5 stamina per use, Shift/A, no iframes,
+walls block (the blink stops at the last open tile before a wall).
 
 ---
 
 ## 6. Free movement between primary + connector levels
 
-**Status:** Concept only — explicitly tier-assigned "no tier" by owner
-on 2026-05-09. Captured here so the idea isn't lost; do not scope into
-any current build.
+**Status:** Shipped — superseded by the traversable-maps refactor
+(`docs/ROADMAP-traversable-maps.md`). The 10 hand-authored levels are
+now anchors in a procedurally generated room grid the player moves
+freely through, with connector rooms linking them and one run-long wave
+scheduler spawning into whichever room the player occupies.
 
-**Sketch:** Architecture-scale change. Instead of the current
-clear-level → next-level state machine, the 10 primary levels become
-nodes the player can move freely between, with designed or
-randomly-generated "connector levels" linking them. The wave system runs
-continuously; "lulls" between waves become free-movement phases. Enemies
-pursue the player into whichever level they're on.
-
-**Why it's not on a tier yet:** Inverts the current `Game.ts` /
-`WaveScheduler.ts` / `Level.ts` contracts. Big architectural rework with
-high risk to the prototype loop. Worth re-evaluating after Demo ships
-and the loop is solid.
-
-**Open questions:** Connector-level count? Generation method (random vs.
-designed vs. hybrid)? How do level transitions render visually
-(seamless, fade, dedicated transition tile)? Enemy carry-over cap
-between levels? Does the wave scheduler pause at level boundaries or
-truly run continuously?
+**Open questions — answered by the implementation:**
+- Generation method → hybrid: Poisson-disk-placed anchors plus template
+  connectors (`RoomGrid.ts`, `RoomTemplates.ts`).
+- Transition rendering → LTTP hard cuts (`Game.detectTransition`).
+- Scheduler at boundaries → the `GlobalWaveScheduler` pauses during a
+  room transition and inside the boss arena, resuming on room entry.
+- Enemy carry-over → enemies persist per-room (no despawn, no cap);
+  active enemies pursue the player room-to-room via the Hunt state
+  machine (`src/game/Hunt.ts`).
 
 ---
 
 ## 7. Burst / rapid-fire ability
 
-**Status:** Idea under discussion. Compatible with the "where you stand"
-pillar as long as the targeting layer is unchanged — the player chooses
-*when* to burst, not *what* to shoot. Auto-fire still picks the nearest
-LOS-cleared enemy on each shot.
-
-**Sketch:** Press a button to double the arrow fire rate for X seconds.
-At the cap of one keystroke and a duration window, this stays
-positioning-flavored: you burst when you've forced a chokepoint and want
-to cash in, not as a substitute for getting into a good position.
-
-**Open questions:** Activation key? Buff duration (e.g., 3s, 5s)?
-Cooldown between activations? Is it run-resource (limited charges per
-run / per level) or cooldown-only? Does it stack with other buffs (e.g.,
-dash)? Does the cooldown change `Game.ts` `ARROW_COOLDOWN_MS` at runtime,
-or introduce a new `arrowCooldownMultiplier` field? Visual cue (player
-glow, arrow trail change, on-screen icon)?
-
-**Tension to watch:** if burst is too cheap or too frequent, it
-under-cuts the tactical-positioning pillar — players will rely on burst
-DPS rather than reading the maze. Tune toward "rare reward for good
-positioning," not "always-on offensive crutch."
+**Status:** Shipped 2026-05-10 (CLAUDE.md §5); entry trimmed per the
+exit process below. What shipped: 2.0× fire rate for 5 s, multiplier
+decays ×0.75 when re-activated within a 15 s break, 5 stamina per
+activation, Space/B; implemented as `constants.ts` `ARROW_COOLDOWN_MS`
+divided by a multiplier, not runtime constant mutation.
 
 ---
 

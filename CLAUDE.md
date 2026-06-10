@@ -35,7 +35,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 1. Spawn in **anchor 1** (the run-start room) of a freshly generated room grid; a 2-second grace precedes the first wave.
 2. Move (WASD/arrows) to expose targets through corridor gaps and to break LOS on threats you can't safely engage.
 3. Arrows auto-fire every 500ms at the nearest enemy within 450px with an unobstructed center-to-center raycast (any angle).
-4. Avoid contact — every enemy is melee, and any AABB overlap with the player is instant death.
+4. Avoid contact — every enemy is melee, and contact is instant death (kill test: enemy cell-center within half a tile of the player center on both axes; see §5 Player).
 5. Walk to a room-edge opening that connects to a neighbor → **LTTP hard-cut transition** into that room. One run-long wave scheduler keeps spawning into whichever room you currently occupy.
 6. Traverse the grid to reach the **boss room (anchor 10)**. Entering it pauses the wave timer (no new spawns in the arena) and shows a "Reached Boss" banner; the run otherwise keeps playing (movement, auto-fire, contact-death all live), and walking back out resumes the waves. Death regenerates the whole map and respawns you in a new anchor 1. (Boss combat is still deferred per `docs/ROADMAP-traversable-maps.md` §5.15; until it lands, **walking into the corrupted growth at the arena's center tile** triggers a stub victory — a positional trigger, so it works identically on keyboard, touch, and gamepad. Pressing V inside the arena is an undocumented desktop debug shortcut for the same stub.)
 
@@ -43,9 +43,9 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 ## 5. Mechanics reference
 
-**Controls** — WASD or arrow keys for movement; Shift or A for dash; Space or B for burst (mobile: on-screen D-pad for movement, A button for dash, B button for burst). Click canvas to start. Sound toggle is a UI button.
+**Controls** — W/S/D plus arrow keys for movement (A is deliberately *not* mapped to left — it's the dash key; use ArrowLeft to move left); Shift or A for dash; Space for burst (mobile: floating joystick — touch anywhere on the left half of the screen — for movement; A and B buttons pinned lower-right for dash and burst). Runs start from the menu's "Start Adventure" button (Game's legacy canvas click-to-start listener is occluded by the menu overlay). Sound toggle is a UI button.
 
-**Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no per-level stamina pool (stamina is playthrough-wide and persistent; see Stamina below). One hit kills. Death is **AABB-overlap only** — an enemy must physically touch the player to kill them. The 360° LOS check is the *player's* auto-fire mechanic, not an enemy attack.
+**Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no per-level stamina pool (stamina is playthrough-wide and persistent; see Stamina below). One hit kills. Death is **contact-only**, and the kill test is a **center-distance rule**: an enemy kills the player when their cell centers are within half a tile (16 px) on both axes (`Game.checkCollisions`). The per-type `ENEMY_AABB_PX` boxes are used only for wall and enemy-vs-enemy collision, never for the player-kill check. The 360° LOS check is the *player's* auto-fire mechanic, not an enemy attack.
 
 **Enemies** (`src/game/Enemy.ts`) — four approved types, fixed speeds. All are infected jungle wildlife, not generic monsters:
 | Type    | Speed (px/s) | In-world identity |
@@ -57,7 +57,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 Enemy pathfinding repolls every 200 ms; direct path if clear, else best cardinal step.
 
-Enemies also carry a **Hunt state** (`src/game/Hunt.ts`, traversable-maps Step 4): `dormant → activating → active → hunting`. Wave spawns start `active` (in-room pursuit); when the player leaves a room its active enemies become `hunting` and chase the player room-to-room through openings (no despawn), de-aggroing back to a dormant static once the player's room is more than 2 rooms (Manhattan) away. Dormant/activating sitters hold position until woken. See `docs/ROADMAP-traversable-maps.md` §5.11–5.12. (Static placement + the de-aggro BFS settlement land in Step 5+6.)
+Enemies also carry a **Hunt state** (`src/game/Hunt.ts`, traversable-maps Step 4): `dormant → activating → active → hunting`. Wave spawns start `active` (in-room pursuit); when the player leaves a room its active enemies become `hunting` and chase the player room-to-room through openings (no despawn), de-aggroing back to a dormant static once the player's room is more than 2 rooms (Manhattan) away. Dormant/activating sitters hold position until woken. See `docs/ROADMAP-traversable-maps.md` §5.11–5.12. (Static placement and the de-aggro BFS settlement landed in Step 5+6: statics roll from template candidates on the player's first entry to a room, and a de-aggroing hunter is relocated via a map-wide BFS to the nearest compatible open tile.)
 
 Each type has its own **collision AABB** (`ENEMY_AABB_PX` in `constants.ts`: bear 34, panther 21, gibbon 15, snake 4 px), centered inside the 32 px cell — so a bear can't fit a 1-tile corridor while a snake's 4 px footprint lets many pack per tile. Enemies can't overlap each other (snake-vs-snake is the one exception — snakes stack); a step that would overlap jitters to a free cardinal direction, else holds. The 32 px cell stays the positioning/render unit and the arrow-hit box, so auto-fire targeting and arrow collision are unchanged. See `docs/ROADMAP-traversable-maps.md` §5.7–5.8.
 
@@ -67,7 +67,7 @@ Each type has its own **collision AABB** (`ENEMY_AABB_PX` in `constants.ts`: bea
 
 **Family NPCs** (planned, behavior unwired in code) — wife, son, daughter. Current scope (updated 2026-05-09):
 - Levels 1–3: solo, no family. (Note: these use wave-driven spawning; see Spawning below.)
-- **Levels 4 or 5 onward (exact level TBD): family begins to appear** as translucent placeholder rectangles and continues through the boss arena. Family positions are seeded in level ASCII grids via the `N` tile marker and parsed into `npcPositions`.
+- **Levels 4 or 5 onward (exact level TBD; currently seeded from anchor 6): family begins to appear** as translucent placeholder rectangles, eventually continuing through the boss arena (the boss-arena grid carries no `N` markers yet). Family positions are seeded in level ASCII grids via the `N` tile marker (today: anchors 6–9) and parsed into `npcPositions`.
 - Level 10 (final boss): all three remaining family members fight alongside the player as active combatants.
 - Currently in code, family is render-only: translucent placeholder rectangles at `N` tiles in `Renderer.renderNpcs`. No `FamilyMember` class, no AI, no AABB, no death triggers, no carryover yet — all to be built.
 
@@ -93,9 +93,9 @@ Don't structure family / hut code in a way that locks future per-member branchin
 
 When stamina drops below the low threshold (10 points), both movement speed and arrow fire rate are multiplied by 0.5×, creating a compounding penalty. When stamina hits zero, penalties are locked at 0.5×.
 
-**Auto-fire** (`src/game/Game.ts`, `src/game/Stamina.ts`) — cooldown 500 ms (effective cooldown is `500 / (burstMultiplier × lowStaminaMultiplier)`), range 450 px, **full 360° at any angle**. Each frame, picks the nearest enemy within range whose center is reachable from the player center by an unobstructed wall raycast; fires an arrow on the raw unit vector to that enemy (no angle snapping). Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit (4×4 AABB collision vs enemy AABB).
+**Auto-fire** (`src/game/Game.ts`, `src/game/Stamina.ts`) — cooldown 500 ms (effective cooldown is `500 / (burstMultiplier × lowStaminaMultiplier)`), range 450 px, **full 360° at any angle**. Each frame, picks the nearest enemy within range whose center is reachable from the player center by an unobstructed wall raycast; fires an arrow on the raw unit vector to that enemy (no angle snapping). Arrow speed 400 px/s; arrows die on bounds, walls, or enemy hit (4×4 arrow box vs the enemy's full 32 px cell — not the per-type collision AABB).
 
-**Burst rapid-fire** (`src/game/Stamina.ts`, triggered via Space/B or on-screen B button) — edge-triggered activation (not held). When active:
+**Burst rapid-fire** (`src/game/Stamina.ts`, triggered via Space or the on-screen B button — there is no keyboard B binding) — edge-triggered activation (not held). When active:
 - Arrow cooldown is multiplied by the burst multiplier (starts at 2.0×, decays with each activation).
 - Lasts 5 seconds.
 - Resets after a 15-second break. Activating again within 15 seconds of the last burst end applies a decay rule: `multiplier *= 0.75`, so spamming burst eventually self-debuffs to <1×.
@@ -104,17 +104,17 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - Direction: opposite of the player's current cardinal facing (up/down/left/right).
 - Distance: 3 tiles = 96 pixels, or stops at the last open tile before a wall, whichever is shorter.
 - Cost: 0.5 stamina (rejected if stamina < 0.5).
-- AABB-vs-enemy collision still applies post-dash, so landing inside an enemy kills the player.
+- The contact-death check (the center-distance kill rule in `Game.checkCollisions`) still applies at the post-dash position, so landing on an enemy kills the player.
 
 **Line of sight** (`src/game/Game.ts` → `hasDirectLineOfSight`) — generic point-to-point raycast from player center to enemy center, sampled in equal steps at ~8 px granularity (`steps = ceil(distance / 8)`); LOS is blocked if any sampled tile is a wall. Center-to-center is intentional: an enemy peeking out from behind a wall column doesn't qualify until the player steps to clear the line.
 
 **Rooms & map** (`src/game/RoomGrid.ts`, `src/game/RoomTemplates.ts`, `src/game/levels.ts`) — each run generates a **29×17 grid of rooms** (`generateRunMap`, 493 rooms), regenerated on every run/death. Each room is one 29×17-tile playfield (928×544 px). Two kinds:
 - **Anchors (10):** the hand-authored ASCII levels in `levels.ts`. Anchor 1 = run start, anchor 10 = boss. Placed by Poisson-disk sampling (≥ `MIN_ANCHOR_SPACING` rooms apart, interior cells only). At build time `RoomGrid` carves canonical doorways (N/S at cols 13–15, E/W at rows 7–9) into a *copy* of each anchor's walls so they connect to the corridor fabric — the boss arena was an unenterable sealed wall ring otherwise. `N`/`H` family/hut markers ride along and still render in their anchor room.
 - **Connectors (~483):** procedurally placed from `CONNECTOR_TEMPLATE_POOL` (20 templates: straights, bends, T-junctions, cross, dead-end, multi-opening hubs, interior mazes). Adjacent connectors are chosen so shared-edge openings match; a BFS path-existence check guarantees the boss is reachable from the start, else the map regenerates.
-- Grid size: 29 columns × 17 rows, each tile 32 px = 928×544 px total. Tile chars: `#` wall (tree), `.` floor (dirt), `N`/`H` family/hut markers (floor); connector templates additionally use `s`/`S` static-spawn candidates (floor; consumed by a later step). `N`/`H`/`s`/`S` all count as floor for collision/pathfinding.
+- Grid size: 29 columns × 17 rows, each tile 32 px = 928×544 px total. Tile chars: `#` wall (tree), `.` floor (dirt), `N`/`H` family/hut markers (floor); connector templates additionally use `s`/`S` static-spawn candidates (floor; rolled into dormant statics on the player's first entry to the room — Step 5+6). `N`/`H`/`s`/`S` all count as floor for collision/pathfinding.
 - **Transitions are LTTP hard cuts:** walking (pressing outward) into an edge opening that overlaps a neighbor room's opening drops the player at the aligned opposite edge of that neighbor (`Game.detectTransition`).
 
-**Spawning** (`src/game/WaveScheduler.ts`) — one run-long **`GlobalWaveScheduler`** drives all spawns. (The per-level `WaveScheduler` class and the legacy static-`enemySpawns`/`delayedSpawns` paths still exist in the source but are no longer wired by `Game`; the `USE_GLOBAL_WAVE_SCHEDULER` flag is removed — global is permanent.) Lifecycle: a 2 s run-start grace, then **triplets** of three waves (setup → add → test) separated by a random 2–6 s inter-wave lull, with a random 10–30 s break between triplets; wave size/cadence escalate indefinitely (`waveParams`; cap 25/wave). The group pool widens by global wave number (`WAVE_POOL_MID_UNLOCK`/`WAVE_POOL_LATE_UNLOCK`): waves 1–4 are 3-snake/6-snake/1-panther only; waves 5–8 add 2-panther, 1-panther+6-snake, and 9-snake; waves 9+ add 1-bear and 12-snake (bears unlock here). Each tick, group templates (`SpawnTemplate.rows: EnemyType[][]`, packed by cumulative AABB width) drip row-by-row into the **current room's per-opening spawn bands** — one band per room opening, derived on room entry (`Game.bandsForRoom`, roadmap §5.5). The scheduler **pauses during a room transition** and resumes on entry (hooks reused for the boss arena later). Enemies **persist per-room** (no despawn): leaving a room parks its enemies; they're still there on return. Cross-room hunting and statics arrive in later refactor steps.
+**Spawning** (`src/game/WaveScheduler.ts`) — one run-long **`GlobalWaveScheduler`** drives all spawns. (The per-level `WaveScheduler` class and the legacy static-`enemySpawns`/`delayedSpawns` paths still exist in the source but are no longer wired by `Game`; the `USE_GLOBAL_WAVE_SCHEDULER` flag is removed — global is permanent.) Lifecycle: a 2 s run-start grace, then **triplets** of three waves (setup → add → test) separated by a random 2–6 s inter-wave lull, with a random 10–30 s break between triplets; wave size/cadence escalate indefinitely (`waveParams`; cap 25/wave). The group pool widens by global wave number (`WAVE_POOL_MID_UNLOCK`/`WAVE_POOL_LATE_UNLOCK`): waves 1–4 are 3-snake/6-snake/1-panther only; waves 5–8 add 2-panther, 1-panther+6-snake, and 9-snake; waves 9+ add 1-bear and 12-snake (bears unlock here). Each tick, group templates (`SpawnTemplate.rows: EnemyType[][]`, rows laid out at uniform one-tile slots — the per-type AABB packing from roadmap §5.7 has not been wired into the dripper) drip row-by-row into the **current room's per-opening spawn bands** — one band per room opening, derived on room entry (`Game.bandsForRoom`, roadmap §5.5). The scheduler **pauses during a room transition** and resumes on entry; the boss arena reuses the same hooks — entering pauses the timer for the whole visit, leaving resumes it. Enemies **persist per-room** (no despawn): leaving a room parks its enemies; they're still there on return. Statics are separate from the wave pipeline — Game rolls them from template candidates on first room entry — and cross-room hunters are driven by the Hunt machine (see Hunt state above); the `GlobalWaveScheduler` drives all wave spawns.
 
 **Scoring** — +10 per kill. (The old +100 × level "level complete" bonus is gone with the level-complete flow; run/room-progression scoring is TBD.)
 
@@ -124,7 +124,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 
 **Protagonist** — Adivasi/tribal-Indian archer, husband and father. Visual direction (in code, `Renderer.renderPlayer`): sprite-based using a CC0 LTTP-style sheet (16×32 px per frame, 4-frame walk animation per direction, directions = up/down/left/right). Color and proportions read as deep warm-brown skin, short black hair (no headdress), cream cotton tunic with a dark waist sash (dhoti-coded), bow held offhand on the left, leather quiver at right hip. Procedural rendering is not used for the player; sprite is the exception to the procedural-only rule.
 
-**Family** — wife, son (boy), daughter. They lived in harmony with the jungle and read it like a second language. They are the player's reason. Rendered as translucent procedural rectangles (placeholder, not final art) with basic anthropomorphic cues: rectangular tunic, rounded head, dark hair. They appear on Levels 4+ as passive render-only placeholders and will gain AI and death triggers once family mechanics are implemented.
+**Family** — wife, son (boy), daughter. They lived in harmony with the jungle and read it like a second language. They are the player's reason. Rendered as translucent procedural rectangles (placeholder, not final art) with basic anthropomorphic cues: rectangular tunic, rounded head, dark hair. They currently appear in anchors 6–9 (the levels whose ASCII grids carry `N` markers) as passive render-only placeholders and will gain AI and death triggers once family mechanics are implemented.
 
 **Antagonist** — not the beasts. The beasts are victims of an infection: a black goo emanating from a monstrous plant deep in the jungle. The plant is the boss. Tone is tragic — the player is killing wildlife because there's no other choice, and the world is worth saving.
 
@@ -145,7 +145,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 ## 7. Scope & roadmap
 
 **In scope (prototype):**
-- **Traversable room grid** (`docs/ROADMAP-traversable-maps.md`): the 10 hand-authored levels become **anchors** in a procedurally generated grid of rooms; the player traverses room-to-room toward the boss. Generator + LTTP hard-cut transitions + global wave scheduler landed as **Step 3 (2026-05-30)**. Remaining refactor steps: cross-room Hunt AI (4), static spawns + density (5/6), per-anchor static authoring (7), boss-room gating (9).
+- **Traversable room grid** (`docs/ROADMAP-traversable-maps.md`): the 10 hand-authored levels become **anchors** in a procedurally generated grid of rooms; the player traverses room-to-room toward the boss. Generator + LTTP hard-cut transitions + global wave scheduler landed as **Step 3 (2026-05-30)**; cross-room Hunt AI (4), static spawns + density with BFS de-aggro settlement (5/6), the full connector template pool (8), and boss-room gating (9) have all landed since. Remaining refactor work: per-anchor static authoring (Step 7) and boss combat (roadmap §5.15).
 - Family appears in the anchor rooms that carry `N` markers (currently anchors 6–9) as translucent placeholders, and through the boss arena.
 - Boss room (anchor 10): corrupted plant exuding black goo.
 - Visual update for the Adivasi-coded protagonist (complete: sprite asset in use as of 2026-05-10).
@@ -160,7 +160,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - A passive family-escort intro on a mid-game level. Possible future phase, not now.
 - Multiple-endings system (hut-attack branch, family-survival carryover into later levels). Documented direction; do not implement without owner sign-off. See §5 and the `protagonist-and-family-tone` skill.
 - Sprite assets for anything other than the player. The player is on a CC0 LTTP-style sheet (owner-approved 2026-05-10); family, beasts, walls, HUD, arrows, and FX stay procedural. Expanding sprite use to a second entity type needs owner approval. See `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
-- New input methods (gamepad, mouse-aim). Touch input is now supported for mobile testing — phones and tablets get an on-screen D-pad via `src/MobileControls.tsx`. Detection uses `(pointer: coarse)` so desktop touchscreens stay on keyboard. Don't add additional input methods without owner sign-off.
+- New input methods (gamepad, mouse-aim). Touch input is now supported for mobile testing — phones and tablets get a floating joystick over the left half of the screen plus on-screen A/B buttons via `src/MobileControls.tsx`. Detection uses `(pointer: coarse)` so desktop touchscreens stay on keyboard. Don't add additional input methods without owner sign-off.
 - Saves, accounts, leaderboards.
 - Multiplayer, online features.
 - Migration to Phaser, Godot, or any other engine.
@@ -187,7 +187,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 
 **Things to stay aware of so we don't paint into corners:**
 - **No browser-only APIs without a Tauri equivalent.** Web Audio, Canvas 2D, `requestAnimationFrame`, keyboard events — all fine. Storage, file system, fullscreen, and gamepad need Tauri-aware patterns when we get to them. Avoid service workers, Web Bluetooth, browser DRM, and pop-up windows.
-- **Canvas is fixed 928×544** (≈17:10 aspect; chosen for an odd column count of 29 so every level has a true center column at col 14). Scales near 1080p at ×2 (1856×1088 — 32 px horizontal black bars and 8 px vertical bars on a 16:9 1080p monitor). Plan to add a fullscreen toggle with letterboxed scaling before any Steam build, not urgent for prototyping.
+- **Canvas is fixed 928×544** (≈17:10 aspect; chosen for an odd column count of 29 so every level has a true center column at col 14). A clean ×2 scale is 1856×1088 — 32 px side bars but 8 px **too tall** for a 16:9 1080p monitor, so an integer scale doesn't fit; desktop fullscreen will need fit-to-height letterboxed scaling (~×1.985) or a small crop. Mobile already requests fullscreen + orientation lock on the start gesture and CSS-fits the canvas to the frame; a desktop fullscreen toggle is still to-do before any Steam build, not urgent for prototyping.
 - **Saves don't exist yet.** When they do, write through Tauri's app-data dir, not `localStorage` long-term.
 - **Steamworks SDK** (achievements, cloud save, leaderboards) integrates via a Tauri plugin or a small Rust crate. Post-prototype concern.
 
@@ -210,37 +210,42 @@ When working in this repo:
 - **Don't migrate to a game engine.** Decision logged: stay on Canvas 2D for the prototype.
 - **Stay Tauri-compatible.** Steam is the eventual publish target via a Tauri wrap (see section 8). Don't introduce browser-only features that wouldn't survive a desktop build — Web Audio, Canvas 2D, keyboard input, and standard storage are all fine; service workers, Web Bluetooth, and pop-up windows are not.
 - **Player is the only entity allowed to use a real sprite asset.** Owner-approved 2026-05-10 to swap the procedural player for a CC0 LTTP-style sheet. Family NPCs, beasts, walls, HUD, arrows, and FX still render procedurally via `Renderer.ts`. Don't extend sprite assets to any other entity without owner approval. See `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
-- **Prefer extending existing modules** over adding new ones. The 16 files in `src/game/` cover the surface area; new concerns should fit in one of them: `Game.ts` (orchestrator), `Player.ts`, `Enemy.ts`, `Level.ts`, `levels.ts` (anchor ASCII), `RoomGrid.ts` (run-map generation), `RoomTemplates.ts` (connector templates), `types.ts`, `Renderer.ts`, `InputManager.ts`, `CollisionManager.ts`, `SoundManager.ts`, `Stamina.ts`, `WaveScheduler.ts`, `Logger.ts`, `constants.ts`.
+- **Prefer extending existing modules** over adding new ones. The 17 files in `src/game/` cover the surface area; new concerns should fit in one of them: `Game.ts` (orchestrator), `Player.ts`, `Enemy.ts`, `Hunt.ts` (hunt-state machine), `Level.ts`, `levels.ts` (anchor ASCII), `RoomGrid.ts` (run-map generation), `RoomTemplates.ts` (connector templates), `types.ts`, `Renderer.ts`, `InputManager.ts`, `CollisionManager.ts`, `SoundManager.ts`, `Stamina.ts`, `WaveScheduler.ts`, `Logger.ts`, `constants.ts`.
 - **Pull magic numbers into named constants** when you touch them. Especially `928`, `544`, `32`, `16`, `400`, `450`, `500`. Use `src/game/constants.ts`.
 - **Always clean up listeners and timers.** The early scaffolding leaked both — those are now fixed. Anything new that subscribes to `window` or schedules a `setTimeout` must be disposable from `Game.cleanup()`.
 - **Lint and typecheck before declaring done.** `npm run lint` and `npm run typecheck` must be clean. Both cover `api/` (the Vercel Edge crash sink) as well as `src/` — the typecheck script runs all three tsconfigs (app, node, api).
 - **Use `Date.now()` only for wall-clock things.** Game timing flows from the `gameLoop` `currentTime` (a `performance.now()` value passed by `requestAnimationFrame`). Mixing the two causes pause/resume bugs. The crash logger uses `Date.now()` for UI timestamps, which is fine (those are non-critical wall-clock).
 - **Crash logger is always running.** Do not remove or disable `src/game/Logger.ts`. It captures frame-by-frame state snapshots and renders an overlay on crash for debugging. Extend it if needed, but don't lose it.
-- **Mobile input is wired.** The D-pad in `MobileControls.tsx` drives movement via `setVirtualInput` and buttons via `triggerBurst` / `triggerDash`. Desktop and mobile input paths converge in `InputManager.ts` so the game loop sees a unified input stream. Both paths must be tested.
+- **Mobile input is wired.** The floating joystick in `MobileControls.tsx` drives movement via `setVirtualInput` (analog vector mapped to cardinal booleans) and the A/B buttons via `triggerDash` / `triggerBurst`. Desktop and mobile input paths converge in `InputManager.ts` so the game loop sees a unified input stream. Both paths must be tested.
 
 ## 10. File map
 
 ```
 src/
-├── App.tsx                       React shell: canvas + HUD overlays (room coord + wave #) + menu/game-over/victory; useIsMobile hook
-├── MobileControls.tsx            On-screen D-pad rendered when (pointer: coarse) matches; pointer-capture press/release tracking
+├── App.tsx                       React shell: canvas + HUD overlays (room coord, wave #, kills, stamina/burst) + menu/game-over/victory + "Reached Boss" banner; useIsMobile/useIsPortrait hooks, CSS force-landscape rotation, mobile fullscreen + orientation lock
+├── MobileControls.tsx            Floating left-half joystick + lower-right A/B buttons (rendered by App when (pointer: coarse) matches); pointer-capture tracking; remaps coordinates when the root is CSS force-rotated to landscape
 ├── main.tsx                      React entry point
 ├── index.css                     Global styles (Tailwind)
 └── game/                         All game logic — pure TS, no React
-    ├── Game.ts                   Orchestrator: game loop, room grid + LTTP transitions, arrow firing, collisions, stamina, burst, dash
+    ├── Game.ts                   Orchestrator: game loop, room grid + LTTP transitions, arrow firing, collisions, statics, stamina, burst, dash, boss-arena win trigger
     ├── Player.ts                 Player position, movement, wall collision, dash teleport, cardinal facing, setPosition
     ├── Enemy.ts                  Enemy AI (direct pathfinding + cardinal-fallback, entry mode for wave spawns)
+    ├── Hunt.ts                   Hunt-state machine (dormant/activating/active/hunting): room enter/leave transitions, cross-room hunting, BFS de-aggro settlement hook
     ├── Level.ts                  Tilemap, isWall(), spawn helpers (player + enemies), NPC/hut positions
     ├── levels.ts                 Hardcoded ASCII grids for the 10 anchor levels + global wave-pool templates
     ├── RoomGrid.ts               Run-map generator: Poisson anchors, anchor door-carving, connector fill, BFS path-existence, transition helpers
     ├── RoomTemplates.ts          Connector template pool (ASCII → walls/openings/candidates) + parser (deriveOpenings)
     ├── types.ts                  Vector2, Rectangle, GameState, GameCallbacks, EnemyType, Facing, room-grid + WaveScheduler types
-    ├── Renderer.ts               Canvas 2D draw routines for the current room/player/enemies/arrows/NPCs/huts/HUD (hybrid sprite + procedural)
-    ├── InputManager.ts           Keyboard + virtual (mobile) input listener → InputState; burst + dash edge-trigger detection
+    ├── Renderer.ts               Canvas 2D draw routines for the current room/player/enemies/arrows/NPCs/huts/corrupted growth (hybrid sprite + procedural)
+    ├── InputManager.ts           Keyboard + virtual (mobile) input listener → InputState; burst + dash + win-stub edge-trigger detection
     ├── CollisionManager.ts       AABB overlap helper
     ├── SoundManager.ts           Web Audio synthesized SFX
     ├── Stamina.ts                Playthrough-wide stamina pool, burst state machine, decay multiplier, low-stamina penalty
     ├── WaveScheduler.ts          GlobalWaveScheduler (run-long triplets, grace, per-opening bands, pause/resume) + legacy per-level WaveScheduler
-    ├── Logger.ts                 Crash capture + frame-by-frame snapshot + on-screen overlay rendering
-    └── constants.ts              Named constants: canvas size (928×544), tile size (32), grid (29×17), room grid, ranges, cooldowns, stamina costs, burst tuning
+    ├── Logger.ts                 Crash capture + frame-by-frame snapshot + on-screen overlay rendering; POSTs crash snapshots to /api/crash
+    └── constants.ts              Named constants: canvas size (928×544), tile size (32), grid (29×17), room grid, ranges, cooldowns, stamina costs, burst tuning, boss-growth trigger
+
+api/
+├── crash.ts                      Vercel Edge crash sink — POST target of Logger's /api/crash reports; opens/updates GitHub issues by crash fingerprint (typechecked via tsconfig.api.json, linted)
+└── env.d.ts                      Ambient process.env declaration for the Edge runtime (no @types/node)
 ```
