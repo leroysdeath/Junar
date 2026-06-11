@@ -20,6 +20,12 @@ tiers toward "done" as decisions and files land.
 
 ## Hard constraints (read before sourcing)
 
+- **Human-made only — no AI-generated art** (owner policy 2026-06-11; applies
+  to ALL shipped assets, art and audio alike — see the matching constraint in
+  `docs/AUDIO-ASSETS.md`). The Steam release must contain only human-created
+  assets. Free libraries increasingly host AI-generated uploads: check the
+  asset's description, author profile, and any AI tags before accepting, and
+  skip anything ambiguous about provenance.
 - **License must allow commercial use + redistribution.** End target is a
   paid Steam release (CLAUDE.md §8). **CC0 / public domain strongly
   preferred.** CC-BY acceptable with attribution logged in
@@ -153,6 +159,7 @@ Always re-confirm the license on the asset's own page at download time.
 
 - [ ] Tier greenlit by owner (this is the pillar-change gate)
 - [ ] File found and previewed at game scale (32×32 on a tan floor — it reads in one frame)
+- [ ] Human-made provenance confirmed — not AI-generated (owner policy 2026-06-11)
 - [ ] Pixel density matches the player sprite (LTTP-scale)
 - [ ] License is CC0 (preferred) or CC-BY; commercial + redistribution OK
 - [ ] If CC-BY: entry added to `docs/ART-CREDITS.md`

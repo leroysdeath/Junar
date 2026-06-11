@@ -15,6 +15,12 @@ integration. Move greenlit rows toward "done" as files land.
 
 ## Hard constraints (read before sourcing)
 
+- **Human-made only — no AI-generated audio** (owner policy 2026-06-11; applies
+  to ALL shipped assets, art and audio alike — see the matching constraint in
+  `docs/ART-ASSETS.md`). The Steam release must contain only human-created
+  assets. Free libraries increasingly host AI-generated uploads: check the
+  asset's description, author profile, and any AI tags before accepting, and
+  skip anything ambiguous about provenance.
 - **License must allow commercial use + redistribution.** End target is a paid
   Steam release (CLAUDE.md §8). **CC0 / public domain is strongly preferred.**
   CC-BY is acceptable but creates an attribution obligation (see below).
@@ -62,18 +68,21 @@ design sign-off.
 | `game-over` | `gameOver` (150 Hz sawtooth) | player or family death ends run, `Game.ts:1588` | somber, low, final — a fall/loss sting, not a comedic buzzer | 0.5–1.5 s | no | Tone is loss, not failure-jingle |
 | `victory` | `victory` (500 Hz sine) | boss-room stub victory (V key), `Game.ts:1673` | hopeful release / the jungle freed — warm, brief | 1–2.5 s | no | Placeholder boss flow; fine to ship a short flourish now |
 
-## 2. SFX — events the game raises but doesn't yet sound (in scope, optional)
+## 2. SFX — event sounds (mixed status; check the Status column)
 
-Low-risk additions: the game already fires these events; we'd just add a
-`SoundManager.play(...)` call during the rewrite. Source if convenient.
+Statuses set by owner 2026-06-11. The `dash`, `burst-activate`,
+`stamina-low`, and `room-transition` hooks are already wired in code (silent
+no-ops until a file exists), so for wired keys **the file is the approval
+gate: don't land a file for a key that isn't approved.**
 
-| Key | Event | Feel / direction | Length | Loop | Notes |
-|-----|-------|------------------|--------|------|-------|
-| `dash` | dash teleport (`Player.ts`, Shift/A) | quick whoosh / blink | 150–300 ms | no | Edge-triggered; won't spam |
-| `burst-activate` | burst rapid-fire start (`Stamina.ts`, Space/B) | rising "power-up" swell, short | 300–600 ms | no | 5-stamina cost, used sparingly |
-| `stamina-low` | stamina crosses low threshold (10 pts) | subtle warning pulse — quiet, non-annoying | 200–400 ms | no | Fire once on threshold cross, not per frame |
-| `room-transition` | LTTP hard-cut into neighbor room (`Game.detectTransition`) | soft footstep-into-brush / whoosh | 150–300 ms | no | Optional; could feel busy — owner taste call |
-| `family-death` | a family member dies (distinct from generic `game-over`) | sharper grief sting layered before/with `game-over` | 0.5–1 s | no | Family combat unbuilt yet (CLAUDE.md §5); spec now, wire when family lands |
+| Key | Status | Event | Feel / direction | Length | Loop | Notes |
+|-----|--------|-------|------------------|--------|------|-------|
+| `burst-activate` | approved, optional | burst rapid-fire start (`Stamina.ts`, Space/B) | rising "power-up" swell, short | 300–600 ms | no | 5-stamina cost, used sparingly |
+| `stamina-low` | approved, optional | stamina crosses low threshold (10 pts) | subtle warning pulse — quiet, non-annoying | 200–400 ms | no | Fire once on threshold cross, not per frame |
+| `dash` | optional — **mechanic may be removed** | dash teleport (`Player.ts`, Shift/A) | quick whoosh / blink | 150–300 ms | no | Don't prioritize sourcing; the dash mechanic itself is under review |
+| `room-transition` | **not approved yet** | LTTP hard-cut into neighbor room (`Game.detectTransition`) | soft footstep-into-brush / whoosh | 150–300 ms | no | Could feel busy — owner taste call; needs sign-off before a file lands |
+| `family-death` | **not approved yet** | a family member dies (distinct from generic `game-over`) | sharper grief sting layered before/with `game-over` | 0.5–1 s | no | Family combat unbuilt (CLAUDE.md §5); spec only — no trigger exists yet |
+| `barrier-lay` | **TBD — mechanic unapproved** | placing a stick barrier (stick-barriers idea, `docs/IDEATION.md` §4) | soft woody stake-into-earth thunk | 150–300 ms | no | The barrier mechanic itself is ideation-only and not on a build tier; spec reserved here in case it's greenlit. No code hook exists |
 
 ## 3. Ambience — background bed (SCOPE ADDITION — needs owner sign-off)
 
@@ -102,6 +111,7 @@ Looping environmental bed under gameplay. Carries the corruption arc (CLAUDE.md
 
 - **Freesound.org** — huge SFX + field-recording library. **Filter by license:
   Creative Commons 0.** Great for arrow, impact, jungle ambience, whooshes.
+  Watch for AI-generated uploads (human-made-only constraint above).
 - **OpenGameArt.org** — game-oriented; filter to CC0. Good for SFX packs and
   loopable music.
 - **Kenney.nl** (kenney assets) — CC0 game-asset packs, includes some SFX.
@@ -116,7 +126,9 @@ licensing varies per file.
 
 ## Sourcing checklist (per asset)
 
+- [ ] Key's status allows landing a file (§2 Status column; wired ≠ approved)
 - [ ] File found and previewed (listened to — it actually fits)
+- [ ] Human-made provenance confirmed — not AI-generated (owner policy 2026-06-11)
 - [ ] License is CC0 (preferred) or CC-BY; commercial + redistribution OK
 - [ ] Trimmed/leveled to the spec (length, loop seam, ~target loudness)
 - [ ] Exported as `.ogg`, named to the **Key**, placed in `src/assets/audio/<sub>/`
@@ -127,7 +139,10 @@ gesture-init in `Game.startRun`, disposal in `Game.cleanup()`): any file
 dropped in `src/assets/audio/` under its Key name is auto-discovered at build
 time and plays immediately — no per-asset code change needed. Variant
 round-robin works via `-2`/`-3` filename suffixes (e.g. `arrow-fire-2.ogg`).
-The §1 keys fall back to the original synth tones until their files land; the
-§2 event keys are already triggered by the game (except `family-death`,
-which awaits family combat) and stay silent until files exist. Looping
-music/ambience playback is still unimplemented pending the §3–4 greenlight.
+The §1 keys fall back to the original synth tones until their files land. The
+§2 hooks for `dash`, `burst-activate`, `stamina-low`, and `room-transition`
+are triggered by the game and stay silent until files exist — but check the
+§2 Status column before landing a file (`room-transition` and `family-death`
+are not approved; `dash` may be removed with its mechanic; `barrier-lay` has
+no mechanic at all yet). Looping music/ambience playback is still
+unimplemented pending the §3–4 greenlight.
