@@ -206,6 +206,9 @@ export class Game {
     });
     this.renderer = new Renderer(this.ctx);
     this.soundManager = new SoundManager(callbacks.soundEnabled);
+    // The app boots into the menu, so bring its music bed up. SoundManager
+    // defers the actual start until the first user gesture (autoplay policy).
+    this.soundManager.setScene('menu');
     this.collisionManager = new CollisionManager();
 
     // Replace Hunt's settle-in-place stub with the map-wide BFS placement
@@ -266,6 +269,9 @@ export class Game {
     // (and the menu canvas-click listener), so this is the reliable
     // user-gesture moment to create/resume the shared AudioContext.
     this.soundManager.unlock();
+    // Crossfade the menu bed into the jungle ambience. Anchor 1 is never the
+    // boss room, so 'gameplay' is always the right opening scene.
+    this.soundManager.setScene('gameplay');
     this.gameState = 'playing';
     this.score = 0;
     this.enemiesKilled = 0;
@@ -500,6 +506,9 @@ export class Game {
     if (inBoss !== this.inBossArena) {
       this.inBossArena = inBoss;
       this.callbacks.onBossArenaChange?.(inBoss);
+      // Audio follows the arena edge: boss music (+ corrupted bed, when its
+      // file exists) inside, the jungle ambience everywhere else.
+      this.soundManager.setScene(inBoss ? 'boss' : 'gameplay');
       this.logger.log('level', inBoss ? 'bossArenaEnter' : 'bossArenaExit', {
         room: { ...coord },
       });
@@ -1683,6 +1692,8 @@ export class Game {
     if (this.gameState === 'gameOver') return;
     this.gameState = 'gameOver';
     this.callbacks.onStateChange('gameOver');
+    // Fade the beds out so the loss sting lands over silence.
+    this.soundManager.setScene('silent');
     this.soundManager.play('game-over');
 
     const verdict = this.classifyGameOver(reason);
@@ -1785,6 +1796,8 @@ export class Game {
       room: { ...this.currentRoomCoord },
       score: this.score,
     });
+    // Fade the boss beds out so the victory sting lands over silence.
+    this.soundManager.setScene('silent');
     this.soundManager.play('victory');
   }
 
@@ -1846,6 +1859,20 @@ export class Game {
 
   setSoundEnabled(enabled: boolean) {
     this.soundManager.setEnabled(enabled);
+  }
+
+  // Bridge for the "Main Menu" buttons on the game-over/victory overlays.
+  // Before menu music existed, App swapped its own overlay state and left
+  // Game's internal state stale on the terminal screen; routing the return
+  // through Game keeps the two in sync and swaps the audio scene to the
+  // menu bed. Clicking the button is the user gesture, so the bed starts
+  // immediately.
+  returnToMenu() {
+    if (this.gameState === 'menu') return;
+    this.gameState = 'menu';
+    this.callbacks.onStateChange('menu');
+    this.soundManager.setScene('menu');
+    this.logger.log('state', 'returnToMenu');
   }
 
   // Bridge for on-screen mobile controls. Touch handlers in App.tsx call

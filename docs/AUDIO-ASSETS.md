@@ -6,10 +6,12 @@ recordings from a free library. It is the spec a sourcing pass works against —
 whether that's the owner on Freesound, or a Claude chat with audio preview.
 
 CLAUDE.md is the source of truth for committed design. Audio replacement of the
-**four existing SFX** is in scope. A **music / ambience system is a scope
-addition** (CLAUDE.md §6 calls audio "owner-led, future direction"); the music
-and ambience rows below are marked accordingly and need owner sign-off before
-integration. Move greenlit rows toward "done" as files land.
+**four existing SFX** is in scope. **§3 ambience and §4 music are GREENLIT**
+(owner sign-off given 2026-06-11) — the looping-bed system is now in scope and
+implemented (see the integration note at the bottom). **§2 is skipped in its
+entirety for this pass** (owner decision 2026-06-11): no files land for any §2
+key, including the two "approved, optional" ones (`burst-activate`,
+`stamina-low`). Move greenlit rows toward "done" as files land.
 
 ---
 
@@ -24,8 +26,13 @@ integration. Move greenlit rows toward "done" as files land.
 - **License must allow commercial use + redistribution.** End target is a paid
   Steam release (CLAUDE.md §8). **CC0 / public domain is strongly preferred.**
   CC-BY is acceptable but creates an attribution obligation (see below).
-  **Reject** anything CC-BY-NC (non-commercial), CC-BY-ND (no derivatives —
-  blocks trimming/looping), "free for non-commercial," or unclear-license rips.
+  **Paid royalty-free packs** with commercial-use + redistribution rights are
+  also acceptable (owner policy expansion 2026-06-11) — but purchases go
+  through the owner: present link, price, exact license, and covered keys, and
+  wait for the owner to buy and hand over the files. Prefer free CC0/CC-BY
+  when quality is comparable. **Reject** anything share-alike (CC-BY-SA, GPL),
+  CC-BY-NC (non-commercial), CC-BY-ND (no derivatives — blocks
+  trimming/looping), "free for non-commercial," or unclear-license rips.
 - **Attribution.** Any CC-BY asset must be logged in `docs/AUDIO-CREDITS.md`
   (title, author, source URL, license, what we changed). Prefer CC0 to avoid
   this entirely.
@@ -68,7 +75,21 @@ design sign-off.
 | `game-over` | `gameOver` (150 Hz sawtooth) | player or family death ends run, `Game.ts:1588` | somber, low, final — a fall/loss sting, not a comedic buzzer | 0.5–1.5 s | no | Tone is loss, not failure-jingle |
 | `victory` | `victory` (500 Hz sine) | boss-room stub victory (V key), `Game.ts:1673` | hopeful release / the jungle freed — warm, brief | 1–2.5 s | no | Placeholder boss flow; fine to ship a short flourish now |
 
-## 2. SFX — event sounds (mixed status; check the Status column)
+**Status (2026-06-11): all four §1 keys DONE.** `arrow-fire` shipped as three
+round-robin variants sliced from one CC0 recurve session (release + whoosh
+only — the impact thwack is cut so it doesn't double with `enemy-hit`);
+`enemy-hit` is a CC0 muffled body thud; `game-over` a CC0 low dark impact;
+`victory` a CC0 warm success chime. All trimmed/leveled to spec (−6 dBFS SFX
+peaks) and verified in-game at their triggers. Full provenance + processing
+notes per file in `docs/AUDIO-CREDITS.md`. Caveat: selection was made from
+source descriptions, metadata, and waveform/spectrogram analysis (no human
+listen pass yet) — an owner audition remains the final taste gate.
+
+## 2. SFX — event sounds (SKIPPED for the 2026-06-11 sourcing pass)
+
+**Owner decision 2026-06-11: skip ALL of §2 for the current sourcing pass —
+including the two "approved, optional" keys (`burst-activate`,
+`stamina-low`). No §2 file lands until the owner re-opens this section.**
 
 Statuses set by owner 2026-06-11. The `dash`, `burst-activate`,
 `stamina-low`, and `room-transition` hooks are already wired in code (silent
@@ -84,7 +105,7 @@ gate: don't land a file for a key that isn't approved.**
 | `family-death` | **not approved yet** | a family member dies (distinct from generic `game-over`) | sharper grief sting layered before/with `game-over` | 0.5–1 s | no | Family combat unbuilt (CLAUDE.md §5); spec only — no trigger exists yet |
 | `barrier-lay` | **TBD — mechanic unapproved** | placing a stick barrier (stick-barriers idea, `docs/IDEATION.md` §4) | soft woody stake-into-earth thunk | 150–300 ms | no | The barrier mechanic itself is ideation-only and not on a build tier; spec reserved here in case it's greenlit. No code hook exists |
 
-## 3. Ambience — background bed (SCOPE ADDITION — needs owner sign-off)
+## 3. Ambience — background bed (GREENLIT 2026-06-11)
 
 Looping environmental bed under gameplay. Carries the corruption arc (CLAUDE.md
 §1, §6): healthy jungle → "wrong"/oily as corruption deepens.
@@ -94,12 +115,29 @@ Looping environmental bed under gameplay. Carries the corruption arc (CLAUDE.md
 | `ambience-jungle` | general gameplay rooms | living jungle bed: insects, distant birds, leaves. Calm, immersive | 30–90 s | **seamless loop** | The default bed. Must loop with no audible seam |
 | `ambience-corrupted` | near/inside boss approach (optional) | the bed turned wrong — low drone, sickly hum, sparser life | 30–90 s | **seamless loop** | Optional second bed for tone shift; could also be a filtered version of the jungle bed |
 
-## 4. Music (SCOPE ADDITION — needs owner sign-off)
+**Status (2026-06-11): both §3 keys DONE.** `ambience-jungle` is a 64 s
+seamless loop cut from a CC0 Chiang Mai forest field recording (birds,
+insects, leaves — steady, no weather/voice events); `ambience-corrupted` a
+56 s seamless loop from a CC0 hand-synthesized deep drone. Loops built with
+equal-power tail→head crossfades; wrap continuity verified numerically at
+PCM level. Leveled to −16/−17 dBFS peaks (beds under SFX). Wired: jungle
+loops under all non-boss gameplay; corrupted joins `music-boss` inside the
+arena. Provenance in `docs/AUDIO-CREDITS.md`; owner audition still pending.
+
+## 4. Music (GREENLIT 2026-06-11)
 
 | Key | Where | Feel / direction | Length | Loop | Notes |
 |-----|-------|------------------|--------|------|-------|
 | `music-menu` | entry / title screen | quiet, evocative, Indian-jungle-coded *without* stereotype caricature (CLAUDE.md §9 cultural-rep guardrail) | 30–60 s | **seamless loop** | Set tone on the menu before play |
 | `music-boss` | boss room (anchor 10) | tense, tragic confrontation — the plant is the antagonist | 60–120 s | **seamless loop** | Boss combat itself is deferred; track can wait but spec it here |
+
+**Status (2026-06-11): both §4 keys DONE.** `music-menu` is a 60 s seamless
+loop from a CC0 recording of a custom-built 8-string tambura drone in Eb —
+the dignified tanpura-like direction, no stereotype instrumentation;
+`music-boss` an 88 s seamless loop of cynicmusic's CC0 "Dark Forest Theme"
+(dark brooding acoustic guitar + strings; courtesy credit logged). Leveled
+to −15/−14 dBFS peaks. Wired: menu music on the title screen, boss music in
+anchor 10. Provenance in `docs/AUDIO-CREDITS.md`; owner audition pending.
 
 > Tone guardrail for music/ambience: the setting is the Indian jungle, mythic
 > time (CLAUDE.md §6). Avoid generic "tribal" stereotype instrumentation and any
@@ -144,5 +182,20 @@ The §1 keys fall back to the original synth tones until their files land. The
 are triggered by the game and stay silent until files exist — but check the
 §2 Status column before landing a file (`room-transition` and `family-death`
 are not approved; `dash` may be removed with its mechanic; `barrier-lay` has
-no mechanic at all yet). Looping music/ambience playback is still
-unimplemented pending the §3–4 greenlight.
+no mechanic at all yet).
+
+Looping bed playback landed 2026-06-11 with the §3–4 greenlight. It is
+scene-driven: `Game` declares where the player is via
+`SoundManager.setScene()` and the scene table owns which bed loops there —
+`menu` → `music-menu`, `gameplay` → `ambience-jungle`, `boss` (anchor 10)
+→ `music-boss` + `ambience-corrupted` (when its file exists), and `silent`
+(game over / victory) → beds fade out so the sting lands over silence. Beds
+crossfade ~0.5 s on scene change, loop gaplessly via
+`AudioBufferSourceNode.loop`, and any missing file simply doesn't play —
+same auto-discovery as SFX, no per-asset code. Because the title screen
+shows before any user gesture, SoundManager arms a one-time window
+pointer/key listener that unlocks the shared AudioContext and starts the
+menu bed on the first interaction; the listener is removed on success and
+from `Game.cleanup()`. The sound toggle mutes beds and SFX alike; beds play
+at unity gain in code, so the file-side leveling above (beds −18 to −14
+dBFS vs SFX −6 dBFS) is what keeps SFX readable over the bed.

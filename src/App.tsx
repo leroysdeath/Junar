@@ -237,6 +237,17 @@ function App() {
     }
   };
 
+  // Return to the title screen via the Game instance so its internal state
+  // and the audio scene (menu music) follow; Game echoes the change back
+  // through onStateChange. Falls back to a bare state swap pre-init.
+  const goToMenu = () => {
+    if (gameRef.current) {
+      gameRef.current.returnToMenu();
+    } else {
+      setGameState('menu');
+    }
+  };
+
   // Initialize game when component mounts
   useEffect(() => {
     initGame();
@@ -364,7 +375,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setGameState('menu')}
+          onClick={goToMenu}
           className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
         >
           Main Menu
@@ -393,7 +404,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setGameState('menu')}
+          onClick={goToMenu}
           className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
         >
           Main Menu
