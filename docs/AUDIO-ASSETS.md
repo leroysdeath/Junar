@@ -122,6 +122,12 @@ licensing varies per file.
 - [ ] Exported as `.ogg`, named to the **Key**, placed in `src/assets/audio/<sub>/`
 - [ ] If CC-BY: entry added to `docs/AUDIO-CREDITS.md`
 
-When files are in the repo, the `SoundManager` rewrite (CLAUDE.md §7 step 8:
-single shared `AudioContext`, lazy gesture-init) wires them up, adds music/
-ambience playback if greenlit, and keeps the existing sound-toggle working.
+The `SoundManager` rewrite landed 2026-06-11 (single shared `AudioContext`,
+gesture-init in `Game.startRun`, disposal in `Game.cleanup()`): any file
+dropped in `src/assets/audio/` under its Key name is auto-discovered at build
+time and plays immediately — no per-asset code change needed. Variant
+round-robin works via `-2`/`-3` filename suffixes (e.g. `arrow-fire-2.ogg`).
+The §1 keys fall back to the original synth tones until their files land; the
+§2 event keys are already triggered by the game (except `family-death`,
+which awaits family combat) and stay silent until files exist. Looping
+music/ambience playback is still unimplemented pending the §3–4 greenlight.

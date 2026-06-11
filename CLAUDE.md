@@ -138,7 +138,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - **Sprite (player only):** CC0 LTTP pack, 16×32 cell size, 4-frame walk loops per direction. Sprite is scaled to native size and centered in the 32×32 AABB. Burst aura is procedural (warm-gold layers) and drawn behind the sprite so readability is preserved.
 - **Palette direction:** Forest greens, earth browns, tan paths, dark canopy fills (see `Renderer.ts` for exact hexes). Roadmap: add a black-goo accent palette (deep oily black, sickly green/purple highlights) for infected beasts and the boss.
 
-**Audio palette** (current code) — synthesized Web Audio tones (arrow 200 Hz square, hit 400 Hz square, gameOver 150 Hz sawtooth, victory 500 Hz sine). Acceptable as placeholder; future direction is owner-led.
+**Audio palette** (current code) — `SoundManager` is file-first (rewritten 2026-06-11): one shared `AudioContext`, created/resumed inside the start-gesture (`Game.startRun`), disposed from `Game.cleanup()`. Sound keys follow `docs/AUDIO-ASSETS.md` (the sourcing spec); `.ogg`/`.mp3` files dropped in `src/assets/audio/` are auto-discovered (build-time glob) with round-robin variants. No files have landed yet, so the four original synthesized tones still play as per-key fallbacks (arrow-fire 200 Hz square, enemy-hit 400 Hz square, game-over 150 Hz sawtooth, victory 500 Hz sine); the optional event keys from the manifest (dash, burst-activate, stamina-low, room-transition) are wired but silent until files exist. Music/ambience beds remain a scope addition needing owner sign-off.
 
 **Working in-engine copy** — title "Jungle X" is final. The entry screen still shows "Jungle Archer" (working title for prototyping); will be swapped at release. The other menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", "You have conquered the jungle!") are still placeholder and will be replaced in a dedicated copy pass once tone is locked.
 
@@ -159,7 +159,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - Ranged enemy attacks. Touch-only is the design.
 - A passive family-escort intro on a mid-game level. Possible future phase, not now.
 - Multiple-endings system (hut-attack branch, family-survival carryover into later levels). Documented direction; do not implement without owner sign-off. See §5 and the `protagonist-and-family-tone` skill.
-- Sprite assets for anything other than the player. The player is on a CC0 LTTP-style sheet (owner-approved 2026-05-10); family, beasts, walls, HUD, arrows, and FX stay procedural. Expanding sprite use to a second entity type needs owner approval. See `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
+- Sprite assets for anything other than the player. The player is on a CC0 LTTP-style sheet (owner-approved 2026-05-10); family, beasts, walls, HUD, arrows, and FX stay procedural. Expanding sprite use to a second entity type needs owner approval. Sourcing/spec planning for that swap lives in `docs/ART-ASSETS.md` (owner-directed 2026-06-11; per-tier greenlight still required before any sprite lands), and see `docs/IDEATION.md` §8 for the LPC upgrade path under consideration.
 - New input methods (gamepad, mouse-aim). Touch input is now supported for mobile testing — phones and tablets get a floating joystick over the left half of the screen plus on-screen A/B buttons via `src/MobileControls.tsx`. Detection uses `(pointer: coarse)` so desktop touchscreens stay on keyboard. Don't add additional input methods without owner sign-off.
 - Saves, accounts, leaderboards.
 - Multiplayer, online features.
@@ -175,7 +175,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 5. **Family rendering & combat** — design the family member entity (movement, collision, rendering, death-triggers-game-over, simple combat behavior for the boss fight).
 6. **Level 10 boss** — corrupted plant (the "Ancient Tree Guardian" placeholder is roughly aligned). Family appears here as three active combatants; any family death = game over.
 7. **Copy pass** — replace remaining placeholder strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) with vision-aligned copy once tone is locked. (Non-code task.)
-8. **Polish** — `SoundManager` rewrite (single shared `AudioContext`, lazy-init on first gesture), broader sweep to push remaining hardcoded `32`s through `TILE_SIZE`, hit feedback, screen shake.
+8. **Polish** — ✅ `SoundManager` rewrite done 2026-06-11 (single shared `AudioContext`, gesture-init, file-first playback per `docs/AUDIO-ASSETS.md` with synth fallback — actual audio files still to be sourced). Remaining: broader sweep to push remaining hardcoded `32`s through `TILE_SIZE`, hit feedback, screen shake.
 9. **Inter-stage cut-scenes** — short dialogueless procedural-rectangle vignettes between levels carrying the corruption arc. "…" bubbles only, skippable, out of scope until the loop is solid (§2 Prototype goals).
 10. **Tauri wrap for Steam** — once the prototype loop is solid, package the Vite build with Tauri for desktop. See section 8 for what this means for current development.
 
@@ -239,7 +239,7 @@ src/
     ├── Renderer.ts               Canvas 2D draw routines for the current room/player/enemies/arrows/NPCs/huts/corrupted growth (hybrid sprite + procedural)
     ├── InputManager.ts           Keyboard + virtual (mobile) input listener → InputState; burst + dash + win-stub edge-trigger detection
     ├── CollisionManager.ts       AABB overlap helper
-    ├── SoundManager.ts           Web Audio synthesized SFX
+    ├── SoundManager.ts           File-first SFX (shared AudioContext, manifest keys per docs/AUDIO-ASSETS.md) with synth-tone fallback
     ├── Stamina.ts                Playthrough-wide stamina pool, burst state machine, decay multiplier, low-stamina penalty
     ├── WaveScheduler.ts          GlobalWaveScheduler (run-long triplets, grace, per-opening bands, pause/resume) + legacy per-level WaveScheduler
     ├── Logger.ts                 Crash capture + frame-by-frame snapshot + on-screen overlay rendering; POSTs crash snapshots to /api/crash

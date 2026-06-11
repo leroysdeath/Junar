@@ -262,6 +262,10 @@ export class Game {
   }
 
   private startRun() {
+    // startRun executes synchronously inside the Start/Restart click handler
+    // (and the menu canvas-click listener), so this is the reliable
+    // user-gesture moment to create/resume the shared AudioContext.
+    this.soundManager.unlock();
     this.gameState = 'playing';
     this.score = 0;
     this.enemiesKilled = 0;
@@ -656,6 +660,7 @@ export class Game {
     this.hunt.onPlayerLeftRoom(this.enemies);
     this.roomEnemies.set(this.roomKey(this.currentRoomCoord), this.enemies);
     this.enterRoom(t.dest, t.entry); // sets inBossArena for the destination
+    this.soundManager.play('room-transition');
     // Player-side doorway kill grace (owner-approved 2026-06-10): hold the
     // contact-kill pass briefly after the hard cut. The landing nudge in
     // enterRoom only clears an exact same-tick overlap — a fast chaser parked
@@ -1289,6 +1294,9 @@ export class Game {
           to: { x: round2(postDash.x), y: round2(postDash.y) },
           value: round2(this.stamina.getValue()),
         });
+        // Optional manifest SFX (docs/AUDIO-ASSETS.md §2) — silent until a
+        // dash.ogg lands (no synth fallback), as are the other §2 hooks.
+        this.soundManager.play('dash');
       } else {
         this.logger.log('stamina', 'dash_rejected', {
           reason: 'no_stamina',
@@ -1440,6 +1448,7 @@ export class Game {
           this.stamina.getBurstMultiplier(),
           this.stamina.getBurstEndAt() ?? 0,
         );
+        this.soundManager.play('burst-activate');
       } else {
         this.logger.log('stamina', 'burst_end', {
           value: round2(this.stamina.getValue()),
@@ -1455,6 +1464,8 @@ export class Game {
       this.logger.log('stamina', isLow ? 'low_enter' : 'low_exit', {
         value: round2(this.stamina.getValue()),
       });
+      // Threshold-cross warning, once per crossing (not per frame).
+      if (isLow) this.soundManager.play('stamina-low');
       this.wasLowStamina = isLow;
     }
 
@@ -1583,7 +1594,7 @@ export class Game {
     this.stamina.consumeArrow();
 
     this.logger.log('fire', 'arrow', { dx: round2(dir.x), dy: round2(dir.y) });
-    this.soundManager.play('arrow');
+    this.soundManager.play('arrow-fire');
   }
 
   // True if the enemy's per-type AABB (ENEMY_AABB_PX, centred in its cell)
@@ -1660,7 +1671,7 @@ export class Game {
             type: enemyType,
             remaining: this.enemies.length,
           });
-          this.soundManager.play('hit');
+          this.soundManager.play('enemy-hit');
           return false; // Remove arrow
         }
       }
@@ -1672,7 +1683,7 @@ export class Game {
     if (this.gameState === 'gameOver') return;
     this.gameState = 'gameOver';
     this.callbacks.onStateChange('gameOver');
-    this.soundManager.play('gameOver');
+    this.soundManager.play('game-over');
 
     const verdict = this.classifyGameOver(reason);
     this.logger.log('state', 'gameOver', {
@@ -1861,6 +1872,7 @@ export class Game {
       this.animationId = null;
     }
     this.inputManager.dispose();
+    this.soundManager.dispose();
     this.logger.log('lifecycle', 'cleanup');
     this.logger.dispose();
   }
