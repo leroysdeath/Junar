@@ -38,7 +38,7 @@ The corruption is the antagonist; the beasts are infected wildlife. CLAUDE.md §
 
 - **Tragic, not bloodthirsty.** The player is killing wildlife because there is no other choice.
 - **No villain framing in copy.** Avoid "evil panther", "vicious bear", "monstrous beast". The monster is the corrupting plant on Level 10 (the boss); the beasts are its victims.
-- **Visual cue direction:** infected beasts should read as "wrong" — black streaks/sheen, glowing eyes, dripping black goo. CLAUDE.md §6 earmarks this as approved direction (still procedural — see `procedural-rendering`).
+- **Visual cue (owner decision 2026-06-11, implemented):** infection shows only as **red eyes** (`INFECTED_EYE_RED` in `Renderer.ts`) on all four beasts; bodies look like normal wildlife. Black goo is boss-only — do NOT add goo streaks/sheen/drips to beasts (still procedural — see `procedural-rendering`).
 - **No direct *Jungle Book* character likenesses.** Style and bestiary inspiration only. CLAUDE.md §6, §9.
 - **Cultural representation.** The protagonist and family are Adivasi/tribal-Indian. Don't add enemy designs or copy that lean on stereotypes adjacent to that representation (e.g., "savage" framing).
 

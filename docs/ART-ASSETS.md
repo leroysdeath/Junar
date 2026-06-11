@@ -80,11 +80,13 @@ type's relative bulk: bear biggest, snake smallest-but-visible.
 | `snake` | `renderSnake` | 2–4 frame slither loop; thin horizontal/vertical poses or 4-dir | Indian rat snake — thin olive-brown sliver; many can share a tile, so silhouette must stay minimal |
 | `gibbon` | `renderGibbon` | 2–3 frame idle/creep, 4-dir optional (near-stationary) | Hoolock gibbon — long arms, dark body, pale brow marks |
 
-**Infected look:** the black-goo corruption accents (CLAUDE.md §7 step 4 —
-streaks, sheen, eye glow) should stay **procedural overlays** drawn on top of
-the sprites using the existing `GOO_*` palette constants in `Renderer.ts`.
-That keeps one corruption treatment across sprite and procedural eras and
-avoids needing "infected" variant sheets per beast.
+**Infected look (owner decision 2026-06-11):** infection shows **only as red
+eyes** (`INFECTED_EYE_RED` in `Renderer.ts`); beast bodies look like normal
+wildlife, and black goo is boss-only. For sprite sourcing this means: source
+*normal-looking* animal sheets (no corrupted/monstrous variants needed), and
+keep the red-eye cue as a small procedural overlay drawn on top of the
+sprite — one treatment across sprite and procedural eras, no per-beast
+"infected" variant sheets.
 
 ## Tier 2 — Family (blocked on family entity work; needs owner greenlight)
 

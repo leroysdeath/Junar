@@ -130,13 +130,13 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 
 **Bestiary status:**
 - **Approved and implemented:** Black panther (Indian leopard), sloth bear, Indian rat snake, Hoolock gibbon. Speed tuned so panther/bear outrun the player while snake/gibbon are slower — combat depends on chokepoints, not foot races. All four are rendered procedurally (not sprites).
-- **Approved direction (visual cues):** Infected beasts should read as "wrong" — black streaks/sheen, glowing eyes, or similar. Keep visuals readable at a glance. Currently not yet implemented; planned as a next step (see §7 Roadmap).
+- **Approved + implemented (visual cue, owner decision 2026-06-11):** infection shows **only as red eyes** on all four beasts (`INFECTED_EYE_RED` in `Renderer.ts`); their bodies read as normal wildlife. The earlier "black-goo accents on beasts" direction is dropped — black goo is the boss's signature only. Don't add goo streaks/sheen/drips to beasts.
 - **Not yet approved (do not add without asking):** Tigers, monkeys, crocodiles, wild dogs, jackals, anything else.
 
 **Rendering:**
 - **Procedural (all entities except player):** Enemies, NPCs, huts, arrows, and effects render as hand-drawn Canvas 2D fills in `Renderer.ts`. Each enemy type has a distinct silhouette and palette; the canonical colours live in `Renderer.ts` — don't duplicate them here.
 - **Sprite (player only):** CC0 LTTP pack, 16×32 cell size, 4-frame walk loops per direction. Sprite is scaled to native size and centered in the 32×32 AABB. Burst aura is procedural (warm-gold layers) and drawn behind the sprite so readability is preserved.
-- **Palette direction:** Forest greens, earth browns, tan paths, dark canopy fills (see `Renderer.ts` for exact hexes). Roadmap: add a black-goo accent palette (deep oily black, sickly green/purple highlights) for infected beasts and the boss.
+- **Palette direction:** Forest greens, earth browns, tan paths, dark canopy fills (see `Renderer.ts` for exact hexes). The black-goo accent palette (deep oily black, sickly green/purple highlights — `GOO_*` in `Renderer.ts`) is live and **boss-only**; beasts carry the red-eye infection cue (`INFECTED_EYE_RED`) instead.
 
 **Audio palette** (current code) — `SoundManager` is file-first (rewritten 2026-06-11): one shared `AudioContext`, created/resumed inside the start-gesture (`Game.startRun`), disposed from `Game.cleanup()`. Sound keys follow `docs/AUDIO-ASSETS.md` (the sourcing spec); `.ogg`/`.mp3` files dropped in `src/assets/audio/` are auto-discovered (build-time glob) with round-robin variants. No files have landed yet, so the four original synthesized tones still play as per-key fallbacks (arrow-fire 200 Hz square, enemy-hit 400 Hz square, game-over 150 Hz sawtooth, victory 500 Hz sine); the optional event keys from the manifest (dash, burst-activate, stamina-low, room-transition) are wired but silent until files exist. Music/ambience beds remain a scope addition needing owner sign-off.
 
@@ -149,7 +149,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - Family appears in the anchor rooms that carry `N` markers (currently anchors 6–9) as translucent placeholders, and through the boss arena.
 - Boss room (anchor 10): corrupted plant exuding black goo.
 - Visual update for the Adivasi-coded protagonist (complete: sprite asset in use as of 2026-05-10).
-- Infected-beast visual treatment (black goo accents) within procedural rendering.
+- Infected-beast visual treatment (red-eye cue — complete 2026-06-11; goo accents on beasts dropped by owner decision).
 - Hit feedback, screen shake, death pop — within Canvas 2D.
 - Stamina, burst, and dash mechanics (complete as of 2026-05-10).
 - Global run-long wave scheduler (complete; replaced the per-level scheduler in the Step-3 room refactor, 2026-05-30).
@@ -171,7 +171,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 1. ✅ Critical bug fixes (input leak, setTimeout race, cardinal edge cases) — done in commit `e8a224b`.
 2. **In-engine title swap to "Jungle X"** — release-time change; "Jungle Archer" remains the working title until then.
 3. ✅ Protagonist visual update — Adivasi-coded archer (deep skin tone, cream dhoti, dark sash, no headdress) live in `Renderer.renderPlayer` via CC0 sprite.
-4. **Infected-beast visual cue** — add black-goo accents (sheen/dripping/eye glow) to all four beast types so the corruption reads at a glance. Current procedural renderers already have distinct colors; adding overlay/glow is the next implementation step.
+4. ✅ **Infected-beast visual cue** — done 2026-06-11. Owner decision replaced the black-goo-accent plan: all four beasts carry red eyes (`INFECTED_EYE_RED`) and otherwise look like normal wildlife; the goo palette stays boss-only.
 5. **Family rendering & combat** — design the family member entity (movement, collision, rendering, death-triggers-game-over, simple combat behavior for the boss fight).
 6. **Level 10 boss** — corrupted plant (the "Ancient Tree Guardian" placeholder is roughly aligned). Family appears here as three active combatants; any family death = game over.
 7. **Copy pass** — replace remaining placeholder strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) with vision-aligned copy once tone is locked. (Non-code task.)

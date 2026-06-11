@@ -36,15 +36,22 @@ const SPRITE_DIR_ROW: Record<Facing, number> = {
 // uses the true AABB (Enemy.getAABB), independent of this.
 const ENEMY_VISUAL_SCALE_FLOOR = 0.5;
 
-// Corrupted-growth palette — first use of the black-goo accent direction from
-// CLAUDE.md §6 (deep oily black, sickly green/purple highlights). The planned
-// infected-beast accents (§7 roadmap step 4) should reuse these constants.
+// Corrupted-growth palette — the black-goo accent direction from CLAUDE.md
+// §6 (deep oily black, sickly green/purple highlights). Boss-only: the goo
+// is the antagonist plant's signature (owner decision 2026-06-11 — beasts
+// do NOT carry goo accents; their infection cue is INFECTED_EYE_RED below).
 const GOO_BLACK = '#0B0A10'; // oily pool mass
 const GOO_TENDRIL = '#1C1426'; // near-black purple tendrils
 const GOO_PURPLE = '#5B2A86'; // sheen highlights on the pool
 const GOO_VEIN = '#6B8E23'; // sickly olive veins feeding the heart
 const GOO_HEART = '#9ACD32'; // glowing heart body
 const GOO_HEART_CORE = '#D9F99D'; // pale core flash at peak pulse
+
+// Infected-beast cue — owner decision 2026-06-11 (replacing the earlier
+// "black-goo accents on beasts" roadmap direction): corruption shows ONLY
+// as red eyes, shared by all four beasts. Bodies stay normal wildlife —
+// the beasts are victims, and they should still look like animals.
+const INFECTED_EYE_RED = '#FF2B2B';
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -201,8 +208,8 @@ export class Renderer {
     this.ctx.fillStyle = '#2a2a2a';
     this.ctx.fillRect(pos.x + 9, pos.y + 8, 14, 11);
 
-    // Eyes
-    this.ctx.fillStyle = '#FFD700';
+    // Eyes — infected red
+    this.ctx.fillStyle = INFECTED_EYE_RED;
     this.ctx.fillRect(pos.x + 12, pos.y + 10, 2, 2);
     this.ctx.fillRect(pos.x + 18, pos.y + 10, 2, 2);
 
@@ -228,10 +235,12 @@ export class Renderer {
     this.ctx.fillRect(pos.x + 6, pos.y + 12, 4, 14);
     this.ctx.fillRect(pos.x + 22, pos.y + 12, 4, 14);
 
-    // Eyes
-    this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(pos.x + 13, pos.y + 9, 2, 2);
-    this.ctx.fillRect(pos.x + 17, pos.y + 9, 2, 2);
+    // Eyes — infected red. Even offsets/extents from the cell centre so the
+    // gibbon's 0.5 visual scale lands them on whole screen pixels — odd
+    // coords half-pixel-blend into an unreadable orange smear at this scale.
+    this.ctx.fillStyle = INFECTED_EYE_RED;
+    this.ctx.fillRect(pos.x + 12, pos.y + 8, 2, 2);
+    this.ctx.fillRect(pos.x + 18, pos.y + 8, 2, 2);
   }
 
   // Bear — chunky, slightly fills the 32-px AABB; ~30 px visible width.
@@ -253,8 +262,8 @@ export class Renderer {
     this.ctx.fillRect(pos.x + 4, pos.y + 2, 5, 5);
     this.ctx.fillRect(pos.x + 23, pos.y + 2, 5, 5);
 
-    // Eyes
-    this.ctx.fillStyle = '#000';
+    // Eyes — infected red
+    this.ctx.fillStyle = INFECTED_EYE_RED;
     this.ctx.fillRect(pos.x + 11, pos.y + 8, 2, 2);
     this.ctx.fillRect(pos.x + 19, pos.y + 8, 2, 2);
 
@@ -279,9 +288,10 @@ export class Renderer {
     this.ctx.fillStyle = '#556B2F';
     this.ctx.fillRect(pos.x + 26, pos.y + 14, 4, 3);
 
-    // Eye — orange-red hint of corruption
-    this.ctx.fillStyle = '#FF6F00';
-    this.ctx.fillRect(pos.x + 29, pos.y + 14, 1, 1);
+    // Eye — infected red. 2×2 (not 1×1) because the snake draws at the 0.5
+    // visual-scale floor, so a 1 px eye would land sub-pixel on screen.
+    this.ctx.fillStyle = INFECTED_EYE_RED;
+    this.ctx.fillRect(pos.x + 28, pos.y + 14, 2, 2);
   }
 
   // Placeholder family-NPC marker. Translucent so it reads as "not final art."

@@ -39,7 +39,7 @@ The render order is set in `Game.render()`: clear (`#1a4a3a`) → level → huts
 - Player: colors live in the sprite-sheet PNG, not in code. The procedural burst aura uses warm golds `#FFC857` / `#FFD97A`, drawn behind the sprite.
 - Background clear: `#1a4a3a`.
 
-The **black-goo accent palette** from CLAUDE.md §6 (deep oily black, sickly green/purple highlights) has landed as the `GOO_*` module constants in `Renderer.ts`, used by the corrupted growth. The infected-beast accents are still pending — when adding them, reuse those constants rather than scattering new hex strings. See `tile-grid-and-canvas-constants`.
+The **black-goo accent palette** from CLAUDE.md §6 (deep oily black, sickly green/purple highlights) has landed as the `GOO_*` module constants in `Renderer.ts`, used by the corrupted growth — and it is **boss-only** (owner decision 2026-06-11). The infected-beast cue has landed and is separate: **red eyes** via `INFECTED_EYE_RED` on all four beasts, bodies otherwise normal wildlife. Don't add goo accents to beasts, and reuse the named constants rather than scattering new hex strings. See `tile-grid-and-canvas-constants`.
 
 ## Pattern for a new entity
 
