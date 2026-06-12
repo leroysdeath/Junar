@@ -133,51 +133,15 @@ divided by a multiplier, not runtime constant mutation.
 
 ## 8. Upgrade player sprite to LPC (Liberated Pixel Cup)
 
-**Status:** Future iteration. Captured 2026-05-10 alongside the owner-approved
-move to a CC0 LTTP-style player sprite (ArMM1998 pack) for prototype
-playtesting. LPC is the leading candidate for a *shipped* high-fidelity
-player sprite if/when we outgrow the placeholder.
-
-**Sketch:** Replace the prototype's ArMM1998 sword-character sprite with a
-player rendered from the Universal LPC Spritesheet Generator
-(`github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator`).
-LPC ships true 4-directional **walk, slash, thrust, bow-shoot, hurt,
-spellcast, and die** animations at 64×64 — the bow-shoot animation in
-particular is the right anim for our auto-fire mechanic, which the
-ArMM1998 sword-swing only approximates. The generator can compose a
-brown-skinned, cream-tunic, no-headdress archer reasonably close to the
-Adivasi design described in CLAUDE.md §6.
-
-**The license trade-off — the reason this is in ideation, not on a tier:**
-LPC is CC-BY-SA 3.0 / GPL 3.0+, not CC0. Practical implications for
-shipping:
-- We must credit each contributing artist in an in-game / Steam page
-  credits screen (CC-BY).
-- The *modified sprite sheet we ship* must remain CC-BY-SA — anyone
-  could legally extract and reuse it. The SA only attaches to the art
-  layer, not our game code. Terraria, Stardew Valley etc. ship with
-  mixed-license assets, so this is well-trodden territory, but it does
-  give up the "this art is ours" position the procedural rendering
-  currently gives us.
-
-**Open questions:**
-- Do we ship with LPC or stick with the ArMM1998 CC0 placeholder for
-  Steam? Decision can defer until the prototype loop is solid.
-- If LPC: which artist's body base do we compose on? (Affects credits
-  list length and the "Adivasi-coded" fidelity — the LPC bases vary in
-  facial detail.)
-- If LPC: do we extend to family members and beasts, or keep them
-  procedural per the current scoped decision? Mixing LPC player + procedural
-  family/beasts may read inconsistently.
-- If we add bow-shoot animation, does the auto-fire cooldown (500 ms)
-  need a frame-timing tweak so the draw-and-release animation reads at
-  the moment the arrow leaves?
-
-**Tension to watch:** scope creep. The "just upgrade the player sprite"
-work can balloon into a full art pass if we let it. Bound the work to:
-*player only, ship LPC composed sheet, update Renderer to swap source —
-nothing else changes.* If the sprite upgrade pulls in tile/wall art,
-enemy art, or HUD art, that's a separate decision.
+**Status: DROPPED — resolved no-LPC, owner decision 2026-06-11.** The
+license policy set with the Tier 1/2 sprite greenlights (`docs/ART-ASSETS.md`)
+rejects share-alike outright on the art layer: no CC-BY-SA, no GPL — which
+rules out LPC and the Universal LPC generator entirely, for the player and
+for everything else. The open question this entry carried ("LPC player +
+family vs. mixed styles?") is answered: the cast ships on CC0 / CC-BY /
+paid royalty-free sheets (player: ArMM1998 CC0; family: Antifarea CC-BY 3.0
+recolors; beasts: Time Fantasy royalty-free). Full original analysis in the
+Archived section below.
 
 ---
 
@@ -190,3 +154,26 @@ enemy art, or HUD art, that's a separate decision.
 - **Dropped:** owner decides not to pursue. Move to an "Archived" section
   at the bottom of this file with the dated decision and one-line
   reasoning, so the rationale survives.
+
+---
+
+## Archived
+
+### LPC player-sprite upgrade (dropped 2026-06-11)
+
+**Decision:** no-LPC, ever — the owner's art-license policy (set with the
+`docs/ART-ASSETS.md` Tier 1/2 greenlights) rejects share-alike (CC-BY-SA /
+GPL) on the shipped art layer, and all LPC assets and the Universal LPC
+generator are CC-BY-SA 3.0 / GPL 3.0+.
+
+**Original sketch (for the record):** replace the ArMM1998 sword-character
+sprite with one composed in the Universal LPC Spritesheet Generator — LPC
+ships 4-directional walk/slash/thrust/bow-shoot/hurt/spellcast/die at
+64×64, and the bow-shoot animation matched our auto-fire better than the
+ArMM1998 sword swing. The blocker was always the license: shipping a
+CC-BY-SA sheet means the modified sheet itself stays CC-BY-SA (anyone may
+extract and reuse it) plus per-artist credits; that trade was judged
+acceptable by some commercial games but the owner chose to keep the art
+layer clear of viral terms. If a higher-fidelity player sprite is wanted
+later, source it under CC0/CC-BY/paid royalty-free like the rest of the
+cast (see `docs/ART-ASSETS.md`).

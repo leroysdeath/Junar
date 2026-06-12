@@ -1,7 +1,7 @@
 import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
-import { Facing, Vector2 } from './types';
+import { EnemyType, Facing, Vector2 } from './types';
 import {
   TILE_SIZE,
   ENEMY_AABB_PX,
@@ -12,6 +12,22 @@ import {
 // (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
 // 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
 import playerSpriteUrl from '../assets/player-sprite.png';
+// Family sheets — Tier 2 of docs/ART-ASSETS.md, owner-greenlit 2026-06-11.
+// Recolored from Charles Gabriel (Antifarea)'s CC-BY 3.0 charsets
+// (opengameart.org); attribution logged in docs/ART-CREDITS.md.
+import familyWifeUrl from '../assets/sprites/family-wife.png';
+import familySonUrl from '../assets/sprites/family-son.png';
+import familyDaughterUrl from '../assets/sprites/family-daughter.png';
+// Beast sheets — Tier 1 of docs/ART-ASSETS.md, owner-greenlit 2026-06-11,
+// files landed 2026-06-12. Panther/gibbon(gorilla)/bear from the paid Time
+// Fantasy Animals packs 1+2 (Jason Perry / finalbossblues, royalty-free
+// commercial — license recorded in docs/ART-CREDITS.md, raw redistribution
+// prohibited); snake from "Tiny, Tiny Heroes - Animals" (Kacper Woźniak /
+// thkaspar, CC-BY 4.0, attribution logged) recolored green→olive.
+import pantherSpriteUrl from '../assets/sprites/panther.png';
+import bearSpriteUrl from '../assets/sprites/bear.png';
+import snakeSpriteUrl from '../assets/sprites/snake.png';
+import gibbonSpriteUrl from '../assets/sprites/gibbon.png';
 
 // Sprite-sheet layout — character.png from ArMM1998's pack uses 16-wide ×
 // 32-tall cells, 4-frame walk per direction across columns, one direction
@@ -27,14 +43,67 @@ const SPRITE_DIR_ROW: Record<Facing, number> = {
   left: 3,
 };
 
-// Enemy procedural art is scaled around its cell centre so drawn size
-// reflects the per-type collision AABB (ENEMY_AABB_PX): the bear reads
-// biggest, the snake smallest. Floored here so the smallest beasts (gibbon,
-// snake) stay identifiable in one frame rather than shrinking to a sub-pixel
-// speck — Pillar 5 (readable at a glance) is a hard constraint, so the drawn
-// size is allowed to exceed the tiny collision box. Collision itself always
-// uses the true AABB (Enemy.getAABB), independent of this.
+// Family-sheet layout — each sheet is 3 walk columns (walk1 / stand / walk2)
+// x 4 direction rows of 16x18 cells, recomposed to the same row order as
+// SPRITE_DIR_ROW so a future FamilyMember entity can animate them exactly
+// like the player. renderNpcs draws only the down-facing stand frame today
+// (family is render-only; CLAUDE.md §5).
+const FAMILY_CELL_W = 16;
+const FAMILY_CELL_H = 18;
+const FAMILY_STAND_COL = 1;
+
+// Beast sprites draw at a size that tracks the per-type collision AABB
+// (ENEMY_AABB_PX): each sheet's frame is fitted into a square box of
+// TILE_SIZE × max(AABB/TILE_SIZE, ENEMY_VISUAL_SCALE_FLOOR) px, centred in
+// the cell. The bear reads biggest and the snake smallest, while the floor
+// keeps the smallest beasts (gibbon, snake) identifiable in one frame rather
+// than shrinking to a sub-pixel speck — Pillar 5 (readable at a glance) is a
+// hard constraint, so the drawn size is allowed to exceed the tiny collision
+// box. A side effect of fitting to the AABB box (vs the old procedural art,
+// which drew the panther ~15 px against its 21 px kill box): the visible
+// body now matches the kill box, so contact deaths read fairer. Collision
+// itself always uses the true AABB (Enemy.getAABB), independent of this.
 const ENEMY_VISUAL_SCALE_FLOOR = 0.5;
+
+// Beast-sheet layout — same convention as the family sheets: 3 walk columns
+// (walk1 / stand / walk2) × 4 direction rows in SPRITE_DIR_ROW order
+// (down, right, up, left), uniform per-sheet cell size (the tight union
+// bbox of the source frames, so cells differ per beast). `eyes` are the
+// sprite's own eye pixels per facing, in cell coordinates — the infected
+// red-eye cue (INFECTED_EYE_RED) is drawn over them as 2×2 fills scaled
+// with the body (owner decision 2026-06-11: one treatment across sprite
+// and procedural eras). Up-facing shows the back of the head: no eyes.
+interface BeastSheetSpec {
+  cellW: number;
+  cellH: number;
+  eyes: { down: [number, number][]; right: [number, number][]; left: [number, number][] };
+}
+const BEAST_SHEET: Record<EnemyType, BeastSheetSpec> = {
+  panther: {
+    cellW: 38,
+    cellH: 28,
+    eyes: { down: [[14, 7], [19, 7]], right: [[31, 7]], left: [[5, 7]] },
+  },
+  bear: {
+    cellW: 38,
+    cellH: 26,
+    eyes: { down: [[15, 8], [21, 8]], right: [[30, 8]], left: [[6, 8]] },
+  },
+  snake: {
+    cellW: 16,
+    cellH: 16,
+    eyes: { down: [[4, 8], [11, 8]], right: [[9, 7]], left: [[6, 7]] },
+  },
+  gibbon: {
+    cellW: 24,
+    cellH: 28,
+    eyes: { down: [[8, 8], [14, 8]], right: [[15, 8]], left: [[4, 8]] },
+  },
+};
+const BEAST_WALK_FRAME_MS = 170;
+// walk1 → stand → walk2 → stand, the classic RPG charset gait.
+const BEAST_WALK_CYCLE = [0, 1, 2, 1];
+const BEAST_STAND_COL = 1;
 
 // Corrupted-growth palette — the black-goo accent direction from CLAUDE.md
 // §6 (deep oily black, sickly green/purple highlights). Boss-only: the goo
@@ -56,6 +125,12 @@ const INFECTED_EYE_RED = '#FF2B2B';
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private playerSprite: HTMLImageElement;
+  private familySprites: HTMLImageElement[];
+  private beastSprites: Record<EnemyType, HTMLImageElement>;
+  // Render-side movement tracking so beast sprites face their walk direction
+  // and idle on the stand frame. Rebuilt every frame from the live enemy
+  // list (no leak across deaths/rooms); purely visual — AI owns real motion.
+  private beastTrack = new Map<number, { x: number; y: number; facing: Facing }>();
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -64,6 +139,26 @@ export class Renderer {
     this.ctx.imageSmoothingEnabled = false;
     this.playerSprite = new Image();
     this.playerSprite.src = playerSpriteUrl;
+    // Wife, son, daughter — N markers cycle through these by position index
+    // so a 3-marker anchor shows the whole family, deterministically per room.
+    this.familySprites = [familyWifeUrl, familySonUrl, familyDaughterUrl].map(
+      url => {
+        const img = new Image();
+        img.src = url;
+        return img;
+      },
+    );
+    const load = (url: string) => {
+      const img = new Image();
+      img.src = url;
+      return img;
+    };
+    this.beastSprites = {
+      panther: load(pantherSpriteUrl),
+      bear: load(bearSpriteUrl),
+      snake: load(snakeSpriteUrl),
+      gibbon: load(gibbonSpriteUrl),
+    };
   }
 
   renderLevel(level: Level) {
@@ -140,41 +235,51 @@ export class Renderer {
   }
 
   renderEnemies(enemies: Enemy[], currentTime = 0) {
+    const track = new Map<number, { x: number; y: number; facing: Facing }>();
     enemies.forEach(enemy => {
       const pos = enemy.getPosition();
       const type = enemy.getType();
 
-      // Scale the procedural art around the cell centre so drawn size tracks
-      // the per-type collision AABB (bear biggest → snake smallest), floored
-      // so the smallest beasts stay identifiable in one frame (Pillar 5).
-      const scale = Math.max(
-        ENEMY_AABB_PX[type] / TILE_SIZE,
-        ENEMY_VISUAL_SCALE_FLOOR,
-      );
-      const cx = pos.x + TILE_SIZE / 2;
-      const cy = pos.y + TILE_SIZE / 2;
+      // Derive facing + idle/walk from frame-to-frame movement (render-side
+      // only). Unseen or stationary enemies idle on their last facing
+      // (default: down — statics sit watching the room).
+      const prev = this.beastTrack.get(enemy.getId());
+      const dx = prev ? pos.x - prev.x : 0;
+      const dy = prev ? pos.y - prev.y : 0;
+      const moving = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
+      let facing: Facing = prev?.facing ?? 'down';
+      if (moving) {
+        facing =
+          Math.abs(dx) > Math.abs(dy)
+            ? dx < 0
+              ? 'left'
+              : 'right'
+            : dy < 0
+              ? 'up'
+              : 'down';
+      }
+      track.set(enemy.getId(), { x: pos.x, y: pos.y, facing });
 
-      this.ctx.save();
-      this.ctx.translate(cx, cy);
-      this.ctx.scale(scale, scale);
-      this.ctx.translate(-cx, -cy);
+      const frameCol = moving
+        ? BEAST_WALK_CYCLE[
+            Math.floor(currentTime / BEAST_WALK_FRAME_MS) % BEAST_WALK_CYCLE.length
+          ]
+        : BEAST_STAND_COL;
 
       switch (type) {
         case 'panther':
-          this.renderPanther(pos);
+          this.renderPanther(pos, facing, frameCol);
           break;
         case 'snake':
-          this.renderSnake(pos);
+          this.renderSnake(pos, facing, frameCol);
           break;
         case 'gibbon':
-          this.renderGibbon(pos);
+          this.renderGibbon(pos, facing, frameCol);
           break;
         case 'bear':
-          this.renderBear(pos);
+          this.renderBear(pos, facing, frameCol);
           break;
       }
-
-      this.ctx.restore();
 
       // Doorway-arrival materialize flash: a cross-room hunter that just
       // crossed into this room is briefly unable to contact-kill (its
@@ -196,122 +301,100 @@ export class Renderer {
         this.ctx.restore();
       }
     });
+    this.beastTrack = track;
   }
 
-  // Panther — sleek, low-slung, ~23 px visible width.
-  private renderPanther(pos: Vector2) {
-    // Body
-    this.ctx.fillStyle = '#1a1a1a';
-    this.ctx.fillRect(pos.x + 5, pos.y + 13, 22, 11);
+  // Shared beast-sprite draw: fit the sheet's cell into the per-type
+  // AABB-or-floor box (see BEAST_SHEET note), centred in the 32 px cell,
+  // then stamp the infected red eyes over the sprite's own eye pixels at
+  // the same scale. The 32 px cell remains the positioning unit and the
+  // arrow-hit box; nothing here touches collision.
+  private drawBeast(
+    type: EnemyType,
+    pos: Vector2,
+    facing: Facing,
+    frameCol: number,
+  ) {
+    const spec = BEAST_SHEET[type];
+    const box =
+      TILE_SIZE *
+      Math.max(ENEMY_AABB_PX[type] / TILE_SIZE, ENEMY_VISUAL_SCALE_FLOOR);
+    const k = box / Math.max(spec.cellW, spec.cellH);
+    const destW = Math.round(spec.cellW * k);
+    const destH = Math.round(spec.cellH * k);
+    const dx = pos.x + Math.round((TILE_SIZE - destW) / 2);
+    const dy = pos.y + Math.round((TILE_SIZE - destH) / 2);
 
-    // Head
-    this.ctx.fillStyle = '#2a2a2a';
-    this.ctx.fillRect(pos.x + 9, pos.y + 8, 14, 11);
+    this.ctx.drawImage(
+      this.beastSprites[type],
+      frameCol * spec.cellW,
+      SPRITE_DIR_ROW[facing] * spec.cellH,
+      spec.cellW,
+      spec.cellH,
+      dx,
+      dy,
+      destW,
+      destH,
+    );
 
-    // Eyes — infected red
-    this.ctx.fillStyle = INFECTED_EYE_RED;
-    this.ctx.fillRect(pos.x + 12, pos.y + 10, 2, 2);
-    this.ctx.fillRect(pos.x + 18, pos.y + 10, 2, 2);
-
-    // Tail
-    this.ctx.fillStyle = '#1a1a1a';
-    this.ctx.fillRect(pos.x + 24, pos.y + 16, 4, 8);
+    // Red-eye infection cue (owner decision 2026-06-11) — 2×2 fills on the
+    // stand-frame eye positions, scaled with the body. Up-facing shows the
+    // back of the head, so no eyes (the cue returns the moment it turns).
+    if (facing !== 'up') {
+      this.ctx.fillStyle = INFECTED_EYE_RED;
+      for (const [ex, ey] of spec.eyes[facing]) {
+        this.ctx.fillRect(dx + Math.round(ex * k), dy + Math.round(ey * k), 2, 2);
+      }
+    }
   }
 
-  // Gibbon — long-armed jungle primate; ~20 px visible width with arms.
-  // Lanky arms hang prominently. Sandy gold color distinguishes from
-  // panther/bear browns.
-  private renderGibbon(pos: Vector2) {
-    // Body (compact torso)
-    this.ctx.fillStyle = '#B8860B';
-    this.ctx.fillRect(pos.x + 11, pos.y + 14, 10, 12);
-
-    // Head
-    this.ctx.fillStyle = '#DAA520';
-    this.ctx.fillRect(pos.x + 12, pos.y + 6, 8, 9);
-
-    // Long arms (signature gibbon trait)
-    this.ctx.fillStyle = '#B8860B';
-    this.ctx.fillRect(pos.x + 6, pos.y + 12, 4, 14);
-    this.ctx.fillRect(pos.x + 22, pos.y + 12, 4, 14);
-
-    // Eyes — infected red. Even offsets/extents from the cell centre so the
-    // gibbon's 0.5 visual scale lands them on whole screen pixels — odd
-    // coords half-pixel-blend into an unreadable orange smear at this scale.
-    this.ctx.fillStyle = INFECTED_EYE_RED;
-    this.ctx.fillRect(pos.x + 12, pos.y + 8, 2, 2);
-    this.ctx.fillRect(pos.x + 18, pos.y + 8, 2, 2);
+  // Panther — Time Fantasy sheet; black-panther silhouette, reads at its
+  // 21 px AABB box. One method per beast kept for the type dispatch.
+  private renderPanther(pos: Vector2, facing: Facing, frameCol: number) {
+    this.drawBeast('panther', pos, facing, frameCol);
   }
 
-  // Bear — chunky, slightly fills the 32-px AABB; ~30 px visible width.
-  private renderBear(pos: Vector2) {
-    // Body
-    this.ctx.fillStyle = '#4a3c28';
-    this.ctx.fillRect(pos.x + 1, pos.y + 7, 30, 24);
-
-    // Body shading / fur tone
-    this.ctx.fillStyle = '#5a4c38';
-    this.ctx.fillRect(pos.x + 3, pos.y + 9, 26, 20);
-
-    // Head
-    this.ctx.fillStyle = '#4a3c28';
-    this.ctx.fillRect(pos.x + 5, pos.y + 3, 22, 16);
-
-    // Ears
-    this.ctx.fillStyle = '#4a3c28';
-    this.ctx.fillRect(pos.x + 4, pos.y + 2, 5, 5);
-    this.ctx.fillRect(pos.x + 23, pos.y + 2, 5, 5);
-
-    // Eyes — infected red
-    this.ctx.fillStyle = INFECTED_EYE_RED;
-    this.ctx.fillRect(pos.x + 11, pos.y + 8, 2, 2);
-    this.ctx.fillRect(pos.x + 19, pos.y + 8, 2, 2);
-
-    // Nose
-    this.ctx.fillStyle = '#000';
-    this.ctx.fillRect(pos.x + 14, pos.y + 13, 4, 3);
+  // Gibbon — Time Fantasy gorilla sheet: dark, tailless, long-armed primate
+  // (closest match for the Hoolock); draws at the 0.5 readability floor.
+  private renderGibbon(pos: Vector2, facing: Facing, frameCol: number) {
+    this.drawBeast('gibbon', pos, facing, frameCol);
   }
 
-  // Snake — thin slithering body, drawn within the cell (scaled in
-  // renderEnemies). Collision AABB is a tiny 4 px box (ENEMY_AABB_PX) so many
-  // snakes pack/stack per tile; the 32 px cell still drives arrow-hit in
-  // Game.ts, so arrows land reliably. Serpentine zigzag suggests motion.
-  private renderSnake(pos: Vector2) {
-    // Body segments alternating high/low to suggest a slither
-    this.ctx.fillStyle = '#2F4F2F';
-    this.ctx.fillRect(pos.x + 3, pos.y + 17, 6, 2);
-    this.ctx.fillRect(pos.x + 9, pos.y + 15, 6, 2);
-    this.ctx.fillRect(pos.x + 15, pos.y + 17, 6, 2);
-    this.ctx.fillRect(pos.x + 21, pos.y + 15, 6, 2);
-
-    // Head (slightly larger, lighter color)
-    this.ctx.fillStyle = '#556B2F';
-    this.ctx.fillRect(pos.x + 26, pos.y + 14, 4, 3);
-
-    // Eye — infected red. 2×2 (not 1×1) because the snake draws at the 0.5
-    // visual-scale floor, so a 1 px eye would land sub-pixel on screen.
-    this.ctx.fillStyle = INFECTED_EYE_RED;
-    this.ctx.fillRect(pos.x + 28, pos.y + 14, 2, 2);
+  // Bear — Time Fantasy dark adult bear; biggest of the set at its 34 px box.
+  private renderBear(pos: Vector2, facing: Facing, frameCol: number) {
+    this.drawBeast('bear', pos, facing, frameCol);
   }
 
-  // Placeholder family-NPC marker. Translucent so it reads as "not final art."
-  // Visual shorthand for a generic family member; behavior is unwired.
+  // Snake — TTH sheet recolored to olive (Indian rat snake). Collision AABB
+  // stays a tiny 4 px box (ENEMY_AABB_PX) so many snakes pack/stack per
+  // tile; drawn at the 16 px readability floor, and the 32 px cell still
+  // drives arrow-hit in Game.ts, so arrows land reliably.
+  private renderSnake(pos: Vector2, facing: Facing, frameCol: number) {
+    this.drawBeast('snake', pos, facing, frameCol);
+  }
+
+  // Family NPCs at N markers — sprite-based (Tier 2 swap, owner-greenlit
+  // 2026-06-11). Behavior is still unwired, so each member stands on its
+  // down-facing idle frame; kept translucent so passive render-only family
+  // still reads as "not yet interactive" until the FamilyMember entity lands.
   renderNpcs(positions: Vector2[]) {
     this.ctx.save();
     this.ctx.globalAlpha = 0.7;
-    positions.forEach(pos => {
-      // Tunic
-      this.ctx.fillStyle = '#E8D7B0';
-      this.ctx.fillRect(pos.x + 9, pos.y + 14, 14, 14);
-      // Head
-      this.ctx.fillStyle = '#5D4037';
-      this.ctx.fillRect(pos.x + 11, pos.y + 6, 10, 10);
-      // Hair
-      this.ctx.fillStyle = '#1A1A1A';
-      this.ctx.fillRect(pos.x + 11, pos.y + 4, 10, 3);
-      // Placeholder marker dot (signals "not final")
-      this.ctx.fillStyle = '#FF6F00';
-      this.ctx.fillRect(pos.x + 14, pos.y + 1, 4, 2);
+    positions.forEach((pos, i) => {
+      const sheet = this.familySprites[i % this.familySprites.length];
+      // Native 16x18 cell, horizontally centered and foot-aligned in the
+      // 32 px tile (same convention as the player sprite's 16x32 cell).
+      this.ctx.drawImage(
+        sheet,
+        FAMILY_STAND_COL * FAMILY_CELL_W,
+        SPRITE_DIR_ROW.down * FAMILY_CELL_H,
+        FAMILY_CELL_W,
+        FAMILY_CELL_H,
+        pos.x + (TILE_SIZE - FAMILY_CELL_W) / 2,
+        pos.y + (TILE_SIZE - FAMILY_CELL_H),
+        FAMILY_CELL_W,
+        FAMILY_CELL_H,
+      );
     });
     this.ctx.restore();
   }

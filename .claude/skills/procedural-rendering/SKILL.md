@@ -1,19 +1,21 @@
 ---
 name: procedural-rendering
-description: Junar's canvas-2D rendering contract for the game world. Renderer.ts is the sole draw surface for in-world entities and effects (player, enemies, arrows, boss, family, particles, screen shake, hit flashes); everything is procedural pixel rectangles except the player — the single owner-approved sprite exception (CC0 LTTP-style sheet imported as a PNG, drawn via drawImage in renderPlayer). No sprite/image imports for any other entity, no WebGL/Pixi/Three.js. Use when adding or editing how something is drawn on the canvas, when proposing a renderer migration, or when a request would import an image asset. Not for: React/Tailwind HUD overlays (see react-game-bridge), the crash logger's red overlay (see crash-logger-channel), the LOS rule itself (see los-contract — this skill only owns the visual indicator), or pulling magic numbers like 32/928/544 into constants (see tile-grid-and-canvas-constants, even inside Renderer.ts).
+description: Junar's canvas-2D rendering contract for the game world. Renderer.ts is the sole draw surface for in-world entities and effects (player, enemies, arrows, boss, family, particles, screen shake, hit flashes). Characters and beasts are sprite-based (owner-greenlit — player 2026-05-10, beasts + family 2026-06-11 per docs/ART-ASSETS.md Tiers 1-2, drawn via drawImage from bundled PNGs); environment, hut, arrows, FX, HUD, and the plant boss are procedural pixel rectangles (Tier 3 not greenlit, Tier 4 keep-procedural confirmed). No sprite/image imports beyond the approved set, no share-alike-licensed art (no LPC), nothing AI-generated, no WebGL/Pixi/Three.js. Use when adding or editing how something is drawn on the canvas, when proposing a renderer migration, or when a request would import an image asset. Not for: React/Tailwind HUD overlays (see react-game-bridge), the crash logger's red overlay (see crash-logger-channel), the LOS rule itself (see los-contract — this skill only owns the visual indicator), or pulling magic numbers like 32/928/544 into constants (see tile-grid-and-canvas-constants, even inside Renderer.ts).
 ---
 
 # Procedural rendering
 
-The chosen art direction is procedural pixel rectangles, drawn to a single Canvas 2D context. This is a feature, not a workaround. The player is the one owner-approved exception: a CC0 LTTP-style sprite sheet, with everything else staying procedural.
+The art direction is hybrid, drawn to a single Canvas 2D context. **Characters and beasts are sprites** (owner-greenlit: player 2026-05-10; the four beasts + family wife/son/daughter 2026-06-11 — Tiers 1–2 of `docs/ART-ASSETS.md`). **Everything else is procedural pixel rectangles** — walls/floor, huts, arrows, burst aura, LOS indicator, materialize flash, hit/death FX, and the corrupted growth / plant boss (Tier 3 explicitly not greenlit; Tier 4 keep-procedural confirmed 2026-06-11). The procedural side is a feature, not a workaround: FX are readability tools, and the boss's pulsing goo animates better as code.
 
-See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Player is the only entity allowed to use a real sprite asset"; "Don't migrate to a game engine").
+Asset rules for the sprite side: bundled PNGs imported via Vite, drawn with `ctx.drawImage` (`imageSmoothingEnabled = false`, integer coords). Licenses: CC0 / CC-BY (logged in `docs/ART-CREDITS.md`) / paid royalty-free only — share-alike rejected (no CC-BY-SA, no GPL, no LPC), no NC/ND, nothing AI-generated.
+
+See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Sprite assets are limited to the approved set"; "Don't migrate to a game engine").
 
 ## The contract
 
 - One render surface: `src/game/Renderer.ts`, holding a `CanvasRenderingContext2D` constructed from the 928×544 canvas in `App.tsx` (`CANVAS_WIDTH` / `CANVAS_HEIGHT` in `constants.ts`).
 - One method per visible entity type: `renderLevel`, `renderPlayer` (sprite + procedural burst aura), `renderEnemies` (dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake`), `renderNpcs`, `renderHuts`, `renderArrows`, `renderCorruptedGrowth`, `renderLineOfSightIndicator`.
-- Drawing primitives are `fillRect`, `fillStyle`, `save`/`translate`/`rotate`/`scale`/`restore`, `globalAlpha`, `strokeRect` + `setLineDash` (LOS indicator), the occasional `beginPath` / triangle for arrowheads — plus `drawImage` for the player sprite **only**. The player is the single owner-approved sprite exception (CC0 LTTP-style sheet imported as a PNG, drawn in `renderPlayer`); every other in-world entity stays procedural, and no sprite/image import may be added for any other entity without owner approval.
+- Drawing primitives are `fillRect`, `fillStyle`, `save`/`translate`/`rotate`/`scale`/`restore`, `globalAlpha`, `strokeRect` + `setLineDash` (LOS indicator), the occasional `beginPath` / triangle for arrowheads — plus `drawImage` for the approved sprite set: the player (`renderPlayer`, CC0 LTTP sheet), the family (`renderNpcs`, CC-BY 3.0 Antifarea recolors at 16×18), and the four beasts (`drawBeast` behind `renderPanther`/`renderBear`/`renderSnake`/`renderGibbon` — Time Fantasy panther/bear/gorilla-gibbon + CC-BY TTH snake, fitted into each type's `ENEMY_AABB_PX`-or-`ENEMY_VISUAL_SCALE_FLOOR` box, facing derived render-side from movement, red-eye cue stamped on top). No sprite/image import may be added for any other entity without owner approval.
 - The canvas is `image-rendering: pixelated` (set on the `<canvas>` in `App.tsx`), and the `Renderer` constructor sets `ctx.imageSmoothingEnabled = false` so the scaled sprite stays crisp. Stay on integer pixel coordinates so the pixelation reads correctly.
 - Every entity must be **identifiable in one frame at 32×32**. Silhouette and color do the work — readability is the constraint, not detail.
 
@@ -23,8 +25,8 @@ See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Player i
 |---|---|
 | Tile floor / tree wall | `renderLevel` |
 | Player (CC0 LTTP-style sprite + procedural burst aura) | `renderPlayer` |
-| Panther / gibbon / bear / snake | `renderEnemies`, dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake` |
-| Family placeholders (`N` tiles) | `renderNpcs` |
+| Panther / gibbon / bear / snake (sprites + procedural red-eye overlay) | `renderEnemies`, dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake` (all via `drawBeast`) |
+| Family wife/son/daughter sprites at `N` tiles (translucent idle frames, cycled by index; behavior unwired) | `renderNpcs` |
 | Huts (`H` tiles) | `renderHuts` |
 | Arrows | `renderArrows` |
 | Corrupted growth (boss-arena walk-on win trigger) | `renderCorruptedGrowth` |
@@ -51,7 +53,8 @@ The **black-goo accent palette** from CLAUDE.md §6 (deep oily black, sickly gre
 
 ## Pushback list
 
-- **The player is the only entity allowed a real sprite asset** (owner-approved 2026-05-10). No sprite sheets, no image/PNG/SVG imports for any other in-world entity without owner approval. CLAUDE.md §9.
+- **Sprite assets are limited to player + four beasts + family** (player approved 2026-05-10; beasts/family greenlit 2026-06-11). No sprite sheets, no image/PNG/SVG imports for environment, hut, arrows, FX, HUD, or the boss without owner approval. CLAUDE.md §9, `docs/ART-ASSETS.md`.
+- **No share-alike or AI-generated art, ever.** CC-BY-SA/GPL (all of LPC) is rejected on the art layer; every sourced sheet needs human-made provenance. CC-BY attributions go in `docs/ART-CREDITS.md`.
 - **No engine migration.** Pixi, Phaser, Three.js, Godot, Bevy — out of scope. CLAUDE.md §9.
 - **No WebGL.** Stay on the 2D context.
 - **No browser-only rendering APIs that won't survive a Tauri wrap.** Canvas 2D is fine; OffscreenCanvas, ImageBitmap, and similar should be sanity-checked first. CLAUDE.md §8.
@@ -60,7 +63,7 @@ The **black-goo accent palette** from CLAUDE.md §6 (deep oily black, sickly gre
 
 ## What is fine
 
-- Adding new procedural entities (the full plant boss replacing the corrupted-growth stub, family AI/art beyond the current placeholder rects, infected-beast accents).
+- Adding new procedural entities (the full plant boss replacing the corrupted-growth stub, FX polish) and animating the family sprites' existing 3-frame 4-dir walk rows once the `FamilyMember` entity lands.
 - Adding hit-feedback flashes, screen-shake, simple particles via more `fillRect` calls within the existing render flow. CLAUDE.md §7 step 8 lists these as planned polish.
 - Refining existing entity art for readability or to land the corruption visual treatment.
 - Adding a new draw method on `Renderer` for a new concept; keep one method per visible thing.

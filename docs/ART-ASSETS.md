@@ -30,9 +30,12 @@ tiers toward "done" as decisions and files land.
   paid Steam release (CLAUDE.md §8). **CC0 / public domain strongly
   preferred.** CC-BY acceptable with attribution logged in
   `docs/ART-CREDITS.md` (title, author, source URL, license, changes).
-  CC-BY-SA (e.g. LPC) is viral on the shipped art layer — see the trade-off
-  analysis in `docs/IDEATION.md` §8 before accepting any SA asset. **Reject**
-  NC, ND, and unclear-license rips.
+  **PAID royalty-free packs are acceptable** when the license covers
+  commercial use and shipping the art inside a game build (owner decision
+  2026-06-11). **Share-alike is rejected outright** (owner decision
+  2026-06-11): no CC-BY-SA, no GPL — which rules out LPC and the LPC
+  generator entirely (this also resolved `docs/IDEATION.md` §8: the answer
+  is no-LPC). **Reject** NC, ND, and unclear-license rips.
 - **Style coherence with the player sprite.** The player uses ArMM1998's
   "Zelda-like tilesets and sprites" pack (CC0, opengameart.org) at LTTP-scale
   texel density (16 px-wide character cells). Mixing pixel densities reads as
@@ -70,7 +73,33 @@ tiers toward "done" as decisions and files land.
 
 ---
 
-## Tier 1 — Beasts (biggest visual win; needs owner greenlight)
+## Tier 1 — Beasts (GREENLIT 2026-06-11; LANDED 2026-06-12)
+
+**Status:** greenlit 2026-06-11 (sourcing decided after a license/
+provenance-verified sweep of OGA, itch.io, and paid packs — no free pack
+covers a feline panther or a 4-dir primate); owner purchased **Time Fantasy
+"Animals Sprite Pack" ($5) + "Animals Sprite Pack 2" ($6) by Jason Perry
+(finalbossblues)** on itch.io (NOT the Steam RPG-Maker DLC, which is
+engine-locked) and the sheets landed 2026-06-12. Actual sourcing, simpler
+than planned: pack 2 ships a ready-made `panther.png` (no tiger recolor
+needed) and `gorilla.png` is the gibbon (dark, tailless, long-armed — the
+closest Hoolock silhouette); the dark adult bear comes from pack 1's
+`animals5.png`; all three keep the artist's native palette for set
+coherence. Pack 2 has **no snake**, so the snake is the planned fallback:
+**Tiny Tiny Heroes - Animals** (CC-BY 4.0, thkaspar.itch.io/tth-animals),
+recolored green→olive for the Indian-rat-snake read — a 16 px sliver on
+screen, the least visible cross-artist seam. Sheets are recomposed to
+3 walk cols × 4 dir rows (down/right/up/left, the player-sheet convention)
+with tight union-bbox cells, named to the Keys in `src/assets/sprites/`.
+`Renderer.drawBeast` fits each frame into its `max(AABB, readability-floor)`
+box (so the visible body now matches the kill box), faces movement
+direction, animates a walk1/stand/walk2/stand gait, and stamps the red-eye
+cue (INFECTED_EYE_RED) over the sprite's own eye pixels per facing —
+up-facing shows the back of the head, no eyes. Per-asset checklist
+completed for all four (game-scale floor previews + live dev-server run +
+bear-vs-1-tile-corridor mock). Licenses recorded in `docs/ART-CREDITS.md`
+(note: the TF zips ship no license file; terms rest on the creator's
+published statements).
 
 Replaces the procedural bodies of `renderPanther` / `renderBear` /
 `renderSnake` / `renderGibbon`. All four should come from one pack (or one
@@ -94,14 +123,23 @@ keep the red-eye cue as a small procedural overlay drawn on top of the
 sprite — one treatment across sprite and procedural eras, no per-beast
 "infected" variant sheets.
 
-## Tier 2 — Family (blocked on family entity work; needs owner greenlight)
+## Tier 2 — Family (GREENLIT 2026-06-11; LANDED)
 
-Wife, son, daughter currently render as translucent placeholder rectangles
-(`renderNpcs`) with no entity class behind them. Sourcing sprites before the
-`FamilyMember` entity exists (CLAUDE.md §7 step 5) risks speccing the wrong
-animations — **recommend deferring this tier until family movement/AI lands**
-and treating it together with the player-sprite end-state decision
-(`docs/IDEATION.md` §8 open question: LPC player + family vs. mixed styles).
+**Status:** greenlit 2026-06-11; sheets landed the same day with the owner's
+pick: **Charles Gabriel (Antifarea)'s CC-BY 3.0 charsets** from
+OpenGameArt — wife = female Townfolk ("Twelve 16x18 RPG sprites, plus
+base"), son = Child M and daughter = Child F ("Twelve more characters + 3
+free characters and a child template"). Recolored to the Adivasi direction
+(player-matched warm-brown skin + black hair; cream apron / red dress,
+red-cream striped tunic, turmeric-ochre top; jeans → earth-brown shorts) and
+recomposed to 48×72 sheets (3 walk cols × 4 dir rows of 16×18, row order
+matching the player sheet: down/right/up/left) in `src/assets/sprites/`
+(`family-wife.png`, `family-son.png`, `family-daughter.png`). Attribution
+logged in `docs/ART-CREDITS.md`. Per-asset checklist completed for all three
+(game-scale readability verified on the tan floor). `renderNpcs` draws the
+down-facing idle frame, translucent, cycling wife/son/daughter by `N`-marker
+index; the sheets carry full 3-frame 4-dir walks so the future
+`FamilyMember` entity (CLAUDE.md §7 step 5) can animate without re-sourcing.
 
 | Key | Replaces | Sheet spec | Identity / direction |
 |-----|----------|------------|----------------------|
@@ -113,7 +151,11 @@ Cultural-representation guardrails (CLAUDE.md §9, `protagonist-and-family-tone`
 skill) apply to every candidate sheet; when in doubt, show the owner before
 committing.
 
-## Tier 3 — Environment tiles (needs owner greenlight)
+## Tier 3 — Environment tiles (NOT GREENLIT — stays procedural)
+
+**Status: not greenlit (owner decision 2026-06-11).** Tree walls, floor, and
+hut keep their procedural rendering. Do not source or land tiles for this
+tier without a fresh owner decision.
 
 The most visible swap per pixel: every frame is mostly walls and floor.
 
@@ -126,7 +168,10 @@ The most visible swap per pixel: every frame is mostly walls and floor.
 ArMM1998's pack (the player sprite's source) includes LTTP-style tilesets —
 first candidate for guaranteed coherence.
 
-## Tier 4 — Keep procedural (recommendation: no assets)
+## Tier 4 — Keep procedural (CONFIRMED 2026-06-11)
+
+**Status: the keep-procedural recommendation below is owner-confirmed
+(2026-06-11).** Arrows, burst aura, FX, and the plant boss stay code-drawn.
 
 Arrows, the burst aura, the LOS indicator, the doorway materialize flash,
 hit/death FX, and the **corrupted growth / plant boss** should stay
@@ -147,9 +192,10 @@ combat design (roadmap §5.15) demands forms code can't deliver.
   verify coherence before adopting.
 - **itch.io** — many CC0 16-px jungle/animal packs; re-confirm license per
   pack page.
-- **LPC / Universal LPC generator** — CC-BY-SA/GPL; full trade-off analysis
-  in `docs/IDEATION.md` §8. Only relevant if the owner accepts SA on the art
-  layer for the whole cast.
+- **LPC / Universal LPC generator** — **rejected (owner decision
+  2026-06-11):** CC-BY-SA/GPL share-alike terms are not accepted on the art
+  layer. Kept here only so nobody re-proposes it; see the archived analysis
+  in `docs/IDEATION.md` §8.
 
 Always re-confirm the license on the asset's own page at download time.
 
