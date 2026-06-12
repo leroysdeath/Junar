@@ -12,6 +12,12 @@ import {
 // (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
 // 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
 import playerSpriteUrl from '../assets/player-sprite.png';
+// Family sheets — Tier 2 of docs/ART-ASSETS.md, owner-greenlit 2026-06-11.
+// Recolored from Charles Gabriel (Antifarea)'s CC-BY 3.0 charsets
+// (opengameart.org); attribution logged in docs/ART-CREDITS.md.
+import familyWifeUrl from '../assets/sprites/family-wife.png';
+import familySonUrl from '../assets/sprites/family-son.png';
+import familyDaughterUrl from '../assets/sprites/family-daughter.png';
 
 // Sprite-sheet layout — character.png from ArMM1998's pack uses 16-wide ×
 // 32-tall cells, 4-frame walk per direction across columns, one direction
@@ -26,6 +32,15 @@ const SPRITE_DIR_ROW: Record<Facing, number> = {
   up: 2,
   left: 3,
 };
+
+// Family-sheet layout — each sheet is 3 walk columns (walk1 / stand / walk2)
+// x 4 direction rows of 16x18 cells, recomposed to the same row order as
+// SPRITE_DIR_ROW so a future FamilyMember entity can animate them exactly
+// like the player. renderNpcs draws only the down-facing stand frame today
+// (family is render-only; CLAUDE.md §5).
+const FAMILY_CELL_W = 16;
+const FAMILY_CELL_H = 18;
+const FAMILY_STAND_COL = 1;
 
 // Enemy procedural art is scaled around its cell centre so drawn size
 // reflects the per-type collision AABB (ENEMY_AABB_PX): the bear reads
@@ -56,6 +71,7 @@ const INFECTED_EYE_RED = '#FF2B2B';
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private playerSprite: HTMLImageElement;
+  private familySprites: HTMLImageElement[];
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -64,6 +80,15 @@ export class Renderer {
     this.ctx.imageSmoothingEnabled = false;
     this.playerSprite = new Image();
     this.playerSprite.src = playerSpriteUrl;
+    // Wife, son, daughter — N markers cycle through these by position index
+    // so a 3-marker anchor shows the whole family, deterministically per room.
+    this.familySprites = [familyWifeUrl, familySonUrl, familyDaughterUrl].map(
+      url => {
+        const img = new Image();
+        img.src = url;
+        return img;
+      },
+    );
   }
 
   renderLevel(level: Level) {
@@ -294,24 +319,28 @@ export class Renderer {
     this.ctx.fillRect(pos.x + 28, pos.y + 14, 2, 2);
   }
 
-  // Placeholder family-NPC marker. Translucent so it reads as "not final art."
-  // Visual shorthand for a generic family member; behavior is unwired.
+  // Family NPCs at N markers — sprite-based (Tier 2 swap, owner-greenlit
+  // 2026-06-11). Behavior is still unwired, so each member stands on its
+  // down-facing idle frame; kept translucent so passive render-only family
+  // still reads as "not yet interactive" until the FamilyMember entity lands.
   renderNpcs(positions: Vector2[]) {
     this.ctx.save();
     this.ctx.globalAlpha = 0.7;
-    positions.forEach(pos => {
-      // Tunic
-      this.ctx.fillStyle = '#E8D7B0';
-      this.ctx.fillRect(pos.x + 9, pos.y + 14, 14, 14);
-      // Head
-      this.ctx.fillStyle = '#5D4037';
-      this.ctx.fillRect(pos.x + 11, pos.y + 6, 10, 10);
-      // Hair
-      this.ctx.fillStyle = '#1A1A1A';
-      this.ctx.fillRect(pos.x + 11, pos.y + 4, 10, 3);
-      // Placeholder marker dot (signals "not final")
-      this.ctx.fillStyle = '#FF6F00';
-      this.ctx.fillRect(pos.x + 14, pos.y + 1, 4, 2);
+    positions.forEach((pos, i) => {
+      const sheet = this.familySprites[i % this.familySprites.length];
+      // Native 16x18 cell, horizontally centered and foot-aligned in the
+      // 32 px tile (same convention as the player sprite's 16x32 cell).
+      this.ctx.drawImage(
+        sheet,
+        FAMILY_STAND_COL * FAMILY_CELL_W,
+        SPRITE_DIR_ROW.down * FAMILY_CELL_H,
+        FAMILY_CELL_W,
+        FAMILY_CELL_H,
+        pos.x + (TILE_SIZE - FAMILY_CELL_W) / 2,
+        pos.y + (TILE_SIZE - FAMILY_CELL_H),
+        FAMILY_CELL_W,
+        FAMILY_CELL_H,
+      );
     });
     this.ctx.restore();
   }

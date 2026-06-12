@@ -43,13 +43,14 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 - `grep -rEi "tiger|crocodile|jackal|wolf|hyena|leopard" src/game/` returns no hits (only acceptable in CLAUDE.md guardrails, README.md, and docs/ as "not approved" examples).
 **Source:** CLAUDE.md §5 Mechanics; §9 Guardrails "No new enemy type may be added without explicit owner approval"
 
-### 4. Player is the only sprite-asset entity
-**Rule:** Only the player-rendering code path imports / uses a sprite image. Enemies, NPCs, huts, arrows, walls, HUD, and FX render via procedural Canvas 2D fills.
+### 4. Sprite assets are limited to the approved entity set (player, beasts, family)
+**Rule:** Sprite images may be imported and drawn only for the player (approved 2026-05-10), the four beasts, and the three family members (Tiers 1–2 of `docs/ART-ASSETS.md`, greenlit 2026-06-11). Huts, arrows, walls/floor, HUD, FX (burst aura, LOS indicator, materialize flash), and the corrupted growth / plant boss render via procedural Canvas 2D fills (Tier 3 not greenlit; Tier 4 keep-procedural confirmed 2026-06-11). The infected red-eye cue on beasts stays a procedural overlay drawn on top of the sprite. Every sourced sheet is CC0, CC-BY (logged in `docs/ART-CREDITS.md`), or paid royalty-free — never share-alike (CC-BY-SA/GPL/LPC), NC, ND, or AI-generated.
 **Verify:**
-- `grep -rEn "import.*from.*assets|\\.png|\\.jpg|\\.webp" src/game/` returns only the player-sprite import (plus comments) in `Renderer.ts`.
-- `Renderer.renderEnemies`, `Renderer.renderNpcs`, `Renderer.renderHuts`, `Renderer.renderArrows` use only `ctx.fillRect`, `ctx.fill`, `ctx.stroke`, `ctx.beginPath` — never `ctx.drawImage`.
-- `Renderer.renderPlayer` is the sole `ctx.drawImage` call site.
-**Source:** CLAUDE.md §3 Pillars "Readable at a glance"; §9 Guardrails "Player is the only entity allowed to use a real sprite asset"
+- `grep -rEn "import.*from.*assets|\\.png|\\.jpg|\\.webp" src/game/` returns imports (plus comments) only in `Renderer.ts`, and only for: `player-sprite.png` and `sprites/family-*.png` / `sprites/{panther,bear,snake,gibbon}.png` (beast sheets land only after the owner-provided purchase arrives; until then those imports are absent).
+- `ctx.drawImage` call sites exist only in `Renderer.renderPlayer`, `Renderer.renderNpcs`, and (once Tier 1 lands) the beast branch of `Renderer.renderEnemies` / `renderPanther|renderBear|renderSnake|renderGibbon`.
+- `Renderer.renderHuts`, `Renderer.renderArrows`, `Renderer.renderLevel`, `Renderer.renderCorruptedGrowth`, and `Renderer.renderLineOfSightIndicator` use only `ctx.fillRect`, `ctx.fill`, `ctx.stroke`, `ctx.beginPath` — never `ctx.drawImage`.
+- Any CC-BY asset import has a matching entry in `docs/ART-CREDITS.md` (title, author, source URL, license, changes).
+**Source:** CLAUDE.md §3 Pillars "Readable at a glance"; §9 Guardrails "Sprite assets are limited to the approved set"; `docs/ART-ASSETS.md` tier statuses
 
 ### 5. No state library; plain TS mutation only
 **Rule:** UI state lives in React; game state lives in plain TS classes mutated in place. No Redux, Zustand, Jotai, MobX, Recoil, or equivalent.
