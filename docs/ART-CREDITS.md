@@ -34,16 +34,32 @@ Steam-page credits screen when it gets built.
   (Antifarea), commissioned by OpenGameArt.org — CC-BY 3.0; recolored and
   recomposed for Jungle X."
 
+### Snake sprite
+
+- **Status: LANDED 2026-06-12** (Time Fantasy Animals 2 contains no snake,
+  so the planned CC-BY fallback is in use).
+- **Title:** "Tiny, Tiny Heroes - Animals"
+- **Author:** Kacper Woźniak (thkaspar)
+- **Source:** https://thkaspar.itch.io/tth-animals
+- **License:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+- **Changes:** greens recolored to olive (Indian rat snake); side row
+  h-flipped for the left facing; frames recomposed into a 3×4 sheet.
+  Shipped as `src/assets/sprites/snake.png`.
+- **Required credit line:** "'Tiny, Tiny Heroes - Animals' by
+  Kacper Woźniak (thkaspar) — https://thkaspar.itch.io/tth-animals —
+  CC BY 4.0; recolored for Jungle X."
+
 ---
 
 ## Paid royalty-free licenses (recorded, attribution optional)
 
-### Beast sprites — panther, bear, gibbon (+ snake if included)
+### Beast sprites — panther, bear, gibbon
 
-- **Status: PENDING — purchase decided 2026-06-11, files not yet received.**
-- **Titles:** "Animals Sprite Pack" ($5) and "Animals Sprite Pack 2" ($6)
+- **Status: LANDED 2026-06-12** (owner purchased on itch.io 2026-06-11).
+- **Titles:** "Animals Sprite Pack" ($5; bear from `animals5.png`) and
+  "Animals Sprite Pack 2" ($6; `panther.png`, `gorilla.png` → gibbon)
 - **Author:** Jason Perry (finalbossblues), timefantasy.net
-- **Sources (buy on itch.io, not the Steam RPG-Maker DLC):**
+- **Sources (bought on itch.io, not the Steam RPG-Maker DLC):**
   - https://finalbossblues.itch.io/animals-sprite-pack
   - https://finalbossblues.itch.io/animals-2
 - **License:** Time Fantasy royalty-free terms (per the creator's published
@@ -51,22 +67,15 @@ Steam-page credits screen when it gets built.
   any engine; no credit required ("please don't attribute my art to someone
   else"); NO standalone redistribution of the raw assets — shipping inside
   the game build is the intended use. One purchase covers the team on the
-  same project. **Confirm the license text that ships in each zip after
-  purchase and update this entry.**
-- **Planned changes:** tiger black-recolored → panther; monkey recolored →
-  Hoolock gibbon (black, pale brow); bear re-toned to sloth-bear dark.
+  same project. **Zip check 2026-06-12:** neither zip ships a formal
+  license file (READMEs are thank-you notes only), so the operative terms
+  are the creator's published statements above.
+- **Changes:** no recolors (native palette kept for set coherence); frames
+  recomposed into 3-column × 4-direction-row sheets (down/right/up/left)
+  with tight union-bbox cells. Shipped as `src/assets/sprites/panther.png`,
+  `bear.png`, `gibbon.png`.
 - **Courtesy credit line (optional):** "Animal sprites: Time Fantasy by
   Jason Perry (finalbossblues), timefantasy.net."
-
-### Snake fallback (only if Animals Sprite Pack 2 has no snake)
-
-- **Title:** "Tiny, Tiny Heroes - Animals"
-- **Author:** Kacper Woźniak (thkaspar)
-- **Source:** https://thkaspar.itch.io/tth-animals
-- **License:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-- **Required credit line if used:** "'Tiny, Tiny Heroes - Animals' by
-  Kacper Woźniak (thkaspar) — https://thkaspar.itch.io/tth-animals —
-  CC BY 4.0; recolored for Jungle X."
 
 ---
 

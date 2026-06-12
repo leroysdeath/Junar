@@ -15,7 +15,7 @@ See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Sprite a
 
 - One render surface: `src/game/Renderer.ts`, holding a `CanvasRenderingContext2D` constructed from the 928×544 canvas in `App.tsx` (`CANVAS_WIDTH` / `CANVAS_HEIGHT` in `constants.ts`).
 - One method per visible entity type: `renderLevel`, `renderPlayer` (sprite + procedural burst aura), `renderEnemies` (dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake`), `renderNpcs`, `renderHuts`, `renderArrows`, `renderCorruptedGrowth`, `renderLineOfSightIndicator`.
-- Drawing primitives are `fillRect`, `fillStyle`, `save`/`translate`/`rotate`/`scale`/`restore`, `globalAlpha`, `strokeRect` + `setLineDash` (LOS indicator), the occasional `beginPath` / triangle for arrowheads — plus `drawImage` for the approved sprite set: the player (`renderPlayer`, CC0 LTTP sheet), the family (`renderNpcs`, CC-BY 3.0 Antifarea recolors at 16×18), and the four beasts once their Time Fantasy sheets land (`renderPanther`/`renderBear`/`renderSnake`/`renderGibbon`; procedural until the owner's purchase arrives). No sprite/image import may be added for any other entity without owner approval.
+- Drawing primitives are `fillRect`, `fillStyle`, `save`/`translate`/`rotate`/`scale`/`restore`, `globalAlpha`, `strokeRect` + `setLineDash` (LOS indicator), the occasional `beginPath` / triangle for arrowheads — plus `drawImage` for the approved sprite set: the player (`renderPlayer`, CC0 LTTP sheet), the family (`renderNpcs`, CC-BY 3.0 Antifarea recolors at 16×18), and the four beasts (`drawBeast` behind `renderPanther`/`renderBear`/`renderSnake`/`renderGibbon` — Time Fantasy panther/bear/gorilla-gibbon + CC-BY TTH snake, fitted into each type's `ENEMY_AABB_PX`-or-`ENEMY_VISUAL_SCALE_FLOOR` box, facing derived render-side from movement, red-eye cue stamped on top). No sprite/image import may be added for any other entity without owner approval.
 - The canvas is `image-rendering: pixelated` (set on the `<canvas>` in `App.tsx`), and the `Renderer` constructor sets `ctx.imageSmoothingEnabled = false` so the scaled sprite stays crisp. Stay on integer pixel coordinates so the pixelation reads correctly.
 - Every entity must be **identifiable in one frame at 32×32**. Silhouette and color do the work — readability is the constraint, not detail.
 
@@ -25,7 +25,7 @@ See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Sprite a
 |---|---|
 | Tile floor / tree wall | `renderLevel` |
 | Player (CC0 LTTP-style sprite + procedural burst aura) | `renderPlayer` |
-| Panther / gibbon / bear / snake | `renderEnemies`, dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake` |
+| Panther / gibbon / bear / snake (sprites + procedural red-eye overlay) | `renderEnemies`, dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake` (all via `drawBeast`) |
 | Family wife/son/daughter sprites at `N` tiles (translucent idle frames, cycled by index; behavior unwired) | `renderNpcs` |
 | Huts (`H` tiles) | `renderHuts` |
 | Arrows | `renderArrows` |

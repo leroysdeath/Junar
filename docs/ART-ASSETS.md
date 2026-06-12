@@ -73,22 +73,33 @@ tiers toward "done" as decisions and files land.
 
 ---
 
-## Tier 1 — Beasts (GREENLIT 2026-06-11; sourced, awaiting owner purchase)
+## Tier 1 — Beasts (GREENLIT 2026-06-11; LANDED 2026-06-12)
 
-**Status:** greenlit by the owner 2026-06-11. Sourcing decided after a
-license/provenance-verified sweep of OGA, itch.io, and paid packs: **Time
-Fantasy "Animals Sprite Pack" ($5) + "Animals Sprite Pack 2" ($6) by Jason
-Perry (finalbossblues)**, bought on itch.io (NOT the Steam RPG-Maker DLC,
-which is engine-locked) — bear from pack 1; tiger black-recolored → panther
-and monkey → gibbon from pack 2; snake from pack 2 if present, else the
-free Tiny Tiny Heroes snake (CC-BY 4.0, thkaspar.itch.io/tth-animals — a
-16 px sliver on screen, the least visible cross-artist seam). Both TF packs:
-4-dir walks, 16×16 SNES density, "No generative AI was used" tags,
-royalty-free commercial license (no standalone redistribution; in-game
-shipping is the intended use). **Integration is blocked until the owner
-provides the purchased zips**; the procedural beast bodies render meanwhile.
-No free pack covers a feline panther or a 4-dir primate — verified across
-an 18-agent research sweep, 2026-06-11.
+**Status:** greenlit 2026-06-11 (sourcing decided after a license/
+provenance-verified sweep of OGA, itch.io, and paid packs — no free pack
+covers a feline panther or a 4-dir primate); owner purchased **Time Fantasy
+"Animals Sprite Pack" ($5) + "Animals Sprite Pack 2" ($6) by Jason Perry
+(finalbossblues)** on itch.io (NOT the Steam RPG-Maker DLC, which is
+engine-locked) and the sheets landed 2026-06-12. Actual sourcing, simpler
+than planned: pack 2 ships a ready-made `panther.png` (no tiger recolor
+needed) and `gorilla.png` is the gibbon (dark, tailless, long-armed — the
+closest Hoolock silhouette); the dark adult bear comes from pack 1's
+`animals5.png`; all three keep the artist's native palette for set
+coherence. Pack 2 has **no snake**, so the snake is the planned fallback:
+**Tiny Tiny Heroes - Animals** (CC-BY 4.0, thkaspar.itch.io/tth-animals),
+recolored green→olive for the Indian-rat-snake read — a 16 px sliver on
+screen, the least visible cross-artist seam. Sheets are recomposed to
+3 walk cols × 4 dir rows (down/right/up/left, the player-sheet convention)
+with tight union-bbox cells, named to the Keys in `src/assets/sprites/`.
+`Renderer.drawBeast` fits each frame into its `max(AABB, readability-floor)`
+box (so the visible body now matches the kill box), faces movement
+direction, animates a walk1/stand/walk2/stand gait, and stamps the red-eye
+cue (INFECTED_EYE_RED) over the sprite's own eye pixels per facing —
+up-facing shows the back of the head, no eyes. Per-asset checklist
+completed for all four (game-scale floor previews + live dev-server run +
+bear-vs-1-tile-corridor mock). Licenses recorded in `docs/ART-CREDITS.md`
+(note: the TF zips ship no license file; terms rest on the creator's
+published statements).
 
 Replaces the procedural bodies of `renderPanther` / `renderBear` /
 `renderSnake` / `renderGibbon`. All four should come from one pack (or one
