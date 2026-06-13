@@ -144,8 +144,17 @@ export class Enemy {
     // Step 2 scope.
     const currentTime = Date.now();
 
-    // Update pathfinding target every 200ms.
-    if (currentTime - this.lastPathfindTime > 200) {
+    // Update pathfinding target every 200ms — except for cross-room hunters,
+    // which re-poll every frame. Game.updateHunters feeds a 'hunting' enemy a
+    // fresh door target each frame; throttling to 200ms left it steering toward
+    // a stale door (up to ~79 px of misdirected travel for a panther) and
+    // wavering at openings, a big part of why pursuit felt laggy (owner
+    // decision 2026-06-13: hunters should run the player down). The ray-sample
+    // to one in-room door cell is cheap enough to run every frame.
+    const repollNow =
+      this.huntState === 'hunting' ||
+      currentTime - this.lastPathfindTime > 200;
+    if (repollNow) {
       this.targetPosition = this.findPathToPlayer(playerPosition, level);
       this.lastPathfindTime = currentTime;
     }
@@ -245,6 +254,19 @@ export class Enemy {
       if (other === this) continue;
       if (other.entering) continue;
       if (this.type === 'snake' && other.type === 'snake') continue;
+      // Big cats and bears brush past the 4 px snake sliver instead of stalling
+      // behind a writhing pile (owner decision 2026-06-13): a snake never blocks
+      // a panther's or bear's movement, so a fast chaser can't get plugged in a
+      // corridor by pursuing snakes converging on the same target. Directional —
+      // a snake mover still respects the larger body (it won't phase through a
+      // bear). The player-kill test is separate (Game.enemyTouchesPlayer), so
+      // this only affects enemy-vs-enemy routing, never contact-death.
+      if (
+        other.type === 'snake' &&
+        (this.type === 'panther' || this.type === 'bear')
+      ) {
+        continue;
+      }
       const o = other.getAABB();
       if (
         box.x < o.x + o.width &&
