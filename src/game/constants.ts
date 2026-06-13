@@ -116,9 +116,11 @@ export const ARRIVAL_GRACE_REARM_MS = 2000;
 // Enemy-side: a cross-room hunter that crosses into the player's CURRENT room
 // materializes at the entry opening mid-tick (parked-room enemies are never
 // drawn), so without this it could kill on the very tick it first becomes
-// visible. While the window runs the hunter cannot contact-kill and the
-// renderer draws a materialize flash over it (Renderer.renderEnemies).
-export const HUNTER_ARRIVAL_GRACE_MS = 350;
+// visible. While the window runs the hunter cannot contact-kill (checkCollisions
+// skips it); it draws as its normal sprite — the white materialize flash was
+// removed 2026-06-13. Lowered 350 → 200 ms on 2026-06-13 (owner) so arriving
+// hunters threaten sooner.
+export const HUNTER_ARRIVAL_GRACE_MS = 200;
 
 // Random pause between triplets, rolled uniformly in [min, max] each time a
 // triplet's third (test) wave finishes emitting.
@@ -215,8 +217,10 @@ export const STATIC_AGGRO_DELAY_MS = 1000;
 // pursuing across rooms as long as its room is within this many rooms of the
 // player's; once the player's room is MORE than HUNT_RANGE away the hunter
 // de-aggros and settles back to a static (§5.12). Hunting is indefinite within
-// range — hiding doesn't work.
-export const HUNT_RANGE = 2;
+// range — hiding doesn't work. Bumped 2 → 3 on 2026-06-13 so fast hunters
+// (panther/bear) don't abandon the chase right as they're closing the gap —
+// the owner wants pursuit to run the player down, not give up early.
+export const HUNT_RANGE = 3;
 
 // --- Static density (Steps 5+6 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.9 (static semantics) and §5.10 (the
