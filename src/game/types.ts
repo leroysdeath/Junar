@@ -36,7 +36,11 @@ export interface GameCallbacks {
   // Stamina + burst signals. isLow is bundled with value to avoid a
   // render race between the bar value and its low-state styling.
   onStaminaChange?: (value: number, isLow: boolean) => void;
-  onBurstChange?: (active: boolean, multiplier: number, endsAtMs: number) => void;
+  onBurstChange?: (
+    active: boolean,
+    multiplier: number,
+    endsAtMs: number,
+  ) => void;
   soundEnabled: boolean;
 }
 

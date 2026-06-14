@@ -12,7 +12,7 @@ export class InputManager {
     up: false,
     down: false,
     left: false,
-    right: false
+    right: false,
   };
   // Edge-triggered burst flag. Set on Space keydown (de-duped against the
   // existing keys Set so browser auto-repeat doesn't refire) or via mobile
@@ -62,7 +62,10 @@ export class InputManager {
     // Also clear virtual input — a phone backgrounding the tab while the
     // joystick is held would otherwise leave a direction stuck on.
     const hadVirtual =
-      this.virtual.up || this.virtual.down || this.virtual.left || this.virtual.right;
+      this.virtual.up ||
+      this.virtual.down ||
+      this.virtual.left ||
+      this.virtual.right;
     if (this.keys.size === 0 && !hadVirtual) return;
     const cleared = Array.from(this.keys);
     this.keys.clear();
@@ -85,12 +88,17 @@ export class InputManager {
   }
 
   private updateInputState() {
-    this.inputState.up = this.virtual.up || this.keys.has('KeyW') || this.keys.has('ArrowUp');
-    this.inputState.down = this.virtual.down || this.keys.has('KeyS') || this.keys.has('ArrowDown');
+    this.inputState.up =
+      this.virtual.up || this.keys.has('KeyW') || this.keys.has('ArrowUp');
+    this.inputState.down =
+      this.virtual.down || this.keys.has('KeyS') || this.keys.has('ArrowDown');
     // KeyA is intentionally NOT mapped to left — it's the dash key.
     // WSAD-style players use ArrowLeft for left movement.
     this.inputState.left = this.virtual.left || this.keys.has('ArrowLeft');
-    this.inputState.right = this.virtual.right || this.keys.has('KeyD') || this.keys.has('ArrowRight');
+    this.inputState.right =
+      this.virtual.right ||
+      this.keys.has('KeyD') ||
+      this.keys.has('ArrowRight');
   }
 
   getInput(): InputState {

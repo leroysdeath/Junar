@@ -110,7 +110,10 @@ export class SoundManager {
   private buffers = new Map<string, AudioBuffer[]>();
   private nextVariant = new Map<string, number>();
   private scene: SoundScene = 'silent';
-  private activeLoops = new Map<LoopKey, { source: AudioBufferSourceNode; gain: GainNode }>();
+  private activeLoops = new Map<
+    LoopKey,
+    { source: AudioBufferSourceNode; gain: GainNode }
+  >();
   private gestureUnlock: (() => void) | null = null;
 
   constructor(enabled: boolean = true) {
@@ -126,7 +129,8 @@ export class SoundManager {
     if (!this.ctx) {
       const AudioCtor =
         window.AudioContext ||
-        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        (window as Window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
       if (!AudioCtor) return;
       this.ctx = new AudioCtor();
       void this.decodeFiles(this.ctx);
@@ -296,7 +300,9 @@ export class SoundManager {
       Object.entries(AUDIO_FILE_URLS).map(async ([path, url]) => {
         try {
           const response = await fetch(url);
-          const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+          const buffer = await ctx.decodeAudioData(
+            await response.arrayBuffer(),
+          );
           if (this.ctx !== ctx) return; // disposed mid-decode
           const key = keyFromPath(path);
           const variants = this.buffers.get(key) ?? [];
@@ -321,7 +327,10 @@ export class SoundManager {
     oscillator.frequency.setValueAtTime(spec.frequency, ctx.currentTime);
 
     gainNode.gain.setValueAtTime(SYNTH_GAIN, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + spec.duration);
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.01,
+      ctx.currentTime + spec.duration,
+    );
 
     oscillator.start(ctx.currentTime);
     oscillator.stop(ctx.currentTime + spec.duration);

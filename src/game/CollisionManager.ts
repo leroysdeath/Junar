@@ -10,7 +10,10 @@ export class CollisionManager {
     );
   }
 
-  checkPointInRectangle(point: { x: number; y: number }, rect: Rectangle): boolean {
+  checkPointInRectangle(
+    point: { x: number; y: number },
+    rect: Rectangle,
+  ): boolean {
     return (
       point.x >= rect.x &&
       point.x <= rect.x + rect.width &&
