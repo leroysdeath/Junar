@@ -1,0 +1,12 @@
+# Build output
+dist
+dist-ssr
+
+# Generated / vendored
+node_modules
+package-lock.json
+
+# Hand-maintained Markdown (CLAUDE.md, README, docs/, skills) — Prettier
+# covers the JS/TS side only; prose tables and manual wrapping are authored,
+# not auto-formatted.
+*.md
