@@ -26,7 +26,11 @@ export interface SpawnRequest {
 }
 
 interface SchedulerCallbacks {
-  onWaveStart?: (waveIndex: number, totalWaves: number, beatRole: BeatRole) => void;
+  onWaveStart?: (
+    waveIndex: number,
+    totalWaves: number,
+    beatRole: BeatRole,
+  ) => void;
   onWaveComplete?: (waveIndex: number) => void;
   onLullStart?: (durationMs: number) => void;
 }
@@ -55,7 +59,11 @@ function templateEnemyCount(template: SpawnTemplate): number {
 // row (so the AABB top-left sits exactly at that offset along the band's
 // orthogonal axis); `rowIndex` stacks rows one tile deep opposite the entry
 // direction.
-function slotPosition(band: BandSpec, slotOffset: number, rowIndex: number): Vector2 {
+function slotPosition(
+  band: BandSpec,
+  slotOffset: number,
+  rowIndex: number,
+): Vector2 {
   const horizontal = band.entryDirection.y !== 0;
   const slot: Vector2 = horizontal
     ? { x: band.rect.x + slotOffset, y: band.rect.y }
@@ -94,7 +102,8 @@ class BandDripper {
   // boss arena) doesn't make blocked bands fire all at once on resume.
   shiftTime(deltaMs: number): void {
     for (let i = 0; i < this.bandReadyAtMs.length; i++) {
-      if (Number.isFinite(this.bandReadyAtMs[i])) this.bandReadyAtMs[i] += deltaMs;
+      if (Number.isFinite(this.bandReadyAtMs[i]))
+        this.bandReadyAtMs[i] += deltaMs;
     }
   }
 
@@ -131,7 +140,8 @@ class BandDripper {
   pendingEnemyCount(): number {
     let n = 0;
     for (const g of this.pending) {
-      for (let r = g.nextRowToSpawn; r < g.rows.length; r++) n += g.rows[r].length;
+      for (let r = g.nextRowToSpawn; r < g.rows.length; r++)
+        n += g.rows[r].length;
     }
     return n;
   }
@@ -168,7 +178,8 @@ class BandDripper {
       // Block the band until this row has cleared one tile. An empty row
       // (no enemies) leaves the band ready immediately.
       if (Number.isFinite(rowMinSpeed)) {
-        this.bandReadyAtMs[group.bandIndex] = nowMs + (TILE_SIZE / rowMinSpeed) * 1000;
+        this.bandReadyAtMs[group.bandIndex] =
+          nowMs + (TILE_SIZE / rowMinSpeed) * 1000;
       }
 
       if (group.nextRowToSpawn >= group.rows.length) {
@@ -326,7 +337,10 @@ export class WaveScheduler {
   // Draw a template + a ready band. If no band is ready (all blocked by a
   // prior group's drip), defer the draw — caller retries next tick without
   // advancing the spawn clock.
-  private tryDrawGroup(nowMs: number, wave: WaveTemplate): SpawnTemplate | null {
+  private tryDrawGroup(
+    nowMs: number,
+    wave: WaveTemplate,
+  ): SpawnTemplate | null {
     const isFirstSpawn = this.spawnedInWave === 0;
     const pool =
       isFirstSpawn && wave.firstSpawnPool
@@ -363,9 +377,9 @@ export class WaveScheduler {
 // listeners or timers, so it needs no disposal.
 
 export interface GlobalSchedulerConfig {
-  earlyPool: SpawnTemplate[];  // waves 1 .. WAVE_POOL_MID_UNLOCK-1
-  midPool: SpawnTemplate[];    // waves WAVE_POOL_MID_UNLOCK .. WAVE_POOL_LATE_UNLOCK-1
-  latePool: SpawnTemplate[];   // waves WAVE_POOL_LATE_UNLOCK+
+  earlyPool: SpawnTemplate[]; // waves 1 .. WAVE_POOL_MID_UNLOCK-1
+  midPool: SpawnTemplate[]; // waves WAVE_POOL_MID_UNLOCK .. WAVE_POOL_LATE_UNLOCK-1
+  latePool: SpawnTemplate[]; // waves WAVE_POOL_LATE_UNLOCK+
 }
 
 export interface GlobalSchedulerCallbacks {
@@ -397,15 +411,15 @@ const AUTHORED_INTERVAL_MS: number[][] = [
 // The L3 row the formula extends from, for triplets beyond the authored set.
 const L3_ENEMYCOUNT = [16, 22, 25];
 const L3_INTERVAL_MS = [1700, 1400, 1300];
-const TRIPLET_ENEMYCOUNT_GROWTH = 1;   // +1 enemy per triplet beyond authored
-const TRIPLET_INTERVAL_DECAY_MS = 50;  // −50 ms interval per triplet beyond authored
+const TRIPLET_ENEMYCOUNT_GROWTH = 1; // +1 enemy per triplet beyond authored
+const TRIPLET_INTERVAL_DECAY_MS = 50; // −50 ms interval per triplet beyond authored
 const TRIPLET_INTERVAL_FLOOR_MS = 800; // interval never drops below this
 
 interface WaveParams {
   enemyCount: number;
   spawnIntervalMs: number;
   triplet: number; // 1-indexed
-  role: number;    // 0=setup, 1=add, 2=test
+  role: number; // 0=setup, 1=add, 2=test
   beatRole: BeatRole;
 }
 
@@ -429,7 +443,13 @@ function waveParams(waveNum: number): WaveParams {
       L3_INTERVAL_MS[role] - beyond * TRIPLET_INTERVAL_DECAY_MS,
     );
   }
-  return { enemyCount, spawnIntervalMs, triplet, role, beatRole: BEAT_BY_ROLE[role] };
+  return {
+    enemyCount,
+    spawnIntervalMs,
+    triplet,
+    role,
+    beatRole: BEAT_BY_ROLE[role],
+  };
 }
 
 export class GlobalWaveScheduler {
@@ -453,7 +473,10 @@ export class GlobalWaveScheduler {
   private paused = false;
   private pausedAtMs = 0;
 
-  constructor(config: GlobalSchedulerConfig, callbacks: GlobalSchedulerCallbacks) {
+  constructor(
+    config: GlobalSchedulerConfig,
+    callbacks: GlobalSchedulerCallbacks,
+  ) {
     this.config = config;
     this.callbacks = callbacks;
   }
@@ -546,7 +569,10 @@ export class GlobalWaveScheduler {
     if (this.phase === 'grace') {
       if (nowMs >= this.phaseDeadlineMs) this.beginWave(1);
     } else if (this.phase === 'spawning') {
-      if (this.spawnedInWave >= this.currentEnemyCount && !this.dripper.hasPending()) {
+      if (
+        this.spawnedInWave >= this.currentEnemyCount &&
+        !this.dripper.hasPending()
+      ) {
         // Wave fully emitted. The triplet's third (test) wave is followed by
         // the long random break; the others by the short inter-wave lull.
         const role = (this.waveNum - 1) % WAVES_PER_TRIPLET;
@@ -607,7 +633,8 @@ export class GlobalWaveScheduler {
     if (this.currentPool.length === 0) return null;
     const ready = this.dripper.readyBands(nowMs);
     if (ready.length === 0) return null;
-    const template = this.currentPool[Math.floor(Math.random() * this.currentPool.length)];
+    const template =
+      this.currentPool[Math.floor(Math.random() * this.currentPool.length)];
     const bandIndex = ready[Math.floor(Math.random() * ready.length)];
     this.dripper.addGroup(bandIndex, template.rows);
     return template;

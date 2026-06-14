@@ -93,9 +93,10 @@ async function exitFullscreen(): Promise<void> {
 
 // screen.orientation.lock/unlock are non-standard and absent from the DOM
 // typings, so reach them through a narrow structural cast rather than `any`.
-function orientationApi():
-  | { lock?: (o: string) => Promise<void>; unlock?: () => void }
-  | null {
+function orientationApi(): {
+  lock?: (o: string) => Promise<void>;
+  unlock?: () => void;
+} | null {
   if (typeof screen === 'undefined' || !screen.orientation) return null;
   return screen.orientation as unknown as {
     lock?: (o: string) => Promise<void>;
@@ -159,14 +160,13 @@ function App() {
   // the 928×544 board into the frame's height; the two axes swap when we've
   // force-rotated the frame 90°. p-4 (1rem each side) is subtracted so the
   // board clears the root padding.
-  const canvasFitStyle =
-    isMobile
-      ? {
-          maxWidth: forceLandscape
-            ? 'min(calc(100vh - 2rem), calc((100vw - 2rem) * 928 / 544))'
-            : 'min(calc(100vw - 2rem), calc((100vh - 2rem) * 928 / 544))',
-        }
-      : undefined;
+  const canvasFitStyle = isMobile
+    ? {
+        maxWidth: forceLandscape
+          ? 'min(calc(100vh - 2rem), calc((100vw - 2rem) * 928 / 544))'
+          : 'min(calc(100vw - 2rem), calc((100vh - 2rem) * 928 / 544))',
+      }
+    : undefined;
 
   const handleMobilePress = useCallback((dir: Direction) => {
     gameRef.current?.setVirtualInput(dir, true);
@@ -210,7 +210,7 @@ function App() {
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
-        soundEnabled
+        soundEnabled,
       });
       gameRef.current.start();
     }
@@ -294,7 +294,10 @@ function App() {
     // Stamina bar fill — red when low, warm gold while bursting, amber
     // otherwise. Width is rounded so the bar visibly steps as the value
     // crosses each percent boundary.
-    const fillPct = Math.max(0, Math.min(100, (stamina.value / STAMINA_MAX) * 100));
+    const fillPct = Math.max(
+      0,
+      Math.min(100, (stamina.value / STAMINA_MAX) * 100),
+    );
     const fillColor = stamina.isLow
       ? 'bg-red-500'
       : burst.active
@@ -305,14 +308,12 @@ function App() {
         <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
           <div className="flex items-center gap-2 text-sm">
             <Target size={16} className="text-amber-400" />
-            <span>Room ({roomCoord.col}, {roomCoord.row})</span>
+            <span>
+              Room ({roomCoord.col}, {roomCoord.row})
+            </span>
           </div>
-          <div className="text-xs text-amber-300 mt-1">
-            Wave: {waveNum}
-          </div>
-          <div className="text-xs text-amber-300">
-            Killed: {kills}
-          </div>
+          <div className="text-xs text-amber-300 mt-1">Wave: {waveNum}</div>
+          <div className="text-xs text-amber-300">Killed: {kills}</div>
         </div>
 
         <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px]">
@@ -357,7 +358,9 @@ function App() {
 
   const renderGameOverContent = () => (
     <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
-      <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">Game Over</h2>
+      <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">
+        Game Over
+      </h2>
       <p className="text-lg text-amber-200 mb-2 drop-shadow">
         You reached room ({roomCoord.col}, {roomCoord.row})
       </p>
@@ -390,9 +393,7 @@ function App() {
       <p className="text-lg text-amber-200 mb-2">
         You have conquered the jungle!
       </p>
-      <p className="text-base text-yellow-300 mb-8">
-        Final Score: {score}
-      </p>
+      <p className="text-base text-yellow-300 mb-8">Final Score: {score}</p>
 
       <div className="space-y-4">
         <button
@@ -454,9 +455,7 @@ function App() {
             on both desktop and mobile. The A/B action buttons sit lower-right
             (MobileControls), so the HUD needs no clearance padding. */}
         {gameState === 'playing' && (
-          <div className="absolute top-4 left-4 right-4">
-            {renderHud()}
-          </div>
+          <div className="absolute top-4 left-4 right-4">{renderHud()}</div>
         )}
 
         {/* "Reached Boss" banner (Step 9). Non-blocking placeholder shown on
@@ -480,12 +479,18 @@ function App() {
 
         {/* Main Menu (overlays canvas on both mobile and desktop) */}
         {gameState === 'menu' && (
-          <div className={`${isMobile ? 'fixed inset-0 z-50' : 'absolute inset-0'} bg-black/90 flex items-center justify-center`}>
+          <div
+            className={`${isMobile ? 'fixed inset-0 z-50' : 'absolute inset-0'} bg-black/90 flex items-center justify-center`}
+          >
             <div className="text-center text-white max-w-md mx-auto px-6">
-              <h1 className={`${isMobile ? 'text-4xl' : 'text-6xl'} font-bold text-amber-400 mb-2 font-serif`}>
+              <h1
+                className={`${isMobile ? 'text-4xl' : 'text-6xl'} font-bold text-amber-400 mb-2 font-serif`}
+              >
                 Jungle Archer
               </h1>
-              <p className={`text-lg text-amber-200 ${isMobile ? 'mb-4' : 'mb-8'} font-mono`}>
+              <p
+                className={`text-lg text-amber-200 ${isMobile ? 'mb-4' : 'mb-8'} font-mono`}
+              >
                 Survive the Ancient Forest
               </p>
 
@@ -508,28 +513,52 @@ function App() {
 
               {showInstructions && (
                 <div className="mt-6 bg-black/80 p-6 rounded-lg border border-amber-500 text-left">
-                  <h3 className="text-amber-400 font-bold mb-3 text-center">Instructions</h3>
+                  <h3 className="text-amber-400 font-bold mb-3 text-center">
+                    Instructions
+                  </h3>
                   <ul className="text-sm space-y-2 text-amber-100">
                     <li>
                       <strong>Movement:</strong>{' '}
-                      {isMobile ? 'Touch the left half of the screen to move' : 'Arrow Keys (or W/S/D — A is dash)'}
+                      {isMobile
+                        ? 'Touch the left half of the screen to move'
+                        : 'Arrow Keys (or W/S/D — A is dash)'}
                     </li>
-                    <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
+                    <li>
+                      <strong>Combat:</strong> Arrows fire when enemies are in
+                      sight
+                    </li>
                     <li>
                       <strong>Burst:</strong>{' '}
-                      {isMobile ? 'Tap B for 5s rapid-fire' : 'Press Space for 5s rapid-fire'}
-                      {' '}(costs stamina; spam loses bonus)
+                      {isMobile
+                        ? 'Tap B for 5s rapid-fire'
+                        : 'Press Space for 5s rapid-fire'}{' '}
+                      (costs stamina; spam loses bonus)
                     </li>
                     <li>
                       <strong>Dash:</strong>{' '}
-                      {isMobile ? 'Tap A to blink backward' : 'Shift or A to blink backward'}
-                      {' '}(opposite of facing, walls block)
+                      {isMobile
+                        ? 'Tap A to blink backward'
+                        : 'Shift or A to blink backward'}{' '}
+                      (opposite of facing, walls block)
                     </li>
-                    <li><strong>Stamina:</strong> One bar for the whole run — no regen</li>
-                    <li><strong>Strategy:</strong> Position for clear line of sight</li>
-                    <li><strong>Warning:</strong> Avoid all enemy contact!</li>
-                    <li><strong>Objective:</strong> Travel room to room toward the boss</li>
-                    <li><strong>Victory:</strong> Defeat the Ancient Tree Guardian</li>
+                    <li>
+                      <strong>Stamina:</strong> One bar for the whole run — no
+                      regen
+                    </li>
+                    <li>
+                      <strong>Strategy:</strong> Position for clear line of
+                      sight
+                    </li>
+                    <li>
+                      <strong>Warning:</strong> Avoid all enemy contact!
+                    </li>
+                    <li>
+                      <strong>Objective:</strong> Travel room to room toward the
+                      boss
+                    </li>
+                    <li>
+                      <strong>Victory:</strong> Defeat the Ancient Tree Guardian
+                    </li>
                   </ul>
                 </div>
               )}

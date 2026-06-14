@@ -73,13 +73,19 @@ export class CrashLogger {
 
   private readonly handleError = (e: ErrorEvent) => {
     if (this.crash) return;
-    const err = e.error instanceof Error ? e.error : new Error(e.message || 'window error');
+    const err =
+      e.error instanceof Error
+        ? e.error
+        : new Error(e.message || 'window error');
     this.captureCrash('global', err);
   };
 
   private readonly handleRejection = (e: PromiseRejectionEvent) => {
     if (this.crash) return;
-    const err = e.reason instanceof Error ? e.reason : new Error(String(e.reason ?? 'unhandled rejection'));
+    const err =
+      e.reason instanceof Error
+        ? e.reason
+        : new Error(String(e.reason ?? 'unhandled rejection'));
     this.captureCrash('unhandledRejection', err);
   };
 
@@ -95,7 +101,8 @@ export class CrashLogger {
     this.snapshotProvider = opts.snapshotProvider;
     this.frameProvider = opts.frameProvider;
     this.onCrash = opts.onCrash;
-    this.reportEndpoint = opts.reportEndpoint === undefined ? REPORT_ENDPOINT : opts.reportEndpoint;
+    this.reportEndpoint =
+      opts.reportEndpoint === undefined ? REPORT_ENDPOINT : opts.reportEndpoint;
     window.addEventListener('error', this.handleError);
     window.addEventListener('unhandledrejection', this.handleRejection);
     window.addEventListener('keydown', this.handleReloadKey);
@@ -208,7 +215,14 @@ export class CrashLogger {
 
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 13px monospace';
-    y = this.wrapText(ctx, c.error, OVERLAY_PADDING, y, CANVAS_WIDTH - OVERLAY_PADDING * 2, 16);
+    y = this.wrapText(
+      ctx,
+      c.error,
+      OVERLAY_PADDING,
+      y,
+      CANVAS_WIDTH - OVERLAY_PADDING * 2,
+      16,
+    );
     y += 4;
 
     ctx.fillStyle = '#FF8B85';

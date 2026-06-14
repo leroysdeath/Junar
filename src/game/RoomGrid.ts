@@ -100,7 +100,12 @@ function edgeClosed(def: RoomDef, edge: Edge): boolean {
 }
 
 // Set-equality of the two edges' opening ranges (used only between connectors).
-function edgeOpeningsEqual(a: RoomDef, ae: Edge, b: RoomDef, be: Edge): boolean {
+function edgeOpeningsEqual(
+  a: RoomDef,
+  ae: Edge,
+  b: RoomDef,
+  be: Edge,
+): boolean {
   const key = (def: RoomDef, e: Edge) =>
     openingsOnEdge(def, e)
       .map((o) => `${o.rangeStart}-${o.rangeEnd}`)
@@ -238,8 +243,16 @@ function placeAnchors(rng: () => number): RoomGridCoord[] {
   // Deterministic last resort: a sparse interior lattice. Guarantees a result
   // so callers never have to handle a null placement.
   const out: RoomGridCoord[] = [];
-  for (let row = 1; row < ROOM_GRID_ROWS - 1 && out.length < ANCHOR_COUNT; row += 2) {
-    for (let col = 1; col < ROOM_GRID_COLS - 1 && out.length < ANCHOR_COUNT; col += 3) {
+  for (
+    let row = 1;
+    row < ROOM_GRID_ROWS - 1 && out.length < ANCHOR_COUNT;
+    row += 2
+  ) {
+    for (
+      let col = 1;
+      col < ROOM_GRID_COLS - 1 && out.length < ANCHOR_COUNT;
+      col += 3
+    ) {
       out.push({ col, row });
     }
   }
@@ -264,7 +277,8 @@ function anchorAgreement(
   for (const [edge, dc, dr] of DIRS) {
     const nc = col + dc;
     const nr = row + dr;
-    if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS) continue;
+    if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS)
+      continue;
     const nb = cells[nr][nc];
     if (!nb || nb.kind !== 'anchor') continue;
     const anchorOpensHere = openingsOnEdge(nb, oppositeEdge(edge)).length > 0;
@@ -298,7 +312,11 @@ function satisfiesNeighbors(
 ): boolean {
   if (!satisfiesBorder(def, col, row)) return false;
   const left = col > 0 ? cells[row][col - 1] : null;
-  if (left && left.kind === 'connector' && !edgeOpeningsEqual(def, 'W', left, 'E')) {
+  if (
+    left &&
+    left.kind === 'connector' &&
+    !edgeOpeningsEqual(def, 'W', left, 'E')
+  ) {
     return false;
   }
   const up = row > 0 ? cells[row - 1][col] : null;
@@ -316,7 +334,9 @@ function pickConnector(
 ): RoomDef {
   // Tier 1: fully matched (border-closed + connector-neighbor opening-set
   // equality).
-  let pool = CONNECTOR_DEFS.filter((d) => satisfiesNeighbors(d, cells, col, row));
+  let pool = CONNECTOR_DEFS.filter((d) =>
+    satisfiesNeighbors(d, cells, col, row),
+  );
   // Tier 2: border-only fallback when no Tier-1 template fits. This fires for
   // ~10% of connector placements, not rarely: the multi-opening "double" hubs
   // have a single mate and the two "fork" templates have none under the
@@ -330,7 +350,10 @@ function pickConnector(
   }
   // Among the pool, prefer the choices that best connect to adjacent anchors.
   // Score each candidate exactly once.
-  const scored = pool.map((d) => ({ d, s: anchorAgreement(d, cells, col, row) }));
+  const scored = pool.map((d) => ({
+    d,
+    s: anchorAgreement(d, cells, col, row),
+  }));
   const best = scored.reduce((m, x) => Math.max(m, x.s), -Infinity);
   const top = scored.filter((x) => x.s === best);
   return top[randInt(rng, top.length)].d;
@@ -367,7 +390,10 @@ export function findPath(
       const path: RoomGridCoord[] = [];
       let k: number | undefined = cellKey(cur.col, cur.row);
       while (k !== undefined) {
-        path.push({ col: k % ROOM_GRID_COLS, row: Math.floor(k / ROOM_GRID_COLS) });
+        path.push({
+          col: k % ROOM_GRID_COLS,
+          row: Math.floor(k / ROOM_GRID_COLS),
+        });
         k = parent.get(k);
       }
       return path.reverse();
@@ -376,7 +402,8 @@ export function findPath(
     for (const [edge, dc, dr] of DIRS) {
       const nc = cur.col + dc;
       const nr = cur.row + dr;
-      if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS) continue;
+      if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS)
+        continue;
       const nk = cellKey(nc, nr);
       if (seen.has(nk)) continue;
       if (!roomsConnect(def, edge, cells[nr][nc])) continue;
@@ -407,7 +434,8 @@ export function generateRunMap(seed?: number): RunMap {
 
     const cells: (RoomDef | null)[][] = Array.from(
       { length: ROOM_GRID_ROWS },
-      () => Array.from({ length: ROOM_GRID_COLS }, () => null as RoomDef | null),
+      () =>
+        Array.from({ length: ROOM_GRID_COLS }, () => null as RoomDef | null),
     );
     anchorCoords.forEach((coord, i) => {
       cells[coord.row][coord.col] = ANCHOR_DEFS[i];
@@ -446,7 +474,9 @@ export function roomAt(map: RunMap, coord: RoomGridCoord): RoomDef {
 // to '*' centres when `markPath` is set.
 // ───────────────────────────────────────────────────────────────────────────
 export function renderRunMapAscii(map: RunMap, markPath = true): string {
-  const path = markPath ? findPath(map.cells, map.startCoord, map.bossCoord) : null;
+  const path = markPath
+    ? findPath(map.cells, map.startCoord, map.bossCoord)
+    : null;
   const onPath = new Set((path ?? []).map((c) => cellKey(c.col, c.row)));
 
   const anchorGlyph = (def: RoomDef): string => {
@@ -468,7 +498,8 @@ export function renderRunMapAscii(map: RunMap, markPath = true): string {
       const w = edgeClosed(def, 'W') ? ' ' : '-';
       const e = edgeClosed(def, 'E') ? ' ' : '-';
       let centre = def.kind === 'anchor' ? anchorGlyph(def) : '.';
-      if (onPath.has(cellKey(col, row)) && def.kind === 'connector') centre = '*';
+      if (onPath.has(cellKey(col, row)) && def.kind === 'connector')
+        centre = '*';
       r0.push(' ', n, ' ');
       r1.push(w, centre, e);
       r2.push(' ', s, ' ');

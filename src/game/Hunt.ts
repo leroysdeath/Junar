@@ -92,7 +92,10 @@ export class Hunt {
     for (const enemy of enemies) {
       switch (enemy.getHuntState()) {
         case 'activating':
-          if (currentTime - enemy.getActivatingSince() >= STATIC_AGGRO_DELAY_MS) {
+          if (
+            currentTime - enemy.getActivatingSince() >=
+            STATIC_AGGRO_DELAY_MS
+          ) {
             // Wake complete. If the player is still in this enemy's room it
             // pursues in-room ('active'); if the player already left during the
             // 1 s delay it commits straight to the cross-room hunt (mirroring
@@ -102,7 +105,9 @@ export class Hunt {
             // happened to return. (Resolves the §5.12 "wake while player
             // absent" race the roadmap table leaves unspecified.)
             enemy.setHuntState(
-              sameRoom(enemy.getCurrentRoom(), playerRoom) ? 'active' : 'hunting',
+              sameRoom(enemy.getCurrentRoom(), playerRoom)
+                ? 'active'
+                : 'hunting',
             );
           }
           break;

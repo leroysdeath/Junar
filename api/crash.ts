@@ -54,7 +54,8 @@ const json = (status: number, payload: unknown) =>
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method === 'OPTIONS') return json(204, null);
-  if (request.method !== 'POST') return json(405, { error: 'method not allowed' });
+  if (request.method !== 'POST')
+    return json(405, { error: 'method not allowed' });
 
   const token = process.env.GITHUB_TOKEN;
   if (!token) return json(500, { error: 'GITHUB_TOKEN not configured' });
@@ -64,7 +65,8 @@ export default async function handler(request: Request): Promise<Response> {
   let crash: IncomingCrash;
   try {
     const raw = await request.text();
-    if (raw.length > MAX_BODY_BYTES) return json(413, { error: 'payload too large' });
+    if (raw.length > MAX_BODY_BYTES)
+      return json(413, { error: 'payload too large' });
     crash = JSON.parse(raw) as IncomingCrash;
   } catch {
     return json(400, { error: 'invalid json' });
@@ -106,7 +108,11 @@ export default async function handler(request: Request): Promise<Response> {
   });
   if (!res.ok) {
     const text = await res.text();
-    return json(502, { error: 'github create failed', status: res.status, detail: text.slice(0, 500) });
+    return json(502, {
+      error: 'github create failed',
+      status: res.status,
+      detail: text.slice(0, 500),
+    });
   }
   const created = (await res.json()) as { html_url: string; number: number };
   return json(200, {
@@ -138,8 +144,12 @@ async function findOpenIssueByPrefix(
   repo: string,
   prefix: string,
 ): Promise<{ number: number; html_url: string } | null> {
-  const q = encodeURIComponent(`repo:${owner}/${repo} is:issue is:open in:title "${prefix}"`);
-  const res = await gh(`https://api.github.com/search/issues?q=${q}&per_page=1`);
+  const q = encodeURIComponent(
+    `repo:${owner}/${repo} is:issue is:open in:title "${prefix}"`,
+  );
+  const res = await gh(
+    `https://api.github.com/search/issues?q=${q}&per_page=1`,
+  );
   if (!res.ok) return null;
   const data = (await res.json()) as {
     items?: Array<{ number: number; html_url: string; title: string }>;
@@ -184,7 +194,10 @@ function renderIssueBody(crash: IncomingCrash, fingerprint: string): string {
     '```',
     truncate(
       events
-        .map((e) => `+${e.t}ms [${e.cat}] ${e.msg}${e.data ? ' ' + JSON.stringify(e.data) : ''}`)
+        .map(
+          (e) =>
+            `+${e.t}ms [${e.cat}] ${e.msg}${e.data ? ' ' + JSON.stringify(e.data) : ''}`,
+        )
         .join('\n'),
       6000,
     ),
@@ -211,7 +224,10 @@ function renderRecurrenceComment(crash: IncomingCrash): string {
     '```',
     truncate(
       events
-        .map((e) => `+${e.t}ms [${e.cat}] ${e.msg}${e.data ? ' ' + JSON.stringify(e.data) : ''}`)
+        .map(
+          (e) =>
+            `+${e.t}ms [${e.cat}] ${e.msg}${e.data ? ' ' + JSON.stringify(e.data) : ''}`,
+        )
         .join('\n'),
       4000,
     ),

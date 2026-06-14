@@ -1,6 +1,11 @@
 import { Vector2, InputState, Facing } from './types';
 import { Level } from './Level';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, PLAYER_SPEED } from './constants';
+import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  TILE_SIZE,
+  PLAYER_SPEED,
+} from './constants';
 
 export interface WallRejection {
   axis: 'x' | 'y';
@@ -18,7 +23,12 @@ export class Player {
   // 'down' so a freshly-spawned player who hasn't pressed anything still
   // has a valid render variant and dash direction.
   private facing: Facing = 'down';
-  private prevInput: InputState = { up: false, down: false, left: false, right: false };
+  private prevInput: InputState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+  };
 
   constructor(startPosition: Vector2) {
     this.position = { ...startPosition };
@@ -39,7 +49,10 @@ export class Player {
   // while attempting to move, even if position is blocked).
   isMoving(): boolean {
     return (
-      this.prevInput.up || this.prevInput.down || this.prevInput.left || this.prevInput.right
+      this.prevInput.up ||
+      this.prevInput.down ||
+      this.prevInput.left ||
+      this.prevInput.right
     );
   }
 
@@ -86,8 +99,14 @@ export class Player {
       const candidateX = this.position.x + direction.x * step;
       const candidateY = this.position.y + direction.y * step;
 
-      const clampedX = Math.max(0, Math.min(candidateX, CANVAS_WIDTH - this.size));
-      const clampedY = Math.max(0, Math.min(candidateY, CANVAS_HEIGHT - this.size));
+      const clampedX = Math.max(
+        0,
+        Math.min(candidateX, CANVAS_WIDTH - this.size),
+      );
+      const clampedY = Math.max(
+        0,
+        Math.min(candidateY, CANVAS_HEIGHT - this.size),
+      );
 
       // Stop if clamping cut off motion (hit canvas edge).
       if (clampedX !== candidateX || clampedY !== candidateY) {
@@ -123,7 +142,8 @@ export class Player {
     level: Level,
     onWallReject?: (rej: WallRejection) => void,
   ) {
-    const moveDistance = this.baseSpeed * this.speedMultiplier * (deltaTime / 1000);
+    const moveDistance =
+      this.baseSpeed * this.speedMultiplier * (deltaTime / 1000);
     let newX = this.position.x;
     let newY = this.position.y;
 
@@ -145,7 +165,9 @@ export class Player {
     const curRowTop = Math.floor(this.position.y / TILE_SIZE);
     const curRowBot = Math.floor((this.position.y + this.size - 1) / TILE_SIZE);
     const curColLeft = Math.floor(this.position.x / TILE_SIZE);
-    const curColRight = Math.floor((this.position.x + this.size - 1) / TILE_SIZE);
+    const curColRight = Math.floor(
+      (this.position.x + this.size - 1) / TILE_SIZE,
+    );
 
     const horizCells = [
       { x: gridX, y: curRowTop },

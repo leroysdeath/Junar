@@ -126,7 +126,11 @@ export class Stamina {
   // activation. Real time keeps ticking; the decay clock counts even
   // through Level Complete cards or other non-playing intervals.
   tick(now: number): void {
-    if (this.burstActive && this.burstEndAt !== null && now >= this.burstEndAt) {
+    if (
+      this.burstActive &&
+      this.burstEndAt !== null &&
+      now >= this.burstEndAt
+    ) {
       this.burstActive = false;
       this.lastBurstEndAt = now;
       this.burstEndAt = null;
