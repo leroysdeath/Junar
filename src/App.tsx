@@ -563,36 +563,16 @@ function App() {
               </div>
               <ul className="flex-1 min-h-0 overflow-y-auto text-sm space-y-2 text-amber-100 px-6 py-4">
                 <li>
-                  <strong>Movement:</strong>{' '}
-                  {isMobile
-                    ? 'Touch the left half of the screen to move'
-                    : 'Arrow Keys (or W/S/D — A is dash)'}
+                  <strong>Movement:</strong> Arrow Keys or W/S/D (A is dash) —
+                  or touch the left half of the screen
                 </li>
                 <li>
-                  <strong>Combat:</strong> Arrows fire when enemies are in sight
-                </li>
-                <li>
-                  <strong>Burst:</strong>{' '}
-                  {isMobile
-                    ? 'Tap B for 5s rapid-fire'
-                    : 'Press Space for 5s rapid-fire'}{' '}
+                  <strong>Burst:</strong> Space or the B button — 5s rapid-fire
                   (costs stamina; spam loses bonus)
                 </li>
                 <li>
-                  <strong>Dash:</strong>{' '}
-                  {isMobile
-                    ? 'Tap A to blink backward'
-                    : 'Shift or A to blink backward'}{' '}
-                  (opposite of facing, walls block)
-                </li>
-                <li>
-                  <strong>Stamina:</strong> One bar for the whole run — no regen
-                </li>
-                <li>
-                  <strong>Strategy:</strong> Position for clear line of sight
-                </li>
-                <li>
-                  <strong>Warning:</strong> Avoid all enemy contact!
+                  <strong>Dash:</strong> Shift/A or the A button — blink
+                  backward (opposite of facing, walls block)
                 </li>
                 <li>
                   <strong>Objective:</strong> Travel room to room toward the
