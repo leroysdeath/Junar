@@ -147,11 +147,13 @@ function TitleModal({
   isMobile,
   onClose,
   children,
+  centerTitle = false,
 }: {
   title: string;
   isMobile: boolean;
   onClose: () => void;
   children: ReactNode;
+  centerTitle?: boolean;
 }) {
   // Escape-to-close. The listener lives for the modal's lifetime only (it
   // mounts when open, unmounts when closed) so it never swallows keys during
@@ -178,12 +180,18 @@ function TitleModal({
         onClick={(e) => e.stopPropagation()}
         className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg text-left shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-amber-500/40 px-6 py-3 shrink-0">
+        <div
+          className={`flex items-center border-b border-amber-500/40 px-6 py-3 shrink-0 ${
+            centerTitle ? 'relative justify-center' : 'justify-between'
+          }`}
+        >
           <h3 className="text-amber-400 font-bold text-lg">{title}</h3>
           <button
             onClick={onClose}
             aria-label={`Close ${title}`}
-            className="text-amber-300 hover:text-amber-100 transition-colors"
+            className={`text-amber-300 hover:text-amber-100 transition-colors ${
+              centerTitle ? 'absolute right-6 top-1/2 -translate-y-1/2' : ''
+            }`}
           >
             <X size={22} />
           </button>
@@ -620,26 +628,26 @@ function App() {
           <TitleModal
             title="How to Play"
             isMobile={isMobile}
+            centerTitle
             onClose={() => setShowInstructions(false)}
           >
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               <li>
-                <strong>Movement:</strong> Arrow Keys or W/S/D (A is dash) — or
-                touch the left half of the screen
+                <strong>Movement:</strong>
+                <div className="ml-4">Arrow Keys or W/S/D/A (Desktop)</div>
+                <div className="ml-4">
+                  Touch the left half of the screen (Mobile)
+                </div>
               </li>
               <li>
-                <strong>Burst:</strong> Space or the B button — 5s rapid-fire
-                (costs stamina; spam loses bonus)
+                <strong>Burst Fire:</strong>
+                <div className="ml-4">Space (Desktop)</div>
+                <div className="ml-4">B button (Mobile)</div>
               </li>
               <li>
-                <strong>Dash:</strong> Shift/A or the A button — blink backward
-                (opposite of facing, walls block)
-              </li>
-              <li>
-                <strong>Objective:</strong> Travel room to room toward the boss
-              </li>
-              <li>
-                <strong>Victory:</strong> Defeat the Ancient Tree Guardian
+                <strong>Dash:</strong>
+                <div className="ml-4">Shift (Desktop)</div>
+                <div className="ml-4">A button (Mobile)</div>
               </li>
             </ul>
           </TitleModal>

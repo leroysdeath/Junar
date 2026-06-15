@@ -2004,8 +2004,8 @@ export class Game {
     this.inputManager.setBurstPressed();
   }
 
-  // Bridge for the on-screen mobile A button. Equivalent to a Shift or
-  // KeyA keydown — sets the edge-triggered dash flag in InputManager.
+  // Bridge for the on-screen mobile A button. Equivalent to a Shift
+  // keydown — sets the edge-triggered dash flag in InputManager.
   triggerDash() {
     this.inputManager.setDashPressed();
   }

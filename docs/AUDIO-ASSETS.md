@@ -100,7 +100,7 @@ gate: don't land a file for a key that isn't approved.**
 |-----|--------|-------|------------------|--------|------|-------|
 | `burst-activate` | approved, optional | burst rapid-fire start (`Stamina.ts`, Space/B) | rising "power-up" swell, short | 300–600 ms | no | 5-stamina cost, used sparingly |
 | `stamina-low` | approved, optional | stamina crosses low threshold (10 pts) | subtle warning pulse — quiet, non-annoying | 200–400 ms | no | Fire once on threshold cross, not per frame |
-| `dash` | optional — **mechanic may be removed** | dash teleport (`Player.ts`, Shift/A) | quick whoosh / blink | 150–300 ms | no | Don't prioritize sourcing; the dash mechanic itself is under review |
+| `dash` | optional — **mechanic may be removed** | dash teleport (`Player.ts`, Shift / mobile A button) | quick whoosh / blink | 150–300 ms | no | Don't prioritize sourcing; the dash mechanic itself is under review |
 | `room-transition` | **not approved yet** | LTTP hard-cut into neighbor room (`Game.detectTransition`) | soft footstep-into-brush / whoosh | 150–300 ms | no | Could feel busy — owner taste call; needs sign-off before a file lands |
 | `family-death` | **not approved yet** | a family member dies (distinct from generic `game-over`) | sharper grief sting layered before/with `game-over` | 0.5–1 s | no | Family combat unbuilt (CLAUDE.md §5); spec only — no trigger exists yet |
 | `barrier-lay` | **TBD — mechanic unapproved** | placing a stick barrier (stick-barriers idea, `docs/IDEATION.md` §4) | soft woody stake-into-earth thunk | 150–300 ms | no | The barrier mechanic itself is ideation-only and not on a build tier; spec reserved here in case it's greenlit. No code hook exists |
