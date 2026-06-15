@@ -1967,13 +1967,10 @@ export class Game {
         this.renderer.renderArrows(this.arrows);
       }
 
-      // Render line of sight indicator
-      if (this.gameState === 'playing') {
-        this.renderer.renderLineOfSightIndicator(
-          this.player,
-          this.hasLineOfSight,
-        );
-      }
+      // The dashed LOS indicator box around the player is intentionally not
+      // drawn (owner request 2026-06-15). `hasLineOfSight` is still tracked for
+      // the crash-logger snapshots, and Renderer.renderLineOfSightIndicator
+      // remains available should the on-screen cue be re-enabled.
     }
   }
 
