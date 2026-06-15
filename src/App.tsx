@@ -504,15 +504,10 @@ function App() {
           >
             <div className="text-center text-white max-w-md mx-auto px-6">
               <h1
-                className={`${isMobile ? 'text-4xl' : 'text-6xl'} font-bold text-amber-400 mb-2 font-serif`}
+                className={`${isMobile ? 'text-4xl mb-6' : 'text-6xl mb-8'} font-bold text-amber-400 font-serif`}
               >
                 Jungle Archer
               </h1>
-              <p
-                className={`text-lg text-amber-200 ${isMobile ? 'mb-4' : 'mb-8'} font-mono`}
-              >
-                Survive the Ancient Forest
-              </p>
 
               <div className="space-y-4">
                 <button
