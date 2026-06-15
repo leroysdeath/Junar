@@ -646,7 +646,7 @@ function App() {
         )}
 
         {/* Credits modal — opened from the title screen's "Credits" button.
-            Attribution for sourced art and audio. CC-BY entries (family
+            Attribution for sourced art and audio. CC-BY entries (NPC
             sprites, snake) are legally required; the "Dark Forest Theme" music
             line is a courtesy credit the author asks be kept; the rest are CC0
             / paid royalty-free, acknowledged here as good practice. Source of
@@ -669,8 +669,7 @@ function App() {
                     (CC0).
                   </li>
                   <li>
-                    Family sprites — Charles Gabriel (Antifarea), commissioned
-                    by{' '}
+                    NPC sprites — Charles Gabriel (Antifarea), commissioned by{' '}
                     <CreditLink href="https://opengameart.org">
                       OpenGameArt.org
                     </CreditLink>{' '}
@@ -762,8 +761,8 @@ function App() {
                 </ul>
               </section>
               <p className="text-xs text-amber-200/70">
-                Assets used under CC0, CC-BY, or paid royalty-free licenses.
-                Full provenance is logged in the project’s credits files.
+                Assets used under CC0, CC-BY, or paid royalty-free licenses. No
+                AI generated assets were used in this game.
               </p>
             </div>
           </TitleModal>
