@@ -18,10 +18,10 @@ export class InputManager {
   // existing keys Set so browser auto-repeat doesn't refire) or via mobile
   // setBurstPressed(); cleared by consumeBurstPress() on read.
   private burstPressed = false;
-  // Edge-triggered dash flag. Set on Shift or A keydown (same dedup
-  // pattern), or via mobile setDashPressed(). KeyA is intentionally
-  // dual-purpose: this fires a one-shot dash on press while continuing to
-  // register as held-state left movement.
+  // Edge-triggered dash flag. Set on Shift keydown (same dedup pattern as
+  // burst) or via mobile setDashPressed(). On the keyboard KeyA is left
+  // movement, not dash — only the on-screen A button triggers dash for
+  // touch players.
   private dashPressed = false;
   // Edge-triggered win-stub flag (Step 9). Set on V keydown (same dedup
   // pattern). An undocumented desktop DEBUG shortcut for the boss-room win —
@@ -37,8 +37,7 @@ export class InputManager {
     }
     if (
       (e.code === 'ShiftLeft' && !this.keys.has('ShiftLeft')) ||
-      (e.code === 'ShiftRight' && !this.keys.has('ShiftRight')) ||
-      (e.code === 'KeyA' && !this.keys.has('KeyA'))
+      (e.code === 'ShiftRight' && !this.keys.has('ShiftRight'))
     ) {
       this.dashPressed = true;
     }
@@ -92,9 +91,10 @@ export class InputManager {
       this.virtual.up || this.keys.has('KeyW') || this.keys.has('ArrowUp');
     this.inputState.down =
       this.virtual.down || this.keys.has('KeyS') || this.keys.has('ArrowDown');
-    // KeyA is intentionally NOT mapped to left — it's the dash key.
-    // WSAD-style players use ArrowLeft for left movement.
-    this.inputState.left = this.virtual.left || this.keys.has('ArrowLeft');
+    // KeyA is left movement (alongside ArrowLeft). Dash is Shift-only on the
+    // keyboard; the mobile A button drives dash through setDashPressed().
+    this.inputState.left =
+      this.virtual.left || this.keys.has('KeyA') || this.keys.has('ArrowLeft');
     this.inputState.right =
       this.virtual.right ||
       this.keys.has('KeyD') ||
@@ -122,7 +122,7 @@ export class InputManager {
     return r;
   }
 
-  // Mobile bridge for the A button. Equivalent to a Shift/A keydown edge.
+  // Mobile bridge for the A button. Equivalent to a Shift keydown edge.
   setDashPressed() {
     this.dashPressed = true;
   }

@@ -147,11 +147,13 @@ function TitleModal({
   isMobile,
   onClose,
   children,
+  centerTitle = false,
 }: {
   title: string;
   isMobile: boolean;
   onClose: () => void;
   children: ReactNode;
+  centerTitle?: boolean;
 }) {
   // Escape-to-close. The listener lives for the modal's lifetime only (it
   // mounts when open, unmounts when closed) so it never swallows keys during
@@ -178,12 +180,18 @@ function TitleModal({
         onClick={(e) => e.stopPropagation()}
         className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg text-left shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-amber-500/40 px-6 py-3 shrink-0">
+        <div
+          className={`flex items-center border-b border-amber-500/40 px-6 py-3 shrink-0 ${
+            centerTitle ? 'relative justify-center' : 'justify-between'
+          }`}
+        >
           <h3 className="text-amber-400 font-bold text-lg">{title}</h3>
           <button
             onClick={onClose}
             aria-label={`Close ${title}`}
-            className="text-amber-300 hover:text-amber-100 transition-colors"
+            className={`text-amber-300 hover:text-amber-100 transition-colors ${
+              centerTitle ? 'absolute right-6 top-1/2 -translate-y-1/2' : ''
+            }`}
           >
             <X size={22} />
           </button>
@@ -602,15 +610,17 @@ function App() {
                 >
                   How to Play
                 </button>
-
-                <button
-                  onClick={() => setShowCredits(true)}
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
-                >
-                  Credits
-                </button>
               </div>
             </div>
+
+            {/* Credits — a small link tucked into the bottom-right corner of
+                the menu overlay instead of the main button stack. */}
+            <button
+              onClick={() => setShowCredits(true)}
+              className="absolute bottom-3 right-3 text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+            >
+              Credits
+            </button>
           </div>
         )}
 
@@ -620,33 +630,33 @@ function App() {
           <TitleModal
             title="How to Play"
             isMobile={isMobile}
+            centerTitle
             onClose={() => setShowInstructions(false)}
           >
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               <li>
-                <strong>Movement:</strong> Arrow Keys or W/S/D (A is dash) — or
-                touch the left half of the screen
+                <strong>Movement:</strong>
+                <div className="ml-4">Arrow Keys or W/S/D/A (Desktop)</div>
+                <div className="ml-4">
+                  Touch the left half of the screen (Mobile)
+                </div>
               </li>
               <li>
-                <strong>Burst:</strong> Space or the B button — 5s rapid-fire
-                (costs stamina; spam loses bonus)
+                <strong>Burst Fire:</strong>
+                <div className="ml-4">Space (Desktop)</div>
+                <div className="ml-4">B button (Mobile)</div>
               </li>
               <li>
-                <strong>Dash:</strong> Shift/A or the A button — blink backward
-                (opposite of facing, walls block)
-              </li>
-              <li>
-                <strong>Objective:</strong> Travel room to room toward the boss
-              </li>
-              <li>
-                <strong>Victory:</strong> Defeat the Ancient Tree Guardian
+                <strong>Dash:</strong>
+                <div className="ml-4">Shift (Desktop)</div>
+                <div className="ml-4">A button (Mobile)</div>
               </li>
             </ul>
           </TitleModal>
         )}
 
         {/* Credits modal — opened from the title screen's "Credits" button.
-            Attribution for sourced art and audio. CC-BY entries (family
+            Attribution for sourced art and audio. CC-BY entries (NPC
             sprites, snake) are legally required; the "Dark Forest Theme" music
             line is a courtesy credit the author asks be kept; the rest are CC0
             / paid royalty-free, acknowledged here as good practice. Source of
@@ -669,8 +679,7 @@ function App() {
                     (CC0).
                   </li>
                   <li>
-                    Family sprites — Charles Gabriel (Antifarea), commissioned
-                    by{' '}
+                    NPC sprites — Charles Gabriel (Antifarea), commissioned by{' '}
                     <CreditLink href="https://opengameart.org">
                       OpenGameArt.org
                     </CreditLink>{' '}
@@ -762,8 +771,8 @@ function App() {
                 </ul>
               </section>
               <p className="text-xs text-amber-200/70">
-                Assets used under CC0, CC-BY, or paid royalty-free licenses.
-                Full provenance is logged in the project’s credits files.
+                Assets used under CC0, CC-BY, or paid royalty-free licenses. No
+                AI generated assets were used in this game.
               </p>
             </div>
           </TitleModal>

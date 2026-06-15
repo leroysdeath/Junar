@@ -43,7 +43,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 
 ## 5. Mechanics reference
 
-**Controls** — W/S/D plus arrow keys for movement (A is deliberately *not* mapped to left — it's the dash key; use ArrowLeft to move left); Shift or A for dash; Space for burst (mobile: floating joystick — touch anywhere on the left half of the screen — for movement; A and B buttons pinned lower-right for dash and burst). Runs start from the menu's "Start Adventure" button (Game's legacy canvas click-to-start listener is occluded by the menu overlay). Sound toggle is a UI button.
+**Controls** — W/A/S/D plus arrow keys for movement (A moves left); Shift for dash (the keyboard A binding for dash was removed 2026-06-15 — A is movement only on desktop); Space for burst (mobile: floating joystick — touch anywhere on the left half of the screen — for movement; A and B buttons pinned lower-right for dash and burst — the mobile A button is still the dash on touch). Runs start from the menu's "Start Adventure" button (Game's legacy canvas click-to-start listener is occluded by the menu overlay). Sound toggle is a UI button.
 
 **Player** (`src/game/Player.ts`) — 32×32 sprite, 150 px/s free movement, AABB collision against tile walls. No health, no per-level stamina pool (stamina is playthrough-wide and persistent; see Stamina below). One hit kills. Death is **contact-only**, and the kill test is a **true AABB overlap** (owner-approved 2026-06-10, replacing the old flat center-distance rule): the enemy's per-type `ENEMY_AABB_PX` box against the player's `PLAYER_HURTBOX_PX` (16 px) kill core, both centered in their 32 px cells (`Game.enemyTouchesPlayer`, used by `Game.checkCollisions`). Per-axis kill distance is `(16 + enemyAABB)/2` — bear 25, panther 18.5, gibbon 15.5, snake 10 px — so the bear's bulk reaches farther while the snake's sliver demands near-touch. Wall collision still uses the player's full 32 px cell. Two narrow **doorway kill graces** (owner-approved 2026-06-10; *not* general i-frames — auto-fire, movement, and arrow hits keep running) hold only the kill pass: `ARRIVAL_KILL_GRACE_MS` (300 ms on room transition, re-armed at most once per `ARRIVAL_GRACE_REARM_MS` = 2 s so doorway ping-pong can't chain windows into sustained immunity) and `HUNTER_ARRIVAL_GRACE_MS` (200 ms — lowered from 350 ms 2026-06-13 — on a cross-room hunter materializing into the player's room; the white materialize flash that used to mark it was removed by owner decision 2026-06-13 — the hunter simply appears as its normal sprite during the grace, with no extra cue). The 360° LOS check is the *player's* auto-fire mechanic, not an enemy attack.
 
@@ -100,7 +100,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - Lasts 5 seconds.
 - Resets after a 15-second break. Activating again within 15 seconds of the last burst end applies a decay rule: `multiplier *= 0.75`, so spamming burst eventually self-debuffs to <1×.
 
-**Dash teleport** (`src/game/Player.ts`, triggered via Shift/A or on-screen A button) — edge-triggered activation. Instant blink:
+**Dash teleport** (`src/game/Player.ts`, triggered via Shift or the on-screen A button) — edge-triggered activation. Instant blink:
 - Direction: opposite of the player's current cardinal facing (up/down/left/right).
 - Distance: 3 tiles = 96 pixels, or stops at the last open tile before a wall, whichever is shorter.
 - Cost: 0.5 stamina (rejected if stamina < 0.5).
