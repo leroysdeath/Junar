@@ -837,7 +837,7 @@ export class Game {
           pathCache,
         );
         if (!step) continue; // no route this frame — hold
-        enemy.update(deltaTime, step.doorTarget, level, list);
+        enemy.update(deltaTime, now, step.doorTarget, level, list);
         if (this.hunterAtDoor(enemy, step.edge, step.opening)) {
           crossings.push({
             enemy,
@@ -1492,6 +1492,7 @@ export class Game {
     this.enemies.forEach((enemy) => {
       enemy.update(
         deltaTime,
+        currentTime,
         this.player.getPosition(),
         this.level,
         this.enemies,
