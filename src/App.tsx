@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, Target, Zap } from 'lucide-react';
+import {
+  Play,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Target,
+  Zap,
+  X,
+} from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
@@ -290,6 +298,18 @@ function App() {
     };
   }, [forceLandscape]);
 
+  // Dismiss the How-to-Play modal on Escape (standard modal behavior). Wired
+  // only while the modal is open so it never swallows keys during play, and
+  // torn down on close/unmount.
+  useEffect(() => {
+    if (!(gameState === 'menu' && showInstructions)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowInstructions(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [gameState, showInstructions]);
+
   const renderHud = () => {
     // Stamina bar fill — red when low, warm gold while bursting, amber
     // otherwise. Width is rounded so the bar visibly steps as the value
@@ -504,64 +524,97 @@ function App() {
                 </button>
 
                 <button
-                  onClick={() => setShowInstructions(!showInstructions)}
+                  onClick={() => setShowInstructions(true)}
                   className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
                 >
-                  {showInstructions ? 'Hide Instructions' : 'How to Play'}
+                  How to Play
                 </button>
               </div>
+            </div>
+          </div>
+        )}
 
-              {showInstructions && (
-                <div className="mt-6 bg-black/80 p-6 rounded-lg border border-amber-500 text-left">
-                  <h3 className="text-amber-400 font-bold mb-3 text-center">
-                    Instructions
-                  </h3>
-                  <ul className="text-sm space-y-2 text-amber-100">
-                    <li>
-                      <strong>Movement:</strong>{' '}
-                      {isMobile
-                        ? 'Touch the left half of the screen to move'
-                        : 'Arrow Keys (or W/S/D — A is dash)'}
-                    </li>
-                    <li>
-                      <strong>Combat:</strong> Arrows fire when enemies are in
-                      sight
-                    </li>
-                    <li>
-                      <strong>Burst:</strong>{' '}
-                      {isMobile
-                        ? 'Tap B for 5s rapid-fire'
-                        : 'Press Space for 5s rapid-fire'}{' '}
-                      (costs stamina; spam loses bonus)
-                    </li>
-                    <li>
-                      <strong>Dash:</strong>{' '}
-                      {isMobile
-                        ? 'Tap A to blink backward'
-                        : 'Shift or A to blink backward'}{' '}
-                      (opposite of facing, walls block)
-                    </li>
-                    <li>
-                      <strong>Stamina:</strong> One bar for the whole run — no
-                      regen
-                    </li>
-                    <li>
-                      <strong>Strategy:</strong> Position for clear line of
-                      sight
-                    </li>
-                    <li>
-                      <strong>Warning:</strong> Avoid all enemy contact!
-                    </li>
-                    <li>
-                      <strong>Objective:</strong> Travel room to room toward the
-                      boss
-                    </li>
-                    <li>
-                      <strong>Victory:</strong> Defeat the Ancient Tree Guardian
-                    </li>
-                  </ul>
-                </div>
-              )}
+        {/* How-to-Play modal — opened from the title screen's "How to Play"
+            button. A centered pop-up that covers the title/menu (so Start
+            Adventure etc. are hidden behind it); dismissed via the header ✕,
+            the "Back to Title" button, a backdrop click, or Escape. The panel
+            is height-capped with an internally scrolling body so the
+            instruction list never clips on short frames (notably mobile
+            landscape, where it overflowed and got cut off before). Mirrors the
+            menu's mobile fixed/desktop absolute positioning, one layer above. */}
+        {gameState === 'menu' && showInstructions && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="How to Play"
+            onClick={() => setShowInstructions(false)}
+            className={`${isMobile ? 'fixed inset-0 z-[60]' : 'absolute inset-0 z-20'} bg-black/95 flex items-center justify-center p-4`}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg text-left shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-amber-500/40 px-6 py-3 shrink-0">
+                <h3 className="text-amber-400 font-bold text-lg">
+                  How to Play
+                </h3>
+                <button
+                  onClick={() => setShowInstructions(false)}
+                  aria-label="Close instructions"
+                  className="text-amber-300 hover:text-amber-100 transition-colors"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+              <ul className="flex-1 min-h-0 overflow-y-auto text-sm space-y-2 text-amber-100 px-6 py-4">
+                <li>
+                  <strong>Movement:</strong>{' '}
+                  {isMobile
+                    ? 'Touch the left half of the screen to move'
+                    : 'Arrow Keys (or W/S/D — A is dash)'}
+                </li>
+                <li>
+                  <strong>Combat:</strong> Arrows fire when enemies are in sight
+                </li>
+                <li>
+                  <strong>Burst:</strong>{' '}
+                  {isMobile
+                    ? 'Tap B for 5s rapid-fire'
+                    : 'Press Space for 5s rapid-fire'}{' '}
+                  (costs stamina; spam loses bonus)
+                </li>
+                <li>
+                  <strong>Dash:</strong>{' '}
+                  {isMobile
+                    ? 'Tap A to blink backward'
+                    : 'Shift or A to blink backward'}{' '}
+                  (opposite of facing, walls block)
+                </li>
+                <li>
+                  <strong>Stamina:</strong> One bar for the whole run — no regen
+                </li>
+                <li>
+                  <strong>Strategy:</strong> Position for clear line of sight
+                </li>
+                <li>
+                  <strong>Warning:</strong> Avoid all enemy contact!
+                </li>
+                <li>
+                  <strong>Objective:</strong> Travel room to room toward the
+                  boss
+                </li>
+                <li>
+                  <strong>Victory:</strong> Defeat the Ancient Tree Guardian
+                </li>
+              </ul>
+              <div className="border-t border-amber-500/40 px-6 py-3 shrink-0">
+                <button
+                  onClick={() => setShowInstructions(false)}
+                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-2.5 px-8 rounded-lg transition-all duration-200 text-base border-2 border-amber-500"
+                >
+                  Back to Title
+                </button>
+              </div>
             </div>
           </div>
         )}
