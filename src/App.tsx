@@ -204,6 +204,23 @@ function TitleModal({
   );
 }
 
+// Clickable attribution link used in the Credits modal. Opens in a new tab
+// with noopener/noreferrer. (When the game is later wrapped in Tauri, external
+// links will route through the shell opener instead of a browser tab — a
+// post-prototype concern; standard for the current web build.)
+function CreditLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-amber-300 underline underline-offset-2 hover:text-amber-100 transition-colors"
+    >
+      {children}
+    </a>
+  );
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -645,20 +662,49 @@ function App() {
                 <h4 className="text-amber-400 font-semibold mb-1">Art</h4>
                 <ul className="space-y-2">
                   <li>
-                    Player sprite — ArMM1998, “Zelda-like tilesets and sprites”
+                    Player sprite — ArMM1998,{' '}
+                    <CreditLink href="https://opengameart.org/content/zelda-like-tilesets-and-sprites">
+                      “Zelda-like tilesets and sprites”
+                    </CreditLink>{' '}
                     (CC0).
                   </li>
                   <li>
                     Family sprites — Charles Gabriel (Antifarea), commissioned
-                    by OpenGameArt.org — CC-BY 3.0. Recolored and recomposed.
+                    by{' '}
+                    <CreditLink href="https://opengameart.org">
+                      OpenGameArt.org
+                    </CreditLink>{' '}
+                    —{' '}
+                    <CreditLink href="https://creativecommons.org/licenses/by/3.0/">
+                      CC-BY 3.0
+                    </CreditLink>
+                    . Recolored and recomposed.
                   </li>
                   <li>
-                    Snake — “Tiny, Tiny Heroes – Animals” by Kacper Woźniak
-                    (thkaspar) — CC BY 4.0. Recolored.
+                    Snake —{' '}
+                    <CreditLink href="https://thkaspar.itch.io/tth-animals">
+                      “Tiny, Tiny Heroes – Animals”
+                    </CreditLink>{' '}
+                    by Kacper Woźniak (thkaspar) —{' '}
+                    <CreditLink href="https://creativecommons.org/licenses/by/4.0/">
+                      CC BY 4.0
+                    </CreditLink>
+                    . Recolored.
                   </li>
                   <li>
-                    Panther, bear &amp; gibbon — Time Fantasy by Jason Perry
-                    (finalbossblues), timefantasy.net.
+                    Panther, bear &amp; gibbon — Time Fantasy by Jason Perry,{' '}
+                    <CreditLink href="https://timefantasy.net">
+                      timefantasy.net
+                    </CreditLink>{' '}
+                    (
+                    <CreditLink href="https://finalbossblues.itch.io/animals-sprite-pack">
+                      pack 1
+                    </CreditLink>{' '}
+                    ·{' '}
+                    <CreditLink href="https://finalbossblues.itch.io/animals-2">
+                      pack 2
+                    </CreditLink>
+                    ).
                   </li>
                 </ul>
               </section>
@@ -666,13 +712,51 @@ function App() {
                 <h4 className="text-amber-400 font-semibold mb-1">Audio</h4>
                 <ul className="space-y-2">
                   <li>
-                    Boss music — “Dark Forest Theme” — The Cynic Project /
-                    cynicmusic.com / pixelsphere.org.
+                    Boss music —{' '}
+                    <CreditLink href="https://opengameart.org/content/dark-forest-theme">
+                      “Dark Forest Theme”
+                    </CreditLink>{' '}
+                    — The Cynic Project /{' '}
+                    <CreditLink href="https://cynicmusic.com">
+                      cynicmusic.com
+                    </CreditLink>{' '}
+                    / pixelsphere.org.
                   </li>
-                  <li>Menu music — tambura drone by Kaczinski (CC0).</li>
-                  <li>Ambience — marc.om, Resaural (CC0).</li>
                   <li>
-                    Sound effects — arcandio, Faulkin, AudioPapkin, Rob_Marion
+                    Menu music — tambura drone by Kaczinski —{' '}
+                    <CreditLink href="https://freesound.org/people/Kaczinski/sounds/506312/">
+                      Freesound
+                    </CreditLink>{' '}
+                    (CC0).
+                  </li>
+                  <li>
+                    Ambience —{' '}
+                    <CreditLink href="https://freesound.org/people/marc.om/sounds/804838/">
+                      marc.om
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/Resaural/sounds/467026/">
+                      Resaural
+                    </CreditLink>{' '}
+                    (CC0).
+                  </li>
+                  <li>
+                    Sound effects —{' '}
+                    <CreditLink href="https://freesound.org/people/arcandio/sounds/347884/">
+                      arcandio
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/Faulkin/sounds/336495/">
+                      Faulkin
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/AudioPapkin/sounds/541029/">
+                      AudioPapkin
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/Rob_Marion/sounds/541985/">
+                      Rob_Marion
+                    </CreditLink>{' '}
                     (CC0, via Freesound).
                   </li>
                 </ul>
