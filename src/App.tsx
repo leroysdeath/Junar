@@ -610,15 +610,17 @@ function App() {
                 >
                   How to Play
                 </button>
-
-                <button
-                  onClick={() => setShowCredits(true)}
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
-                >
-                  Credits
-                </button>
               </div>
             </div>
+
+            {/* Credits — a small link tucked into the bottom-right corner of
+                the menu overlay instead of the main button stack. */}
+            <button
+              onClick={() => setShowCredits(true)}
+              className="absolute bottom-3 right-3 text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+            >
+              Credits
+            </button>
           </div>
         )}
 
