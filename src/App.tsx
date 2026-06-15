@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import {
   Play,
   RotateCcw,
@@ -131,6 +137,73 @@ function unlockOrientation(): void {
   }
 }
 
+// Centered title-screen pop-up shell shared by How to Play and Credits. Covers
+// the menu, dismissed via the header ✕, the "Back to Title" button, a backdrop
+// click, or Escape. The body is height-capped and scrolls internally so long
+// content never clips on short frames (notably mobile landscape). Mirrors the
+// menu's mobile fixed / desktop absolute positioning, one layer above.
+function TitleModal({
+  title,
+  isMobile,
+  onClose,
+  children,
+}: {
+  title: string;
+  isMobile: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  // Escape-to-close. The listener lives for the modal's lifetime only (it
+  // mounts when open, unmounts when closed) so it never swallows keys during
+  // play. onClose is read through a ref so the subscription stays mount-once.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onClose}
+      className={`${isMobile ? 'fixed inset-0 z-[60]' : 'absolute inset-0 z-20'} bg-black/95 flex items-center justify-center p-4`}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg text-left shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-amber-500/40 px-6 py-3 shrink-0">
+          <h3 className="text-amber-400 font-bold text-lg">{title}</h3>
+          <button
+            onClick={onClose}
+            aria-label={`Close ${title}`}
+            className="text-amber-300 hover:text-amber-100 transition-colors"
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto text-sm text-amber-100 px-6 py-4">
+          {children}
+        </div>
+        <div className="border-t border-amber-500/40 px-6 py-3 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-2.5 px-8 rounded-lg transition-all duration-200 text-base border-2 border-amber-500"
+          >
+            Back to Title
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -147,6 +220,7 @@ function App() {
   const [, setEnemiesRemaining] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
   const [burst, setBurst] = useState({ active: false, multiplier: 1 });
   // Boss-arena sub-state (Step 9): true while the player is inside anchor 10.
@@ -297,18 +371,6 @@ function App() {
       document.body.style.overflow = prevBody;
     };
   }, [forceLandscape]);
-
-  // Dismiss the How-to-Play modal on Escape (standard modal behavior). Wired
-  // only while the modal is open so it never swallows keys during play, and
-  // torn down on close/unmount.
-  useEffect(() => {
-    if (!(gameState === 'menu' && showInstructions)) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowInstructions(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [gameState, showInstructions]);
 
   const renderHud = () => {
     // Stamina bar fill — red when low, warm gold while bursting, amber
@@ -523,74 +585,104 @@ function App() {
                 >
                   How to Play
                 </button>
+
+                <button
+                  onClick={() => setShowCredits(true)}
+                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+                >
+                  Credits
+                </button>
               </div>
             </div>
           </div>
         )}
 
         {/* How-to-Play modal — opened from the title screen's "How to Play"
-            button. A centered pop-up that covers the title/menu (so Start
-            Adventure etc. are hidden behind it); dismissed via the header ✕,
-            the "Back to Title" button, a backdrop click, or Escape. The panel
-            is height-capped with an internally scrolling body so the
-            instruction list never clips on short frames (notably mobile
-            landscape, where it overflowed and got cut off before). Mirrors the
-            menu's mobile fixed/desktop absolute positioning, one layer above. */}
+            button. See TitleModal for the shared shell + dismissal behavior. */}
         {gameState === 'menu' && showInstructions && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="How to Play"
-            onClick={() => setShowInstructions(false)}
-            className={`${isMobile ? 'fixed inset-0 z-[60]' : 'absolute inset-0 z-20'} bg-black/95 flex items-center justify-center p-4`}
+          <TitleModal
+            title="How to Play"
+            isMobile={isMobile}
+            onClose={() => setShowInstructions(false)}
           >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg text-left shadow-2xl"
-            >
-              <div className="flex items-center justify-between border-b border-amber-500/40 px-6 py-3 shrink-0">
-                <h3 className="text-amber-400 font-bold text-lg">
-                  How to Play
-                </h3>
-                <button
-                  onClick={() => setShowInstructions(false)}
-                  aria-label="Close instructions"
-                  className="text-amber-300 hover:text-amber-100 transition-colors"
-                >
-                  <X size={22} />
-                </button>
-              </div>
-              <ul className="flex-1 min-h-0 overflow-y-auto text-sm space-y-2 text-amber-100 px-6 py-4">
-                <li>
-                  <strong>Movement:</strong> Arrow Keys or W/S/D (A is dash) —
-                  or touch the left half of the screen
-                </li>
-                <li>
-                  <strong>Burst:</strong> Space or the B button — 5s rapid-fire
-                  (costs stamina; spam loses bonus)
-                </li>
-                <li>
-                  <strong>Dash:</strong> Shift/A or the A button — blink
-                  backward (opposite of facing, walls block)
-                </li>
-                <li>
-                  <strong>Objective:</strong> Travel room to room toward the
-                  boss
-                </li>
-                <li>
-                  <strong>Victory:</strong> Defeat the Ancient Tree Guardian
-                </li>
-              </ul>
-              <div className="border-t border-amber-500/40 px-6 py-3 shrink-0">
-                <button
-                  onClick={() => setShowInstructions(false)}
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-2.5 px-8 rounded-lg transition-all duration-200 text-base border-2 border-amber-500"
-                >
-                  Back to Title
-                </button>
-              </div>
+            <ul className="space-y-2">
+              <li>
+                <strong>Movement:</strong> Arrow Keys or W/S/D (A is dash) — or
+                touch the left half of the screen
+              </li>
+              <li>
+                <strong>Burst:</strong> Space or the B button — 5s rapid-fire
+                (costs stamina; spam loses bonus)
+              </li>
+              <li>
+                <strong>Dash:</strong> Shift/A or the A button — blink backward
+                (opposite of facing, walls block)
+              </li>
+              <li>
+                <strong>Objective:</strong> Travel room to room toward the boss
+              </li>
+              <li>
+                <strong>Victory:</strong> Defeat the Ancient Tree Guardian
+              </li>
+            </ul>
+          </TitleModal>
+        )}
+
+        {/* Credits modal — opened from the title screen's "Credits" button.
+            Attribution for sourced art and audio. CC-BY entries (family
+            sprites, snake) are legally required; the "Dark Forest Theme" music
+            line is a courtesy credit the author asks be kept; the rest are CC0
+            / paid royalty-free, acknowledged here as good practice. Source of
+            truth: docs/ART-CREDITS.md and docs/AUDIO-CREDITS.md. */}
+        {gameState === 'menu' && showCredits && (
+          <TitleModal
+            title="Credits"
+            isMobile={isMobile}
+            onClose={() => setShowCredits(false)}
+          >
+            <div className="space-y-4">
+              <section>
+                <h4 className="text-amber-400 font-semibold mb-1">Art</h4>
+                <ul className="space-y-2">
+                  <li>
+                    Player sprite — ArMM1998, “Zelda-like tilesets and sprites”
+                    (CC0).
+                  </li>
+                  <li>
+                    Family sprites — Charles Gabriel (Antifarea), commissioned
+                    by OpenGameArt.org — CC-BY 3.0. Recolored and recomposed.
+                  </li>
+                  <li>
+                    Snake — “Tiny, Tiny Heroes – Animals” by Kacper Woźniak
+                    (thkaspar) — CC BY 4.0. Recolored.
+                  </li>
+                  <li>
+                    Panther, bear &amp; gibbon — Time Fantasy by Jason Perry
+                    (finalbossblues), timefantasy.net.
+                  </li>
+                </ul>
+              </section>
+              <section>
+                <h4 className="text-amber-400 font-semibold mb-1">Audio</h4>
+                <ul className="space-y-2">
+                  <li>
+                    Boss music — “Dark Forest Theme” — The Cynic Project /
+                    cynicmusic.com / pixelsphere.org.
+                  </li>
+                  <li>Menu music — tambura drone by Kaczinski (CC0).</li>
+                  <li>Ambience — marc.om, Resaural (CC0).</li>
+                  <li>
+                    Sound effects — arcandio, Faulkin, AudioPapkin, Rob_Marion
+                    (CC0, via Freesound).
+                  </li>
+                </ul>
+              </section>
+              <p className="text-xs text-amber-200/70">
+                Assets used under CC0, CC-BY, or paid royalty-free licenses.
+                Full provenance is logged in the project’s credits files.
+              </p>
             </div>
-          </div>
+          </TitleModal>
         )}
 
         {/* Game Over Screen — overlays the canvas on both desktop and mobile so
