@@ -1,11 +1,11 @@
 ---
 name: procedural-rendering
-description: Junar's canvas-2D rendering contract for the game world. Renderer.ts is the sole draw surface for in-world entities and effects (player, enemies, arrows, boss, family, particles, screen shake, hit flashes). Characters and beasts are sprite-based (owner-greenlit — player 2026-05-10, beasts + family 2026-06-11 per docs/ART-ASSETS.md Tiers 1-2, drawn via drawImage from bundled PNGs); environment, hut, arrows, FX, HUD, and the plant boss are procedural pixel rectangles (Tier 3 not greenlit, Tier 4 keep-procedural confirmed). No sprite/image imports beyond the approved set, no share-alike-licensed art (no LPC), nothing AI-generated, no WebGL/Pixi/Three.js. Use when adding or editing how something is drawn on the canvas, when proposing a renderer migration, or when a request would import an image asset. Not for: React/Tailwind HUD overlays (see react-game-bridge), the crash logger's red overlay (see crash-logger-channel), the LOS rule itself (see los-contract — this skill only owns the visual indicator), or pulling magic numbers like 32/928/544 into constants (see tile-grid-and-canvas-constants, even inside Renderer.ts).
+description: Junar's canvas-2D rendering contract for the game world. Renderer.ts is the sole draw surface for in-world entities and effects (player, enemies, arrows, boss, family, particles, screen shake, hit flashes). Characters, beasts, and the jungle tree-walls/dirt-floor are sprite-based (owner-greenlit — player 2026-05-10, beasts + family 2026-06-11 per docs/ART-ASSETS.md Tiers 1-2, tree walls + floor 2026-06-15 Tier 3 partial, drawn via drawImage from bundled PNGs); the hut, arrows, FX, HUD, and the plant boss are procedural pixel rectangles (rest of Tier 3 not greenlit, Tier 4 keep-procedural confirmed). No sprite/image imports beyond the approved set, no share-alike-licensed art (no LPC), nothing AI-generated, no WebGL/Pixi/Three.js. Use when adding or editing how something is drawn on the canvas, when proposing a renderer migration, or when a request would import an image asset. Not for: React/Tailwind HUD overlays (see react-game-bridge), the crash logger's red overlay (see crash-logger-channel), the LOS rule itself (see los-contract — this skill only owns the visual indicator), or pulling magic numbers like 32/928/544 into constants (see tile-grid-and-canvas-constants, even inside Renderer.ts).
 ---
 
 # Procedural rendering
 
-The art direction is hybrid, drawn to a single Canvas 2D context. **Characters and beasts are sprites** (owner-greenlit: player 2026-05-10; the four beasts + family wife/son/daughter 2026-06-11 — Tiers 1–2 of `docs/ART-ASSETS.md`). **Everything else is procedural pixel rectangles** — walls/floor, huts, arrows, burst aura, LOS indicator, materialize flash, hit/death FX, and the corrupted growth / plant boss (Tier 3 explicitly not greenlit; Tier 4 keep-procedural confirmed 2026-06-11). The procedural side is a feature, not a workaround: FX are readability tools, and the boss's pulsing goo animates better as code.
+The art direction is hybrid, drawn to a single Canvas 2D context. **Characters, beasts, and the jungle tree-walls/dirt-floor are sprites** (owner-greenlit: player 2026-05-10; the four beasts + family wife/son/daughter 2026-06-11 — Tiers 1–2 of `docs/ART-ASSETS.md`; tree walls + dirt floor 2026-06-15 — Tier 3, partial, `src/assets/sprites/jungle-tiles.png`). **Everything else is procedural pixel rectangles** — the hut, arrows, burst aura, LOS indicator, materialize flash, hit/death FX, and the corrupted growth / plant boss (rest of Tier 3 — the hut — not greenlit; Tier 4 keep-procedural confirmed 2026-06-11). The procedural side is a feature, not a workaround: FX are readability tools, and the boss's pulsing goo animates better as code.
 
 Asset rules for the sprite side: bundled PNGs imported via Vite, drawn with `ctx.drawImage` (`imageSmoothingEnabled = false`, integer coords). Licenses: CC0 / CC-BY (logged in `docs/ART-CREDITS.md`) / paid royalty-free only — share-alike rejected (no CC-BY-SA, no GPL, no LPC), no NC/ND, nothing AI-generated.
 
@@ -15,7 +15,7 @@ See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Sprite a
 
 - One render surface: `src/game/Renderer.ts`, holding a `CanvasRenderingContext2D` constructed from the 928×544 canvas in `App.tsx` (`CANVAS_WIDTH` / `CANVAS_HEIGHT` in `constants.ts`).
 - One method per visible entity type: `renderLevel`, `renderPlayer` (sprite + procedural burst aura), `renderEnemies` (dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake`), `renderNpcs`, `renderHuts`, `renderArrows`, `renderCorruptedGrowth`, `renderLineOfSightIndicator`.
-- Drawing primitives are `fillRect`, `fillStyle`, `save`/`translate`/`rotate`/`scale`/`restore`, `globalAlpha`, `strokeRect` + `setLineDash` (LOS indicator), the occasional `beginPath` / triangle for arrowheads — plus `drawImage` for the approved sprite set: the player (`renderPlayer`, CC0 LTTP sheet), the family (`renderNpcs`, CC-BY 3.0 Antifarea recolors at 16×18), and the four beasts (`drawBeast` behind `renderPanther`/`renderBear`/`renderSnake`/`renderGibbon` — Time Fantasy panther/bear/gorilla-gibbon + CC-BY TTH snake, fitted into each type's `ENEMY_AABB_PX`-or-`ENEMY_VISUAL_SCALE_FLOOR` box, facing derived render-side from movement, red-eye cue stamped on top). No sprite/image import may be added for any other entity without owner approval.
+- Drawing primitives are `fillRect`, `fillStyle`, `save`/`translate`/`rotate`/`scale`/`restore`, `globalAlpha`, `strokeRect` + `setLineDash` (LOS indicator), the occasional `beginPath` / triangle for arrowheads — plus `drawImage` for the approved sprite set: the player (`renderPlayer`, CC0 LTTP sheet), the family (`renderNpcs`, CC-BY 3.0 Antifarea recolors at 16×18), and the four beasts (`drawBeast` behind `renderPanther`/`renderBear`/`renderSnake`/`renderGibbon` — Time Fantasy panther/bear/gorilla-gibbon + CC-BY TTH snake, fitted into each type's `ENEMY_AABB_PX`-or-`ENEMY_VISUAL_SCALE_FLOOR` box, facing derived render-side from movement, red-eye cue stamped on top); and the jungle **tree walls + dirt floor** (`renderLevel`, `jungle-tiles.png` — atlas tile 0 dirt floor, tiles 1–6 hash-picked canopy interiors, tile 7 lit top-edge, 16px source drawn ×2 to the grid). No sprite/image import may be added for any other entity without owner approval.
 - The canvas is `image-rendering: pixelated` (set on the `<canvas>` in `App.tsx`), and the `Renderer` constructor sets `ctx.imageSmoothingEnabled = false` so the scaled sprite stays crisp. Stay on integer pixel coordinates so the pixelation reads correctly.
 - Every entity must be **identifiable in one frame at 32×32**. Silhouette and color do the work — readability is the constraint, not detail.
 
@@ -23,7 +23,7 @@ See CLAUDE.md §3 ("Readable at a glance"), §6 (visual palette), §9 ("Sprite a
 
 | Entity | Method |
 |---|---|
-| Tile floor / tree wall | `renderLevel` |
+| Tile floor / tree wall (sprite tiles from `jungle-tiles.png`) | `renderLevel` |
 | Player (CC0 LTTP-style sprite + procedural burst aura) | `renderPlayer` |
 | Panther / gibbon / bear / snake (sprites + procedural red-eye overlay) | `renderEnemies`, dispatching to `renderPanther` / `renderGibbon` / `renderBear` / `renderSnake` (all via `drawBeast`) |
 | Family wife/son/daughter sprites at `N` tiles (translucent idle frames, cycled by index; behavior unwired) | `renderNpcs` |
@@ -36,8 +36,7 @@ The render order is set in `Game.render()`: clear (`#1a4a3a`) → level → huts
 
 ## Palette today
 
-- Forest greens for trees: `#228B22`, `#32CD32`, `#90EE90`.
-- Floor: solid tan `#D2B48C`, a single fill per tile. (`#8B4513` survives only as arrow fletching.)
+- Trees/floor: now drawn from `jungle-tiles.png` (Time Fantasy Jungle Tileset), **not** procedural fills — the old `renderLevel` greens/tan are retired. `#8B4513` survives only as arrow fletching. The dirt-floor tile was recolored from the set's grass autotile via a green→earth ramp; the canopy palette lives in the PNG.
 - Player: colors live in the sprite-sheet PNG, not in code. The procedural burst aura uses warm golds `#FFC857` / `#FFD97A`, drawn behind the sprite.
 - Background clear: `#1a4a3a`.
 
@@ -53,7 +52,7 @@ The **black-goo accent palette** from CLAUDE.md §6 (deep oily black, sickly gre
 
 ## Pushback list
 
-- **Sprite assets are limited to player + four beasts + family** (player approved 2026-05-10; beasts/family greenlit 2026-06-11). No sprite sheets, no image/PNG/SVG imports for environment, hut, arrows, FX, HUD, or the boss without owner approval. CLAUDE.md §9, `docs/ART-ASSETS.md`.
+- **Sprite assets are limited to player + four beasts + family + jungle tree-walls/dirt-floor** (player 2026-05-10; beasts/family 2026-06-11; tree walls + floor 2026-06-15, Tier 3 partial). No sprite sheets, no image/PNG/SVG imports for the hut, arrows, FX, HUD, or the boss without owner approval. CLAUDE.md §9, `docs/ART-ASSETS.md`.
 - **No share-alike or AI-generated art, ever.** CC-BY-SA/GPL (all of LPC) is rejected on the art layer; every sourced sheet needs human-made provenance. CC-BY attributions go in `docs/ART-CREDITS.md`.
 - **No engine migration.** Pixi, Phaser, Three.js, Godot, Bevy — out of scope. CLAUDE.md §9.
 - **No WebGL.** Stay on the 2D context.

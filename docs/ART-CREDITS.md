@@ -77,6 +77,30 @@ Steam-page credits screen when it gets built.
 - **Courtesy credit line (optional):** "Animal sprites: Time Fantasy by
   Jason Perry (finalbossblues), timefantasy.net."
 
+### Environment — Jungle Tileset (tree walls + dirt floor)
+
+- **Status: LANDED 2026-06-15** (Tier 3 reopened and greenlit by the owner the
+  same day; tree walls + dirt floor only — the hut stays procedural).
+- **Title:** "Jungle Tileset" — a free Time Fantasy mini-expansion (Patreon
+  goal release).
+- **Author:** Jason Perry (finalbossblues), timefantasy.net
+- **Source:** https://finalbossblues.itch.io/tf-jungle-tileset
+- **License:** Time Fantasy "free graphics" royalty-free terms (creator's
+  published statement, finalbossblues.com): "using them in commercial projects
+  is fine. Edit them all you want. No credit necessary." Commercial use + edits
+  allowed; only direct redistribution of the raw assets is prohibited. Free /
+  name-your-own-price. NOT share-alike / NC / ND; the itch listing is tagged
+  "No generative AI was used."
+- **Changes:** from the plain 16px tilesheet, built a small in-repo atlas
+  `src/assets/sprites/jungle-tiles.png` — tile 0 = dirt-path floor recolored
+  from the set's seamless grass autotile (green→earth ramp); tiles 1–6 =
+  pure-leaf canopy interior tiles (sheet cols 11–13, rows 6–7), hash-picked
+  per cell in `Renderer.renderLevel` to avoid a regular grid; tile 7 = a lit
+  canopy top-edge (top rows brightened) drawn where a wall is exposed to floor
+  above. 16px tiles upscaled ×2 to the 32px grid.
+- **Courtesy credit line (optional):** "Jungle tileset: Time Fantasy by Jason
+  Perry (finalbossblues), timefantasy.net."
+
 ---
 
 ## CC0 assets (no attribution required; logged for provenance)

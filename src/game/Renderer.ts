@@ -27,6 +27,13 @@ import pantherSpriteUrl from '../assets/sprites/panther.png';
 import bearSpriteUrl from '../assets/sprites/bear.png';
 import snakeSpriteUrl from '../assets/sprites/snake.png';
 import gibbonSpriteUrl from '../assets/sprites/gibbon.png';
+// Jungle tileset — Tier 3 (tree walls + dirt floor), owner-greenlit 2026-06-15.
+// "Jungle Tileset" free Time Fantasy mini-expansion (Jason Perry / finalbossblues,
+// royalty-free commercial use + edits, raw redistribution prohibited — credited in
+// docs/ART-CREDITS.md). Atlas is a 16px-tile row: [0] dirt-path floor (recolored
+// from the set's seamless grass autotile), [1..4] seamless canopy wall variants
+// cycled by cell parity to break up repetition.
+import jungleTilesUrl from '../assets/sprites/jungle-tiles.png';
 
 // Sprite-sheet layout — character.png from ArMM1998's pack uses 16-wide ×
 // 32-tall cells, 4-frame walk per direction across columns, one direction
@@ -35,6 +42,13 @@ const SPRITE_CELL_W = 16;
 const SPRITE_CELL_H = 32;
 const SPRITE_WALK_FRAMES = 4;
 const SPRITE_WALK_FRAME_MS = 140;
+// Jungle tileset atlas: 16px source tiles, upscaled to TILE_SIZE on draw.
+// Layout: index 0 = dirt-path floor, 1..JUNGLE_WALL_VARIANTS = interior canopy
+// variants (hash-picked per cell), JUNGLE_WALL_TOP = lit canopy top-edge used
+// where a wall cell is exposed to open floor above.
+const JUNGLE_TILE_SRC = 16;
+const JUNGLE_WALL_VARIANTS = 6;
+const JUNGLE_WALL_TOP = 7;
 const SPRITE_DIR_ROW: Record<Facing, number> = {
   down: 0,
   right: 1,
@@ -126,6 +140,7 @@ export class Renderer {
   private playerSprite: HTMLImageElement;
   private familySprites: HTMLImageElement[];
   private beastSprites: Record<EnemyType, HTMLImageElement>;
+  private jungleTiles: HTMLImageElement;
   // Render-side movement tracking so beast sprites face their walk direction
   // and idle on the stand frame. Rebuilt every frame from the live enemy
   // list (no leak across deaths/rooms); purely visual — AI owns real motion.
@@ -158,6 +173,7 @@ export class Renderer {
       snake: load(snakeSpriteUrl),
       gibbon: load(gibbonSpriteUrl),
     };
+    this.jungleTiles = load(jungleTilesUrl);
   }
 
   renderLevel(level: Level) {
@@ -165,28 +181,35 @@ export class Renderer {
     
     for (let y = 0; y < level.getHeight(); y++) {
       for (let x = 0; x < level.getWidth(); x++) {
-        const pixelX = x * 32;
-        const pixelY = y * 32;
+        const pixelX = x * TILE_SIZE;
+        const pixelY = y * TILE_SIZE;
         
-        if (walls[y][x]) {
-          // Render tree (green blocks with collision)
-          this.ctx.fillStyle = '#228B22';
-          this.ctx.fillRect(pixelX, pixelY, 32, 32);
-
-          // Add tree texture
-          this.ctx.fillStyle = '#32CD32';
-          this.ctx.fillRect(pixelX + 2, pixelY + 2, 28, 28);
-
-          // Add tree highlights
-          this.ctx.fillStyle = '#90EE90';
-          this.ctx.fillRect(pixelX + 4, pixelY + 4, 4, 4);
-          this.ctx.fillRect(pixelX + 24, pixelY + 12, 4, 4);
-          this.ctx.fillRect(pixelX + 12, pixelY + 24, 4, 4);
+        // Atlas tile 0 is the dirt path (floor). Wall (tree) cells use the lit
+        // canopy top-edge when open floor is directly above, else an interior
+        // canopy variant chosen by a deterministic per-cell hash so a run of
+        // wall reads as organic foliage rather than a regular grid. 16px source
+        // cells upscale to TILE_SIZE (imageSmoothingEnabled is already false, so
+        // the ×2 stays crisp).
+        let atlasIndex: number;
+        if (!walls[y][x]) {
+          atlasIndex = 0;
+        } else if (y === 0 || !walls[y - 1][x]) {
+          atlasIndex = JUNGLE_WALL_TOP;
         } else {
-          // Solid pathway tile — single tan fill, no accents.
-          this.ctx.fillStyle = '#D2B48C';
-          this.ctx.fillRect(pixelX, pixelY, 32, 32);
+          const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+          atlasIndex = 1 + (hash % JUNGLE_WALL_VARIANTS);
         }
+        this.ctx.drawImage(
+          this.jungleTiles,
+          atlasIndex * JUNGLE_TILE_SRC,
+          0,
+          JUNGLE_TILE_SRC,
+          JUNGLE_TILE_SRC,
+          pixelX,
+          pixelY,
+          TILE_SIZE,
+          TILE_SIZE,
+        );
       }
     }
   }
