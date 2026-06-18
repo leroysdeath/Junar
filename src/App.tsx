@@ -614,10 +614,24 @@ function App() {
             </div>
 
             {/* Credits — a small link tucked into the bottom-right corner of
-                the menu overlay instead of the main button stack. */}
+                the menu overlay instead of the main button stack. When the root
+                is force-rotated into landscape the menu's "bottom-right" maps to
+                the physical bottom-left of the phone, and the landscape's right
+                edge lands at the physical bottom where Safari's toolbar / home
+                indicator sit — clipping the label to "Cred…". So we inset it the
+                same way the in-play A/B buttons do (safe-area + toolbar
+                clearance) to keep it fully on-screen. */}
             <button
               onClick={() => setShowCredits(true)}
-              className="absolute bottom-3 right-3 text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+              className="absolute text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+              style={{
+                bottom: forceLandscape
+                  ? 'calc(env(safe-area-inset-left, 0px) + 0.75rem)'
+                  : '0.75rem',
+                right: forceLandscape
+                  ? 'calc(env(safe-area-inset-bottom, 0px) + 5rem)'
+                  : '0.75rem',
+              }}
             >
               Credits
             </button>
