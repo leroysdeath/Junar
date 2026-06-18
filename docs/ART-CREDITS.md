@@ -9,8 +9,11 @@ Steam-page credits screen when it gets built.
 
 ## CC-BY attributions (required)
 
-### Family sprites — wife, son, daughter
+### Family sprites — wife, son, daughter (RETIRED 2026-06-15)
 
+- **Status: RETIRED 2026-06-15** — replaced by Time Elements modular composites
+  (see the paid royalty-free section below); these Antifarea sheets no longer
+  ship. Attribution retained here for provenance.
 - **Titles:** "Twelve 16x18 RPG sprites, plus base" (wife — female Townfolk)
   and "Twelve more characters + 3 free characters and a child template"
   (son — Child M; daughter — Child F)
@@ -53,6 +56,44 @@ Steam-page credits screen when it gets built.
 
 ## Paid royalty-free licenses (recorded, attribution optional)
 
+### Player sprite — Adivasi archer
+
+- **Status: LANDED 2026-06-15** (owner reopened the player sprite 2026-06-14,
+  paid OK; Core Set purchased on itch.io 2026-06-15). Replaces the prior
+  ArMM1998 CC0 sheet.
+- **Title:** "Time Elements: Character Core Set" ($20)
+- **Author:** Jason Perry (finalbossblues), timefantasy.net — the same art line
+  as the beasts and the jungle tileset.
+- **Source:** https://finalbossblues.itch.io/time-elements-character-core-set
+- **License:** Time Fantasy royalty-free terms (creator's published statement on
+  the product page): "you are welcome to use these assets in any commercial
+  project … no restrictions on how you use them within your game"; recolors and
+  edits allowed; no standalone redistribution of the raw assets. Listing tagged
+  "No generative AI was used" and carries no AI-adjacency clause (clean for this
+  AI-assisted repo).
+- **Changes:** composited from modular pieces (head1 + bottom1 + top10 + hair7)
+  recolored to the Adivasi palette (deep warm-brown skin, black hair, cream
+  tunic, dark dhoti, dark eyes); the `bow1` stave seated in the offhand per
+  facing as a wood-recolored overlay; walk frames repacked into a 64×128 sheet
+  (4 columns stand/step/stand/step × 4 direction rows down/right/up/left of
+  16×32). Shipped as `src/assets/player-sprite.png`.
+- **Courtesy credit line (optional):** "Character sprites: Time Fantasy by Jason
+  Perry (finalbossblues), timefantasy.net."
+
+### Family sprites — wife, son, daughter
+
+- **Status: LANDED 2026-06-15** (rebuilt to match the new player; the prior
+  Antifarea CC-BY sheets retired — see the CC-BY section above).
+- **Source:** "Time Elements: Character Core Set" (finalbossblues / Jason Perry)
+  — same pack and license as the player sprite above.
+- **Changes:** modular composites recolored to the Adivasi palette — wife
+  (`head1+bottom5+top10+hair10`): long black hair, red dress, deep-brown skin;
+  son (`head1+bottom1+top6+hair4`): short hair, red tunic, dark shorts; daughter
+  (`head1+bottom5+top10+hair11`): long hair, turmeric-ochre dress. Repacked into
+  48×128 sheets (3 walk columns × 4 direction rows down/right/up/left of 16×32).
+  Shipped as `src/assets/sprites/family-wife.png`, `family-son.png`,
+  `family-daughter.png`.
+
 ### Beast sprites — panther, bear, gibbon
 
 - **Status: LANDED 2026-06-12** (owner purchased on itch.io 2026-06-11).
@@ -77,13 +118,38 @@ Steam-page credits screen when it gets built.
 - **Courtesy credit line (optional):** "Animal sprites: Time Fantasy by
   Jason Perry (finalbossblues), timefantasy.net."
 
+### Environment — Jungle Tileset (tree walls + dirt floor)
+
+- **Status: LANDED 2026-06-15** (Tier 3 reopened and greenlit by the owner the
+  same day; tree walls + dirt floor only — the hut stays procedural).
+- **Title:** "Jungle Tileset" — a free Time Fantasy mini-expansion (Patreon
+  goal release).
+- **Author:** Jason Perry (finalbossblues), timefantasy.net
+- **Source:** https://finalbossblues.itch.io/tf-jungle-tileset
+- **License:** Time Fantasy "free graphics" royalty-free terms (creator's
+  published statement, finalbossblues.com): "using them in commercial projects
+  is fine. Edit them all you want. No credit necessary." Commercial use + edits
+  allowed; only direct redistribution of the raw assets is prohibited. Free /
+  name-your-own-price. NOT share-alike / NC / ND; the itch listing is tagged
+  "No generative AI was used."
+- **Changes:** from the plain 16px tilesheet, built a small in-repo atlas
+  `src/assets/sprites/jungle-tiles.png` — tile 0 = dirt-path floor recolored
+  from the set's seamless grass autotile (green→earth ramp); tiles 1–6 =
+  pure-leaf canopy interior tiles (sheet cols 11–13, rows 6–7), hash-picked
+  per cell in `Renderer.renderLevel` to avoid a regular grid; tile 7 = a lit
+  canopy top-edge (top rows brightened) drawn where a wall is exposed to floor
+  above. 16px tiles upscaled ×2 to the 32px grid.
+- **Courtesy credit line (optional):** "Jungle tileset: Time Fantasy by Jason
+  Perry (finalbossblues), timefantasy.net."
+
 ---
 
 ## CC0 assets (no attribution required; logged for provenance)
 
 - **Player sprite** — ArMM1998, "Zelda-like tilesets and sprites"
   (https://opengameart.org/content/zelda-like-tilesets-and-sprites), CC0.
-  Recolored to the Adivasi-coded archer. In use since 2026-05-10.
+  Recolored to the Adivasi-coded archer. In use 2026-05-10 → 2026-06-15;
+  **replaced** by the Time Elements composite above (no longer shipped).
 
 All assets above were verified human-made (no generative AI) at sourcing
 time per the policy in `docs/ART-ASSETS.md`.

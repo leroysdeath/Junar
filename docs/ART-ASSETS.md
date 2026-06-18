@@ -151,19 +151,29 @@ Cultural-representation guardrails (CLAUDE.md §9, `protagonist-and-family-tone`
 skill) apply to every candidate sheet; when in doubt, show the owner before
 committing.
 
-## Tier 3 — Environment tiles (NOT GREENLIT — stays procedural)
+## Tier 3 — Environment tiles (PARTIAL — tree walls + floor GREENLIT 2026-06-15 & LANDED; hut NOT greenlit)
 
-**Status: not greenlit (owner decision 2026-06-11).** Tree walls, floor, and
-hut keep their procedural rendering. Do not source or land tiles for this
-tier without a fresh owner decision.
+**Status: partial.** Tree walls + dirt floor were reopened and **greenlit
+2026-06-15** and **landed** the same day; the **hut** remains procedural (not
+greenlit). Source: the free **"Jungle Tileset"** Time Fantasy mini-expansion
+by Jason Perry (finalbossblues),
+https://finalbossblues.itch.io/tf-jungle-tileset — royalty-free commercial +
+edits, human-made ("No generative AI was used"), credited in
+`docs/ART-CREDITS.md`. Built into `src/assets/sprites/jungle-tiles.png` (16px
+tiles drawn ×2 to the 32px grid): dirt-path floor recolored from the set's
+seamless grass autotile; 6 pure-leaf canopy interior tiles hash-picked per
+cell in `Renderer.renderLevel` to avoid a regular grid; a lit canopy top-edge
+drawn where a wall is exposed to open floor above. Verified in-engine
+(corridor-readability spike + live dev-server screenshots). Do not land
+**hut** tiles without a fresh owner decision.
 
 The most visible swap per pixel: every frame is mostly walls and floor.
 
 | Key | Replaces | Sheet spec | Identity / direction |
 |-----|----------|------------|----------------------|
-| `tree-wall` | wall branch of `renderLevel` | 32×32 tile (single tile; autotiling/edge variants are explicitly out of scope for the first pass) | Dense jungle canopy/trunk block — must read as "impassable tree", not hedge |
-| `floor-dirt` | floor branch of `renderLevel` | 32×32 tile, 1–3 subtle variants max | Tan jungle path — must stay quiet so entities pop (readability pillar) |
-| `hut` | `renderHuts` | single ~32×32 (or 2×2-tile) image | Family hut — thatch/wood, pre-industrial, warm |
+| `jungle-tiles` (walls) | wall branch of `renderLevel` | ✅ LANDED 2026-06-15 — 6 hash-picked 16px canopy interior tiles + a lit top-edge, atlas tiles 1–7 | Dense jungle canopy — reads as impassable tree, not hedge |
+| `jungle-tiles` (floor) | floor branch of `renderLevel` | ✅ LANDED 2026-06-15 — dirt recolored from the set's grass autotile, atlas tile 0 | Tan jungle path — stays quiet so entities pop (readability pillar) |
+| `hut` | `renderHuts` | ❌ still procedural (not greenlit) | Family hut — thatch/wood, pre-industrial, warm |
 
 ArMM1998's pack (the player sprite's source) includes LTTP-style tilesets —
 first candidate for guaranteed coherence.
