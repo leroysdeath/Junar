@@ -55,7 +55,7 @@ Every change must serve at least one of these. If a proposed change weakens a pi
 | snake   | 68           | Indian rat snake — easy to outrun (0.45× player); thin slither sprite |
 | gibbon  | 34           | Hoolock gibbon — long-armed jungle primate; near-stationary creeper (0.23×) |
 
-Enemy pathfinding repolls every 200 ms (cross-room `hunting` enemies re-poll every frame so pursuit doesn't waver at doorways — owner decision 2026-06-13); direct path if clear, else best cardinal step.
+Enemy pathfinding repolls every 200 ms (cross-room `hunting` enemies re-poll every frame so pursuit doesn't waver at doorways — owner decision 2026-06-13); direct path if clear, else a **BFS shortest route** over the room's tile grid, path-smoothed to aim at the farthest route tile reachable by a clear ray (the greedy best-cardinal step is now only an unreachable-target fallback — greedy-only trapped fast chasers like the panther in local minima against a wall, oscillating in place instead of routing around it; fixed 2026-06-18).
 
 Enemies also carry a **Hunt state** (`src/game/Hunt.ts`, traversable-maps Step 4): `dormant → activating → active → hunting`. Wave spawns start `active` (in-room pursuit); when the player leaves a room its active enemies become `hunting` and chase the player room-to-room through openings (no despawn), de-aggroing back to a dormant static once the player's room is more than 3 rooms (Manhattan) away (`HUNT_RANGE` bumped 2 → 3 on 2026-06-13 so fast hunters run the player down instead of giving up as they close). Dormant/activating sitters hold position until woken. See `docs/ROADMAP-traversable-maps.md` §5.11–5.12. (Static placement and the de-aggro BFS settlement landed in Step 5+6: statics roll from template candidates on the player's first entry to a room, and a de-aggroing hunter is relocated via a map-wide BFS to the nearest compatible open tile.)
 
@@ -232,7 +232,7 @@ src/
 └── game/                         All game logic — pure TS, no React
     ├── Game.ts                   Orchestrator: game loop, room grid + LTTP transitions, arrow firing, collisions, statics, stamina, burst, dash, boss-arena win trigger
     ├── Player.ts                 Player position, movement, wall collision, dash teleport, cardinal facing, setPosition
-    ├── Enemy.ts                  Enemy AI (direct pathfinding + cardinal-fallback, entry mode for wave spawns)
+    ├── Enemy.ts                  Enemy AI (direct path → BFS shortest route around walls, path-smoothed; greedy cardinal only as unreachable fallback; entry mode for wave spawns)
     ├── Hunt.ts                   Hunt-state machine (dormant/activating/active/hunting): room enter/leave transitions, cross-room hunting, BFS de-aggro settlement hook
     ├── Level.ts                  Tilemap, isWall(), spawn helpers (player + enemies), NPC/hut positions
     ├── levels.ts                 Hardcoded ASCII grids for the 10 anchor levels + global wave-pool templates
