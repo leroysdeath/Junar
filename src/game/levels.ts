@@ -27,7 +27,9 @@ interface ParsedLevel {
 // 'H' = hut marker (placeholder; treated as floor).
 function parseLevel(grid: string[]): ParsedLevel {
   if (grid.length !== GRID_HEIGHT) {
-    throw new Error(`Level grid must have ${GRID_HEIGHT} rows; got ${grid.length}`);
+    throw new Error(
+      `Level grid must have ${GRID_HEIGHT} rows; got ${grid.length}`,
+    );
   }
   const walls: boolean[][] = [];
   const npcPositions: Vector2[] = [];
@@ -37,7 +39,7 @@ function parseLevel(grid: string[]): ParsedLevel {
     const row = grid[y];
     if (row.length !== GRID_WIDTH) {
       throw new Error(
-        `Level row ${y} must have ${GRID_WIDTH} cols; got ${row.length} ("${row}")`
+        `Level row ${y} must have ${GRID_WIDTH} cols; got ${row.length} ("${row}")`,
       );
     }
     walls[y] = [];
@@ -55,7 +57,7 @@ function parseLevel(grid: string[]): ParsedLevel {
         hutPositions.push({ x: x * TILE_SIZE, y: y * TILE_SIZE });
       } else {
         throw new Error(
-          `Unknown tile char "${ch}" at (${x},${y}) on row "${row}"`
+          `Unknown tile char "${ch}" at (${x},${y}) on row "${row}"`,
         );
       }
     }
@@ -93,24 +95,49 @@ function buildLevel(grid: string[], opts: BuildLevelOptions = {}): LevelData {
 // points inward — group rows beyond the front row stack at one-tile
 // spacing in the reverse direction.
 const TOP_BAND: BandSpec = {
-  rect: { x: 13 * TILE_SIZE, y: -TILE_SIZE, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  rect: {
+    x: 13 * TILE_SIZE,
+    y: -TILE_SIZE,
+    width: 3 * TILE_SIZE,
+    height: TILE_SIZE,
+  },
   entryDirection: { x: 0, y: 1 },
 };
 const BOTTOM_BAND: BandSpec = {
-  rect: { x: 13 * TILE_SIZE, y: CANVAS_HEIGHT, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  rect: {
+    x: 13 * TILE_SIZE,
+    y: CANVAS_HEIGHT,
+    width: 3 * TILE_SIZE,
+    height: TILE_SIZE,
+  },
   entryDirection: { x: 0, y: -1 },
 };
 const LEFT_BAND: BandSpec = {
-  rect: { x: -TILE_SIZE, y: 7 * TILE_SIZE, width: TILE_SIZE, height: 3 * TILE_SIZE },
+  rect: {
+    x: -TILE_SIZE,
+    y: 7 * TILE_SIZE,
+    width: TILE_SIZE,
+    height: 3 * TILE_SIZE,
+  },
   entryDirection: { x: 1, y: 0 },
 };
 const RIGHT_BAND: BandSpec = {
-  rect: { x: CANVAS_WIDTH, y: 7 * TILE_SIZE, width: TILE_SIZE, height: 3 * TILE_SIZE },
+  rect: {
+    x: CANVAS_WIDTH,
+    y: 7 * TILE_SIZE,
+    width: TILE_SIZE,
+    height: 3 * TILE_SIZE,
+  },
   entryDirection: { x: -1, y: 0 },
 };
 // L1's top entryway is offset right (cols 20-22) rather than centered.
 const L1_TOP_BAND: BandSpec = {
-  rect: { x: 20 * TILE_SIZE, y: -TILE_SIZE, width: 3 * TILE_SIZE, height: TILE_SIZE },
+  rect: {
+    x: 20 * TILE_SIZE,
+    y: -TILE_SIZE,
+    width: 3 * TILE_SIZE,
+    height: TILE_SIZE,
+  },
   entryDirection: { x: 0, y: 1 },
 };
 
@@ -180,11 +207,7 @@ const T_1BEAR: SpawnTemplate = {
 };
 const T_1BEAR_4SNAKE: SpawnTemplate = {
   id: 'g-1bear-4snake',
-  rows: [
-    ['bear'],
-    ['snake', 'snake'],
-    ['snake', 'snake'],
-  ],
+  rows: [['bear'], ['snake', 'snake'], ['snake', 'snake']],
 };
 const T_2PANTHER_1BEAR: SpawnTemplate = {
   id: 'g-2panther-1bear',
@@ -560,7 +583,12 @@ export function initializeLevels(): LevelData[] {
         }
         return levelData.walls[y][x];
       },
-      isPositionSafe(x: number, y: number, w = TILE_SIZE, h = TILE_SIZE): boolean {
+      isPositionSafe(
+        x: number,
+        y: number,
+        w = TILE_SIZE,
+        h = TILE_SIZE,
+      ): boolean {
         const gx1 = Math.floor(x / TILE_SIZE);
         const gy1 = Math.floor(y / TILE_SIZE);
         const gx2 = Math.floor((x + w - 1) / TILE_SIZE);
@@ -609,13 +637,11 @@ export function initializeLevels(): LevelData[] {
     const enemyTypes = ['panther', 'snake', 'gibbon', 'bear'] as const;
     const minDistanceFromPlayer = 128;
 
-    const validPositions = tempLevel
-      .getEdgeSpawnPositions()
-      .filter((pos) => {
-        const dx = pos.x - playerCenter.x;
-        const dy = pos.y - playerCenter.y;
-        return Math.sqrt(dx * dx + dy * dy) >= minDistanceFromPlayer;
-      });
+    const validPositions = tempLevel.getEdgeSpawnPositions().filter((pos) => {
+      const dx = pos.x - playerCenter.x;
+      const dy = pos.y - playerCenter.y;
+      return Math.sqrt(dx * dx + dy * dy) >= minDistanceFromPlayer;
+    });
 
     const spawns: Array<{
       pos: Vector2;

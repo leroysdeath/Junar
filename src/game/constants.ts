@@ -13,7 +13,7 @@ export const GRID_HEIGHT = 17;
 export const CENTER_SPAWN: Vector2 = { x: 448, y: 256 };
 // Real-world scale: 1 tile (32 px) ≈ 5.5 ft (adult male archer height)
 export const FEET_PER_TILE = 5.5;
-export const MAP_WIDTH_FEET = GRID_WIDTH * FEET_PER_TILE;   // 159.5 ft
+export const MAP_WIDTH_FEET = GRID_WIDTH * FEET_PER_TILE; // 159.5 ft
 export const MAP_HEIGHT_FEET = GRID_HEIGHT * FEET_PER_TILE; // 93.5 ft
 // 360-degree LOS detection range (auto-fire and contact-death share this radius).
 export const MAX_DETECTION_RANGE = 450;
@@ -23,6 +23,11 @@ export const ARROW_COOLDOWN_MS = 500;
 // Player movement. Promoted from Player.ts so the stamina low-penalty and
 // any future buffs can compose against a single source of truth.
 export const PLAYER_SPEED = 150; // pixels per second
+
+// Enemy AI pathfinding repoll cadence: each enemy re-derives its pursuit
+// target at most this often (Enemy.update), moving toward the cached target
+// between repolls. Promoted from an inline literal in Enemy.ts.
+export const ENEMY_PATHFIND_REPOLL_MS = 200;
 
 // Stamina pool — playthrough-wide, no regen, persists across all levels in
 // a run. Resets to STAMINA_MAX only on Game.restart().

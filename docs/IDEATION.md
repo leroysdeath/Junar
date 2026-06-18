@@ -96,7 +96,7 @@ or reset on level start?
 
 **Status:** Shipped 2026-05-10 as the dash teleport (CLAUDE.md §5);
 entry trimmed per the exit process below. What shipped: 3-tile blink
-opposite the player's facing, 0.5 stamina per use, Shift/A, no iframes,
+opposite the player's facing, 0.5 stamina per use, Shift (mobile A button), no iframes,
 walls block (the blink stops at the last open tile before a wall).
 
 ---

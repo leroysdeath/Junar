@@ -21,7 +21,7 @@ interface MobileControlsProps {
 function screenPointToLocal(
   x: number,
   y: number,
-  forceLandscape: boolean
+  forceLandscape: boolean,
 ): { left: number; top: number } {
   if (!forceLandscape) return { left: x, top: y };
   return { left: y, top: window.innerWidth - x };
@@ -33,7 +33,7 @@ function screenPointToLocal(
 function vectorToGameFrame(
   dx: number,
   dy: number,
-  forceLandscape: boolean
+  forceLandscape: boolean,
 ): { gx: number; gy: number } {
   if (!forceLandscape) return { gx: dx, gy: dy };
   return { gx: dy, gy: -dx };
@@ -86,7 +86,11 @@ interface JoystickZoneProps {
 // floating joystick at the touch point; the stick follows the finger (clamped),
 // and we keep pointer capture so drift off the origin (even onto the right half)
 // keeps tracking until the finger lifts.
-function JoystickZone({ onPress, onRelease, forceLandscape }: JoystickZoneProps) {
+function JoystickZone({
+  onPress,
+  onRelease,
+  forceLandscape,
+}: JoystickZoneProps) {
   const pointerIdRef = useRef<number | null>(null);
   const originRef = useRef<{ x: number; y: number } | null>(null);
   // Which cardinals are currently asserted, so we only emit press/release on
@@ -110,7 +114,7 @@ function JoystickZone({ onPress, onRelease, forceLandscape }: JoystickZoneProps)
         }
       });
     },
-    [onPress, onRelease]
+    [onPress, onRelease],
   );
 
   const releaseAll = useCallback(() => {
@@ -131,14 +135,15 @@ function JoystickZone({ onPress, onRelease, forceLandscape }: JoystickZoneProps)
     const dx = e.clientX - originRef.current.x;
     const dy = e.clientY - originRef.current.y;
     const mag = Math.hypot(dx, dy);
-    const scale = mag > JOYSTICK_MAX_RADIUS_PX ? JOYSTICK_MAX_RADIUS_PX / mag : 1;
+    const scale =
+      mag > JOYSTICK_MAX_RADIUS_PX ? JOYSTICK_MAX_RADIUS_PX / mag : 1;
     // Directions are computed in the game frame so swipes match what the player
     // sees; the visual stick still tracks the raw screen displacement (sx/sy),
     // re-mapped to the rotated root only at render time.
     const { gx, gy } = vectorToGameFrame(dx, dy, forceLandscape);
     applyDirections(dirsFromVector(gx, gy));
     setStick((prev) =>
-      prev ? { ...prev, sx: dx * scale, sy: dy * scale } : prev
+      prev ? { ...prev, sx: dx * scale, sy: dy * scale } : prev,
     );
   };
 
@@ -169,41 +174,42 @@ function JoystickZone({ onPress, onRelease, forceLandscape }: JoystickZoneProps)
       onPointerCancel={endPointer}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {stick && (() => {
-        // ox/oy and the clamped sx/sy are stored in screen space; map both the
-        // ring origin and the stick tip into the (possibly rotated) root frame
-        // so they render under the finger in landscape and portrait alike.
-        const base = screenPointToLocal(stick.ox, stick.oy, forceLandscape);
-        const tip = screenPointToLocal(
-          stick.ox + stick.sx,
-          stick.oy + stick.sy,
-          forceLandscape
-        );
-        return (
-          <>
-            <div
-              className="fixed rounded-full border-2 border-amber-300/50 bg-amber-200/10 pointer-events-none"
-              style={{
-                left: base.left,
-                top: base.top,
-                width: JOYSTICK_BASE_PX,
-                height: JOYSTICK_BASE_PX,
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-            <div
-              className="fixed rounded-full bg-amber-400/60 border-2 border-amber-200/70 pointer-events-none"
-              style={{
-                left: tip.left,
-                top: tip.top,
-                width: JOYSTICK_STICK_PX,
-                height: JOYSTICK_STICK_PX,
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-          </>
-        );
-      })()}
+      {stick &&
+        (() => {
+          // ox/oy and the clamped sx/sy are stored in screen space; map both the
+          // ring origin and the stick tip into the (possibly rotated) root frame
+          // so they render under the finger in landscape and portrait alike.
+          const base = screenPointToLocal(stick.ox, stick.oy, forceLandscape);
+          const tip = screenPointToLocal(
+            stick.ox + stick.sx,
+            stick.oy + stick.sy,
+            forceLandscape,
+          );
+          return (
+            <>
+              <div
+                className="fixed rounded-full border-2 border-amber-300/50 bg-amber-200/10 pointer-events-none"
+                style={{
+                  left: base.left,
+                  top: base.top,
+                  width: JOYSTICK_BASE_PX,
+                  height: JOYSTICK_BASE_PX,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+              <div
+                className="fixed rounded-full bg-amber-400/60 border-2 border-amber-200/70 pointer-events-none"
+                style={{
+                  left: tip.left,
+                  top: tip.top,
+                  width: JOYSTICK_STICK_PX,
+                  height: JOYSTICK_STICK_PX,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+            </>
+          );
+        })()}
     </div>
   );
 }

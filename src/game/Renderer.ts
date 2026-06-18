@@ -2,11 +2,7 @@ import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
 import { EnemyType, Facing, Vector2 } from './types';
-import {
-  TILE_SIZE,
-  ENEMY_AABB_PX,
-  BOSS_GROWTH_CENTER,
-} from './constants';
+import { TILE_SIZE, ENEMY_AABB_PX, BOSS_GROWTH_CENTER } from './constants';
 // Player sprite: composited from Time Elements "Character Core Set"
 // (finalbossblues / Jason Perry, timefantasy.net) — paid royalty-free, the
 // same art line as the beasts and jungle tileset. Modular pieces
@@ -92,28 +88,60 @@ const ENEMY_VISUAL_SCALE_FLOOR = 0.5;
 interface BeastSheetSpec {
   cellW: number;
   cellH: number;
-  eyes: { down: [number, number][]; right: [number, number][]; left: [number, number][] };
+  eyes: {
+    down: [number, number][];
+    right: [number, number][];
+    left: [number, number][];
+  };
 }
 const BEAST_SHEET: Record<EnemyType, BeastSheetSpec> = {
   panther: {
     cellW: 38,
     cellH: 28,
-    eyes: { down: [[14, 7], [19, 7]], right: [[31, 7]], left: [[5, 7]] },
+    eyes: {
+      down: [
+        [14, 7],
+        [19, 7],
+      ],
+      right: [[31, 7]],
+      left: [[5, 7]],
+    },
   },
   bear: {
     cellW: 38,
     cellH: 26,
-    eyes: { down: [[15, 8], [21, 8]], right: [[30, 8]], left: [[6, 8]] },
+    eyes: {
+      down: [
+        [15, 8],
+        [21, 8],
+      ],
+      right: [[30, 8]],
+      left: [[6, 8]],
+    },
   },
   snake: {
     cellW: 16,
     cellH: 16,
-    eyes: { down: [[4, 8], [10, 8]], right: [[9, 7]], left: [[6, 7]] },
+    eyes: {
+      down: [
+        [4, 8],
+        [10, 8],
+      ],
+      right: [[9, 7]],
+      left: [[6, 7]],
+    },
   },
   gibbon: {
     cellW: 24,
     cellH: 28,
-    eyes: { down: [[8, 7], [13, 7]], right: [[15, 8]], left: [[4, 8]] },
+    eyes: {
+      down: [
+        [8, 7],
+        [13, 7],
+      ],
+      right: [[15, 8]],
+      left: [[4, 8]],
+    },
   },
 };
 const BEAST_WALK_FRAME_MS = 170;
@@ -147,7 +175,10 @@ export class Renderer {
   // Render-side movement tracking so beast sprites face their walk direction
   // and idle on the stand frame. Rebuilt every frame from the live enemy
   // list (no leak across deaths/rooms); purely visual — AI owns real motion.
-  private beastTrack = new Map<number, { x: number; y: number; facing: Facing }>();
+  private beastTrack = new Map<
+    number,
+    { x: number; y: number; facing: Facing }
+  >();
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -159,7 +190,7 @@ export class Renderer {
     // Wife, son, daughter — N markers cycle through these by position index
     // so a 3-marker anchor shows the whole family, deterministically per room.
     this.familySprites = [familyWifeUrl, familySonUrl, familyDaughterUrl].map(
-      url => {
+      (url) => {
         const img = new Image();
         img.src = url;
         return img;
@@ -181,12 +212,12 @@ export class Renderer {
 
   renderLevel(level: Level) {
     const walls = level.getWalls();
-    
+
     for (let y = 0; y < level.getHeight(); y++) {
       for (let x = 0; x < level.getWidth(); x++) {
         const pixelX = x * TILE_SIZE;
         const pixelY = y * TILE_SIZE;
-        
+
         // Atlas tile 0 is the dirt path (floor). Wall (tree) cells use the lit
         // canopy top-edge when open floor is directly above, else an interior
         // canopy variant chosen by a deterministic per-cell hash so a run of
@@ -261,7 +292,7 @@ export class Renderer {
 
   renderEnemies(enemies: Enemy[], currentTime = 0) {
     const track = new Map<number, { x: number; y: number; facing: Facing }>();
-    enemies.forEach(enemy => {
+    enemies.forEach((enemy) => {
       const pos = enemy.getPosition();
       const type = enemy.getType();
 
@@ -287,7 +318,8 @@ export class Renderer {
 
       const frameCol = moving
         ? BEAST_WALK_CYCLE[
-            Math.floor(currentTime / BEAST_WALK_FRAME_MS) % BEAST_WALK_CYCLE.length
+            Math.floor(currentTime / BEAST_WALK_FRAME_MS) %
+              BEAST_WALK_CYCLE.length
           ]
         : BEAST_STAND_COL;
 
@@ -354,7 +386,12 @@ export class Renderer {
     if (facing !== 'up') {
       this.ctx.fillStyle = INFECTED_EYE_RED;
       for (const [ex, ey] of spec.eyes[facing]) {
-        this.ctx.fillRect(dx + Math.round(ex * k), dy + Math.round(ey * k), 2, 2);
+        this.ctx.fillRect(
+          dx + Math.round(ex * k),
+          dy + Math.round(ey * k),
+          2,
+          2,
+        );
       }
     }
   }
@@ -414,7 +451,7 @@ export class Renderer {
   renderHuts(positions: Vector2[]) {
     this.ctx.save();
     this.ctx.globalAlpha = 0.7;
-    positions.forEach(pos => {
+    positions.forEach((pos) => {
       // Hut base (woven walls)
       this.ctx.fillStyle = '#8B6F47';
       this.ctx.fillRect(pos.x + 4, pos.y + 14, 24, 16);
@@ -439,7 +476,7 @@ export class Renderer {
   }
 
   renderArrows(arrows: Array<{ pos: Vector2; dir: Vector2; id: number }>) {
-    arrows.forEach(arrow => {
+    arrows.forEach((arrow) => {
       const arrowLength = 24;
       const arrowWidth = 4;
       const headLength = 6;
@@ -450,24 +487,29 @@ export class Renderer {
       this.ctx.save();
       this.ctx.translate(arrow.pos.x, arrow.pos.y);
       this.ctx.rotate(angle);
-      
+
       // Arrow shaft - solid dark brown for better visibility
       this.ctx.fillStyle = '#4a3c28';
-      this.ctx.fillRect(-arrowLength/2, -arrowWidth/2, arrowLength - headLength, arrowWidth);
-      
+      this.ctx.fillRect(
+        -arrowLength / 2,
+        -arrowWidth / 2,
+        arrowLength - headLength,
+        arrowWidth,
+      );
+
       // Arrow head - solid dark brown triangle
       this.ctx.fillStyle = '#4a3c28';
       this.ctx.beginPath();
-      this.ctx.moveTo(arrowLength/2, 0); // Point of arrow
-      this.ctx.lineTo(arrowLength/2 - headLength, -headWidth/2); // Top of head
-      this.ctx.lineTo(arrowLength/2 - headLength, headWidth/2); // Bottom of head
+      this.ctx.moveTo(arrowLength / 2, 0); // Point of arrow
+      this.ctx.lineTo(arrowLength / 2 - headLength, -headWidth / 2); // Top of head
+      this.ctx.lineTo(arrowLength / 2 - headLength, headWidth / 2); // Bottom of head
       this.ctx.closePath();
       this.ctx.fill();
-      
+
       // Add arrow fletching for cardinal direction clarity
       this.ctx.fillStyle = '#8B4513';
-      this.ctx.fillRect(-arrowLength/2, -arrowWidth/4, 4, arrowWidth/2);
-      
+      this.ctx.fillRect(-arrowLength / 2, -arrowWidth / 4, 4, arrowWidth / 2);
+
       this.ctx.restore();
     });
   }
@@ -531,7 +573,7 @@ export class Renderer {
 
     this.ctx.save();
     this.ctx.globalAlpha = 0.6;
-    
+
     if (hasLineOfSight) {
       // Green glow when enemy is in sight
       this.ctx.strokeStyle = '#00FF00';
@@ -543,10 +585,10 @@ export class Renderer {
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([2, 2]);
     }
-    
+
     this.ctx.strokeRect(pos.x - 2, pos.y - 2, 36, 36);
     this.ctx.setLineDash([]); // Reset line dash
-    
+
     this.ctx.restore();
   }
 }

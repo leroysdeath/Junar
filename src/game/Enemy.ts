@@ -1,10 +1,17 @@
-import { Vector2, EnemyType, Rectangle, HuntState, RoomGridCoord } from './types';
+import {
+  Vector2,
+  EnemyType,
+  Rectangle,
+  HuntState,
+  RoomGridCoord,
+} from './types';
 import { Level } from './Level';
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   TILE_SIZE,
   ENEMY_AABB_PX,
+  ENEMY_PATHFIND_REPOLL_MS,
 } from './constants';
 
 export class Enemy {
@@ -109,6 +116,7 @@ export class Enemy {
 
   update(
     deltaTime: number,
+    currentTime: number,
     playerPosition: Vector2,
     level: Level,
     others: Enemy[] = [],
@@ -130,30 +138,38 @@ export class Enemy {
       if (this.isFullyInside()) {
         // Snap the 32 px cell to the canvas edge for a clean handoff into
         // grid collision.
-        if (this.entryDirection.y > 0 && this.position.y < 0) this.position.y = 0;
-        if (this.entryDirection.x > 0 && this.position.x < 0) this.position.x = 0;
-        if (this.entryDirection.y < 0 && this.position.y + TILE_SIZE > CANVAS_HEIGHT) this.position.y = CANVAS_HEIGHT - TILE_SIZE;
-        if (this.entryDirection.x < 0 && this.position.x + TILE_SIZE > CANVAS_WIDTH) this.position.x = CANVAS_WIDTH - TILE_SIZE;
+        if (this.entryDirection.y > 0 && this.position.y < 0)
+          this.position.y = 0;
+        if (this.entryDirection.x > 0 && this.position.x < 0)
+          this.position.x = 0;
+        if (
+          this.entryDirection.y < 0 &&
+          this.position.y + TILE_SIZE > CANVAS_HEIGHT
+        )
+          this.position.y = CANVAS_HEIGHT - TILE_SIZE;
+        if (
+          this.entryDirection.x < 0 &&
+          this.position.x + TILE_SIZE > CANVAS_WIDTH
+        )
+          this.position.x = CANVAS_WIDTH - TILE_SIZE;
         this.entering = false;
       }
       return;
     }
 
-    // NOTE: Date.now() here is a pre-existing Invariant 8 item slated for a
-    // separate fix (migrate to gameLoop currentTime); left untouched per the
-    // Step 2 scope.
-    const currentTime = Date.now();
-
-    // Update pathfinding target every 200ms — except for cross-room hunters,
-    // which re-poll every frame. Game.updateHunters feeds a 'hunting' enemy a
-    // fresh door target each frame; throttling to 200ms left it steering toward
-    // a stale door (up to ~79 px of misdirected travel for a panther) and
-    // wavering at openings, a big part of why pursuit felt laggy (owner
-    // decision 2026-06-13: hunters should run the player down). The ray-sample
-    // to one in-room door cell is cheap enough to run every frame.
+    // Repoll the pursuit target on the gameLoop clock (Invariant 8 — this was
+    // the last wall-clock timestamp in src/game/ outside Logger.ts; the rAF
+    // clock is immune to pause/resume drift and OS clock changes) at most every
+    // ENEMY_PATHFIND_REPOLL_MS — except for cross-room hunters, which re-poll
+    // every frame. Game.updateHunters feeds a 'hunting' enemy a fresh door
+    // target each frame; throttling left it steering toward a stale door (up to
+    // ~79 px of misdirected travel for a panther) and wavering at openings, a
+    // big part of why pursuit felt laggy (owner decision 2026-06-13: hunters
+    // should run the player down). The ray-sample to one in-room door cell is
+    // cheap enough to run every frame.
     const repollNow =
       this.huntState === 'hunting' ||
-      currentTime - this.lastPathfindTime > 200;
+      currentTime - this.lastPathfindTime > ENEMY_PATHFIND_REPOLL_MS;
     if (repollNow) {
       this.targetPosition = this.findPathToPlayer(playerPosition, level);
       this.lastPathfindTime = currentTime;
@@ -179,10 +195,23 @@ export class Enemy {
       if (!this.collidesWall(newX, this.position.y, level)) candX = newX;
       if (!this.collidesWall(candX, newY, level)) candY = newY;
 
+      // Wall-pin escape: a 34 px bear's centred AABB overhangs its 32 px cell
+      // by 1 px, so one parked against a corridor's edge column clips the
+      // adjacent wall column on EVERY step — both axis moves reject and
+      // candX/candY never leave the current position. Assigning that
+      // zero-net-movement "success" below would freeze the bear permanently
+      // (the jitter fallback only fired on enemy-vs-enemy overlap), so an
+      // off-target (distance > 5) step the walls zeroed out routes to the
+      // same jitter-then-hold fallback and the bear slides off the wall
+      // toward the corridor centre. No-op for enemies that fit their cell:
+      // their per-axis resolution only zeroes out in a true dead end, where
+      // jitter holds position anyway.
+      const wallPinned = candX === this.position.x && candY === this.position.y;
+
       // Enemy-vs-enemy no-overlap (snake-snake exempt, §5.8). If the
       // wall-resolved step would overlap another enemy, reject it and jitter
       // to a random clear cardinal; hold position if none is clear.
-      if (!this.overlapsEnemy(candX, candY, others)) {
+      if (!wallPinned && !this.overlapsEnemy(candX, candY, others)) {
         this.position.x = candX;
         this.position.y = candY;
       } else {
@@ -210,7 +239,12 @@ export class Enemy {
   // overlapsEnemy). Used by the Hunt de-aggro settlement (Step 5+6) to test
   // candidate landing tiles before relocating a de-aggroing hunter, reusing the
   // exact Step 2 collision rules rather than duplicating them in Game.
-  canSettleAt(cellX: number, cellY: number, level: Level, others: Enemy[]): boolean {
+  canSettleAt(
+    cellX: number,
+    cellY: number,
+    level: Level,
+    others: Enemy[],
+  ): boolean {
     return (
       !this.collidesWall(cellX, cellY, level) &&
       !this.overlapsEnemy(cellX, cellY, others)
@@ -248,7 +282,11 @@ export class Enemy {
   // True if the centred AABB at the given cell top-left overlaps another
   // enemy. Snake-vs-snake overlap is allowed (writhing pile / pack, §5.8);
   // still-entering enemies are off-canvas and excluded as obstacles.
-  private overlapsEnemy(cellX: number, cellY: number, others: Enemy[]): boolean {
+  private overlapsEnemy(
+    cellX: number,
+    cellY: number,
+    others: Enemy[],
+  ): boolean {
     const box = this.aabbAt(cellX, cellY);
     for (const other of others) {
       if (other === this) continue;
@@ -299,7 +337,10 @@ export class Enemy {
     for (const d of dirs) {
       const jx = this.position.x + d.x * moveDistance;
       const jy = this.position.y + d.y * moveDistance;
-      if (!this.collidesWall(jx, jy, level) && !this.overlapsEnemy(jx, jy, others)) {
+      if (
+        !this.collidesWall(jx, jy, level) &&
+        !this.overlapsEnemy(jx, jy, others)
+      ) {
         this.position.x = jx;
         this.position.y = jy;
         return;

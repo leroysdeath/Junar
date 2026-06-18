@@ -24,10 +24,9 @@ Why it matters: `Date.now()` jumps when the OS clock changes (NTP sync, daylight
 
 ### Known deviations (don't copy these patterns)
 
-- `Enemy.update` reads `Date.now()` for the 200 ms pathfind repoll (`Enemy.ts:145`). It works today but should drift to `currentTime` when the file is touched — the in-code comment there already slates this migration. Don't add new `Date.now()` reads in `src/game/` — thread the loop time down instead.
-- `Game.levelStartedAt` and `Game.classifyGameOver` use `performance.now()` directly rather than the loop's `currentTime` (`Game.ts:280`, `Game.ts:1728`). Same story — works today, but the consistent pattern is to read from the loop.
+- `Game.levelStartedAt` and `Game.classifyGameOver` use `performance.now()` directly rather than the loop's `currentTime` (`Game.ts:280`, `Game.ts:1728`). Works today, but the consistent pattern is to read from the loop.
 
-If you're touching one of these files, prefer migrating to loop time over preserving the deviation.
+(The historical `Enemy.update` `Date.now()` pathfind repoll was migrated to the loop's `currentTime` on 2026-06-10 — `src/game/` outside `Logger.ts` is now wall-clock-free. Don't add new `Date.now()` reads; thread the loop time down instead.) If you're touching the remaining deviation's file, prefer migrating to loop time over preserving it.
 
 ## Cleanup discipline
 

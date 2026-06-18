@@ -1,5 +1,19 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, Target, Zap } from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react';
+import {
+  Play,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Target,
+  Zap,
+  X,
+} from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
@@ -93,9 +107,10 @@ async function exitFullscreen(): Promise<void> {
 
 // screen.orientation.lock/unlock are non-standard and absent from the DOM
 // typings, so reach them through a narrow structural cast rather than `any`.
-function orientationApi():
-  | { lock?: (o: string) => Promise<void>; unlock?: () => void }
-  | null {
+function orientationApi(): {
+  lock?: (o: string) => Promise<void>;
+  unlock?: () => void;
+} | null {
   if (typeof screen === 'undefined' || !screen.orientation) return null;
   return screen.orientation as unknown as {
     lock?: (o: string) => Promise<void>;
@@ -122,6 +137,98 @@ function unlockOrientation(): void {
   }
 }
 
+// Centered title-screen pop-up shell shared by How to Play and Credits. Covers
+// the menu, dismissed via the header ✕, the "Back to Title" button, a backdrop
+// click, or Escape. The body is height-capped and scrolls internally so long
+// content never clips on short frames (notably mobile landscape). Mirrors the
+// menu's mobile fixed / desktop absolute positioning, one layer above.
+function TitleModal({
+  title,
+  isMobile,
+  onClose,
+  children,
+  centerTitle = false,
+}: {
+  title: string;
+  isMobile: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  centerTitle?: boolean;
+}) {
+  // Escape-to-close. The listener lives for the modal's lifetime only (it
+  // mounts when open, unmounts when closed) so it never swallows keys during
+  // play. onClose is read through a ref so the subscription stays mount-once.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onClose}
+      className={`${isMobile ? 'fixed inset-0 z-[60]' : 'absolute inset-0 z-20'} bg-black/95 flex items-center justify-center p-4`}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg text-left shadow-2xl"
+      >
+        <div
+          className={`flex items-center border-b border-amber-500/40 px-6 py-3 shrink-0 ${
+            centerTitle ? 'relative justify-center' : 'justify-between'
+          }`}
+        >
+          <h3 className="text-amber-400 font-bold text-lg">{title}</h3>
+          <button
+            onClick={onClose}
+            aria-label={`Close ${title}`}
+            className={`text-amber-300 hover:text-amber-100 transition-colors ${
+              centerTitle ? 'absolute right-6 top-1/2 -translate-y-1/2' : ''
+            }`}
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto text-sm text-amber-100 px-6 py-4">
+          {children}
+        </div>
+        <div className="border-t border-amber-500/40 px-6 py-3 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-2.5 px-8 rounded-lg transition-all duration-200 text-base border-2 border-amber-500"
+          >
+            Back to Title
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Clickable attribution link used in the Credits modal. Opens in a new tab
+// with noopener/noreferrer. (When the game is later wrapped in Tauri, external
+// links will route through the shell opener instead of a browser tab — a
+// post-prototype concern; standard for the current web build.)
+function CreditLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-amber-300 underline underline-offset-2 hover:text-amber-100 transition-colors"
+    >
+      {children}
+    </a>
+  );
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -138,6 +245,7 @@ function App() {
   const [, setEnemiesRemaining] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
   const [burst, setBurst] = useState({ active: false, multiplier: 1 });
   // Boss-arena sub-state (Step 9): true while the player is inside anchor 10.
@@ -159,14 +267,13 @@ function App() {
   // the 928×544 board into the frame's height; the two axes swap when we've
   // force-rotated the frame 90°. p-4 (1rem each side) is subtracted so the
   // board clears the root padding.
-  const canvasFitStyle =
-    isMobile
-      ? {
-          maxWidth: forceLandscape
-            ? 'min(calc(100vh - 2rem), calc((100vw - 2rem) * 928 / 544))'
-            : 'min(calc(100vw - 2rem), calc((100vh - 2rem) * 928 / 544))',
-        }
-      : undefined;
+  const canvasFitStyle = isMobile
+    ? {
+        maxWidth: forceLandscape
+          ? 'min(calc(100vh - 2rem), calc((100vw - 2rem) * 928 / 544))'
+          : 'min(calc(100vw - 2rem), calc((100vh - 2rem) * 928 / 544))',
+      }
+    : undefined;
 
   const handleMobilePress = useCallback((dir: Direction) => {
     gameRef.current?.setVirtualInput(dir, true);
@@ -210,7 +317,7 @@ function App() {
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
-        soundEnabled
+        soundEnabled,
       });
       gameRef.current.start();
     }
@@ -234,6 +341,17 @@ function App() {
     setSoundEnabled(!soundEnabled);
     if (gameRef.current) {
       gameRef.current.setSoundEnabled(!soundEnabled);
+    }
+  };
+
+  // Return to the title screen via the Game instance so its internal state
+  // and the audio scene (menu music) follow; Game echoes the change back
+  // through onStateChange. Falls back to a bare state swap pre-init.
+  const goToMenu = () => {
+    if (gameRef.current) {
+      gameRef.current.returnToMenu();
+    } else {
+      setGameState('menu');
     }
   };
 
@@ -283,7 +401,10 @@ function App() {
     // Stamina bar fill — red when low, warm gold while bursting, amber
     // otherwise. Width is rounded so the bar visibly steps as the value
     // crosses each percent boundary.
-    const fillPct = Math.max(0, Math.min(100, (stamina.value / STAMINA_MAX) * 100));
+    const fillPct = Math.max(
+      0,
+      Math.min(100, (stamina.value / STAMINA_MAX) * 100),
+    );
     const fillColor = stamina.isLow
       ? 'bg-red-500'
       : burst.active
@@ -294,14 +415,12 @@ function App() {
         <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
           <div className="flex items-center gap-2 text-sm">
             <Target size={16} className="text-amber-400" />
-            <span>Room ({roomCoord.col}, {roomCoord.row})</span>
+            <span>
+              Room ({roomCoord.col}, {roomCoord.row})
+            </span>
           </div>
-          <div className="text-xs text-amber-300 mt-1">
-            Wave: {waveNum}
-          </div>
-          <div className="text-xs text-amber-300">
-            Killed: {kills}
-          </div>
+          <div className="text-xs text-amber-300 mt-1">Wave: {waveNum}</div>
+          <div className="text-xs text-amber-300">Killed: {kills}</div>
         </div>
 
         <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px]">
@@ -346,7 +465,9 @@ function App() {
 
   const renderGameOverContent = () => (
     <div className="text-center text-white max-w-md mx-auto px-6 opacity-90">
-      <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">Game Over</h2>
+      <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">
+        Game Over
+      </h2>
       <p className="text-lg text-amber-200 mb-2 drop-shadow">
         You reached room ({roomCoord.col}, {roomCoord.row})
       </p>
@@ -364,7 +485,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setGameState('menu')}
+          onClick={goToMenu}
           className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
         >
           Main Menu
@@ -379,9 +500,7 @@ function App() {
       <p className="text-lg text-amber-200 mb-2">
         You have conquered the jungle!
       </p>
-      <p className="text-base text-yellow-300 mb-8">
-        Final Score: {score}
-      </p>
+      <p className="text-base text-yellow-300 mb-8">Final Score: {score}</p>
 
       <div className="space-y-4">
         <button
@@ -393,7 +512,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setGameState('menu')}
+          onClick={goToMenu}
           className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
         >
           Main Menu
@@ -443,9 +562,7 @@ function App() {
             on both desktop and mobile. The A/B action buttons sit lower-right
             (MobileControls), so the HUD needs no clearance padding. */}
         {gameState === 'playing' && (
-          <div className="absolute top-4 left-4 right-4">
-            {renderHud()}
-          </div>
+          <div className="absolute top-4 left-4 right-4">{renderHud()}</div>
         )}
 
         {/* "Reached Boss" banner (Step 9). Non-blocking placeholder shown on
@@ -469,61 +586,196 @@ function App() {
 
         {/* Main Menu (overlays canvas on both mobile and desktop) */}
         {gameState === 'menu' && (
-          <div className={`${isMobile ? 'fixed inset-0 z-50' : 'absolute inset-0'} bg-black/90 flex items-center justify-center`}>
+          <div
+            className={`${isMobile ? 'fixed inset-0 z-50' : 'absolute inset-0'} bg-black/90 flex items-center justify-center`}
+          >
             <div className="text-center text-white max-w-md mx-auto px-6">
-              <h1 className={`${isMobile ? 'text-4xl' : 'text-6xl'} font-bold text-amber-400 mb-2 font-serif`}>
+              <h1
+                className={`${isMobile ? 'text-4xl mb-6' : 'text-6xl mb-8'} font-bold text-amber-400 font-serif`}
+              >
                 Jungle Archer
               </h1>
-              <p className={`text-lg text-amber-200 ${isMobile ? 'mb-4' : 'mb-8'} font-mono`}>
-                Survive the Ancient Forest
-              </p>
 
               <div className="space-y-4">
                 <button
                   onClick={startGame}
                   className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-green-500"
                 >
-                  <Play size={24} />
-                  Start Adventure
+                  Start
                 </button>
 
                 <button
-                  onClick={() => setShowInstructions(!showInstructions)}
+                  onClick={() => setShowInstructions(true)}
                   className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
                 >
-                  {showInstructions ? 'Hide Instructions' : 'How to Play'}
+                  How to Play
                 </button>
               </div>
-
-              {showInstructions && (
-                <div className="mt-6 bg-black/80 p-6 rounded-lg border border-amber-500 text-left">
-                  <h3 className="text-amber-400 font-bold mb-3 text-center">Instructions</h3>
-                  <ul className="text-sm space-y-2 text-amber-100">
-                    <li>
-                      <strong>Movement:</strong>{' '}
-                      {isMobile ? 'Touch the left half of the screen to move' : 'Arrow Keys (or W/S/D — A is dash)'}
-                    </li>
-                    <li><strong>Combat:</strong> Arrows fire when enemies are in sight</li>
-                    <li>
-                      <strong>Burst:</strong>{' '}
-                      {isMobile ? 'Tap B for 5s rapid-fire' : 'Press Space for 5s rapid-fire'}
-                      {' '}(costs stamina; spam loses bonus)
-                    </li>
-                    <li>
-                      <strong>Dash:</strong>{' '}
-                      {isMobile ? 'Tap A to blink backward' : 'Shift or A to blink backward'}
-                      {' '}(opposite of facing, walls block)
-                    </li>
-                    <li><strong>Stamina:</strong> One bar for the whole run — no regen</li>
-                    <li><strong>Strategy:</strong> Position for clear line of sight</li>
-                    <li><strong>Warning:</strong> Avoid all enemy contact!</li>
-                    <li><strong>Objective:</strong> Travel room to room toward the boss</li>
-                    <li><strong>Victory:</strong> Defeat the Ancient Tree Guardian</li>
-                  </ul>
-                </div>
-              )}
             </div>
+
+            {/* Credits — a small link tucked into the bottom-right corner of
+                the menu overlay instead of the main button stack. */}
+            <button
+              onClick={() => setShowCredits(true)}
+              className="absolute bottom-3 right-3 text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+            >
+              Credits
+            </button>
           </div>
+        )}
+
+        {/* How-to-Play modal — opened from the title screen's "How to Play"
+            button. See TitleModal for the shared shell + dismissal behavior. */}
+        {gameState === 'menu' && showInstructions && (
+          <TitleModal
+            title="How to Play"
+            isMobile={isMobile}
+            centerTitle
+            onClose={() => setShowInstructions(false)}
+          >
+            <ul className="space-y-3">
+              <li>
+                <strong>Movement:</strong>
+                <div className="ml-4">Arrow Keys or W/S/D/A (Desktop)</div>
+                <div className="ml-4">
+                  Touch the left half of the screen (Mobile)
+                </div>
+              </li>
+              <li>
+                <strong>Burst Fire:</strong>
+                <div className="ml-4">Space (Desktop)</div>
+                <div className="ml-4">B button (Mobile)</div>
+              </li>
+              <li>
+                <strong>Dash:</strong>
+                <div className="ml-4">Shift (Desktop)</div>
+                <div className="ml-4">A button (Mobile)</div>
+              </li>
+            </ul>
+          </TitleModal>
+        )}
+
+        {/* Credits modal — opened from the title screen's "Credits" button.
+            Attribution for sourced art and audio. CC-BY entries (NPC
+            sprites, snake) are legally required; the "Dark Forest Theme" music
+            line is a courtesy credit the author asks be kept; the rest are CC0
+            / paid royalty-free, acknowledged here as good practice. Source of
+            truth: docs/ART-CREDITS.md and docs/AUDIO-CREDITS.md. */}
+        {gameState === 'menu' && showCredits && (
+          <TitleModal
+            title="Credits"
+            isMobile={isMobile}
+            onClose={() => setShowCredits(false)}
+          >
+            <div className="space-y-4">
+              <section>
+                <h4 className="text-amber-400 font-semibold mb-1">Art</h4>
+                <ul className="space-y-2">
+                  <li>
+                    Player sprite — ArMM1998,{' '}
+                    <CreditLink href="https://opengameart.org/content/zelda-like-tilesets-and-sprites">
+                      “Zelda-like tilesets and sprites”
+                    </CreditLink>{' '}
+                    (CC0).
+                  </li>
+                  <li>
+                    NPC sprites — Charles Gabriel (Antifarea), commissioned by{' '}
+                    <CreditLink href="https://opengameart.org">
+                      OpenGameArt.org
+                    </CreditLink>{' '}
+                    —{' '}
+                    <CreditLink href="https://creativecommons.org/licenses/by/3.0/">
+                      CC-BY 3.0
+                    </CreditLink>
+                    . Recolored and recomposed.
+                  </li>
+                  <li>
+                    Snake —{' '}
+                    <CreditLink href="https://thkaspar.itch.io/tth-animals">
+                      “Tiny, Tiny Heroes – Animals”
+                    </CreditLink>{' '}
+                    by Kacper Woźniak (thkaspar) —{' '}
+                    <CreditLink href="https://creativecommons.org/licenses/by/4.0/">
+                      CC BY 4.0
+                    </CreditLink>
+                    . Recolored.
+                  </li>
+                  <li>
+                    Panther, bear &amp; gibbon — Time Fantasy by Jason Perry,{' '}
+                    <CreditLink href="https://timefantasy.net">
+                      timefantasy.net
+                    </CreditLink>{' '}
+                    (
+                    <CreditLink href="https://finalbossblues.itch.io/animals-sprite-pack">
+                      pack 1
+                    </CreditLink>{' '}
+                    ·{' '}
+                    <CreditLink href="https://finalbossblues.itch.io/animals-2">
+                      pack 2
+                    </CreditLink>
+                    ).
+                  </li>
+                </ul>
+              </section>
+              <section>
+                <h4 className="text-amber-400 font-semibold mb-1">Audio</h4>
+                <ul className="space-y-2">
+                  <li>
+                    Boss music —{' '}
+                    <CreditLink href="https://opengameart.org/content/dark-forest-theme">
+                      “Dark Forest Theme”
+                    </CreditLink>{' '}
+                    — The Cynic Project /{' '}
+                    <CreditLink href="https://cynicmusic.com">
+                      cynicmusic.com
+                    </CreditLink>{' '}
+                    / pixelsphere.org.
+                  </li>
+                  <li>
+                    Menu music — tambura drone by Kaczinski —{' '}
+                    <CreditLink href="https://freesound.org/people/Kaczinski/sounds/506312/">
+                      Freesound
+                    </CreditLink>{' '}
+                    (CC0).
+                  </li>
+                  <li>
+                    Ambience —{' '}
+                    <CreditLink href="https://freesound.org/people/marc.om/sounds/804838/">
+                      marc.om
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/Resaural/sounds/467026/">
+                      Resaural
+                    </CreditLink>{' '}
+                    (CC0).
+                  </li>
+                  <li>
+                    Sound effects —{' '}
+                    <CreditLink href="https://freesound.org/people/arcandio/sounds/347884/">
+                      arcandio
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/Faulkin/sounds/336495/">
+                      Faulkin
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/AudioPapkin/sounds/541029/">
+                      AudioPapkin
+                    </CreditLink>
+                    ,{' '}
+                    <CreditLink href="https://freesound.org/people/Rob_Marion/sounds/541985/">
+                      Rob_Marion
+                    </CreditLink>{' '}
+                    (CC0, via Freesound).
+                  </li>
+                </ul>
+              </section>
+              <p className="text-xs text-amber-200/70">
+                Assets used under CC0, CC-BY, or paid royalty-free licenses. No
+                AI generated assets were used in this game.
+              </p>
+            </div>
+          </TitleModal>
         )}
 
         {/* Game Over Screen — overlays the canvas on both desktop and mobile so

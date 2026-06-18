@@ -24,7 +24,7 @@ Stack: React 18 + TypeScript + Vite + Tailwind + lucide-react — and deliberate
 
 ## How it plays
 
-Move with WASD/arrows (mobile: floating touch joystick). Arrows auto-fire at the nearest enemy in line of sight — there is no fire button. Every enemy kills on touch; one hit ends the run. Dash (Shift/A) blinks you backward; Burst (Space/B) doubles your fire rate briefly. Each run generates a fresh grid of rooms: traverse it, survive the waves, reach the boss arena.
+Move with WASD/arrows (mobile: floating touch joystick). Arrows auto-fire at the nearest enemy in line of sight — there is no fire button. Every enemy kills on touch; one hit ends the run. Dash (Shift, or the A button on mobile) blinks you backward; Burst (Space/B) doubles your fire rate briefly. Each run generates a fresh grid of rooms: traverse it, survive the waves, reach the boss arena.
 
 ## Pillars
 

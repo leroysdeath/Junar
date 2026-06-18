@@ -77,9 +77,8 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 
 ### 8. Game timing uses `gameLoop` `currentTime`, never `Date.now()` in simulation code
 **Rule:** All game-simulation timing (loop tick, enemy AI, projectile motion, pathfinding intervals, cooldowns, stamina decay) uses `currentTime` — a `performance.now()` value passed from `requestAnimationFrame` through `gameLoop` into each update method. `Date.now()` is permitted **only** in `src/game/Logger.ts` for wall-clock UI timestamps on the crash overlay.
-**Documented standing exception:** the `Enemy.ts` pathfinding repoll still calls `Date.now()` (the in-code NOTE slates it for migration to `currentTime`). No **new** `Date.now()` call sites outside `Logger.ts`.
 **Verify:**
-- `grep -rn "Date.now()" src/game/ | grep -v "Logger.ts"` returns only the documented `Enemy.ts` pathfinding-repoll hit. Any other hit is a violation regardless of how it is used; migrate the call site to take `currentTime` as a parameter.
+- `grep -rn "Date.now()" src/game/ | grep -v "Logger.ts"` returns no hits. Any hit is a violation regardless of how it is used; migrate the call site to take `currentTime` as a parameter. (The historical `Enemy.ts` pathfinding-repoll exception was migrated to the loop clock on 2026-06-10.)
 - `gameLoop` in `Game.ts` reads `currentTime` from the `requestAnimationFrame` callback parameter and passes it to every `update(deltaTime, currentTime)` call.
 - New modules added to `src/game/` that need time-based logic accept `currentTime` as a parameter — never call `Date.now()` directly.
 **Source:** CLAUDE.md §9 Guardrails "Use Date.now() only for wall-clock things"; `game-loop-time-and-cleanup` skill

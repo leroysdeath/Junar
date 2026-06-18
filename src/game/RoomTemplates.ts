@@ -21,12 +21,7 @@
 // (Moyersoen 2004) path cards — straights, L-bends, T-junctions, a 4-way
 // cross, a dead-end chamber, multi-opening hubs, and interior-maze rooms.
 
-import {
-  Edge,
-  RoomOpening,
-  RoomTemplate,
-  StaticCandidate,
-} from './types';
+import { Edge, RoomOpening, RoomTemplate, StaticCandidate } from './types';
 import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE } from './constants';
 
 // Chars that parse as walkable floor for the collision grid. 's'/'S' are also
@@ -137,7 +132,9 @@ const CONNECTOR_OPENING_WIDTH = 3; // tiles (matches the L1–L3 corridor conven
 function buildConnector(source: ConnectorSource): RoomTemplate {
   const parsed = parseRoomTemplate(source.ascii);
   if (parsed.openings.length === 0) {
-    throw new Error(`Connector "${source.id}" has no openings (would be unreachable)`);
+    throw new Error(
+      `Connector "${source.id}" has no openings (would be unreachable)`,
+    );
   }
   for (const o of parsed.openings) {
     const width = o.rangeEnd - o.rangeStart + 1;

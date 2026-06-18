@@ -65,7 +65,13 @@ import {
 } from './constants';
 
 type GameOverReason =
-  | { kind: 'overlap'; enemyId: number; enemyType: EnemyType; dx: number; dy: number }
+  | {
+      kind: 'overlap';
+      enemyId: number;
+      enemyType: EnemyType;
+      dx: number;
+      dy: number;
+    }
   | { kind: 'manual' };
 
 interface GameOverVerdict {
@@ -206,12 +212,17 @@ export class Game {
     });
     this.renderer = new Renderer(this.ctx);
     this.soundManager = new SoundManager(callbacks.soundEnabled);
+    // The app boots into the menu, so bring its music bed up. SoundManager
+    // defers the actual start until the first user gesture (autoplay policy).
+    this.soundManager.setScene('menu');
     this.collisionManager = new CollisionManager();
 
     // Replace Hunt's settle-in-place stub with the map-wide BFS placement
     // (Steps 5+6, §5.13). Registered once; Hunt holds the reference for the
     // life of the Game instance (no per-run reset — Hunt is stateless across runs).
-    this.hunt.registerSettlementCallback((enemy) => this.settleDeaggroedHunter(enemy));
+    this.hunt.registerSettlementCallback((enemy) =>
+      this.settleDeaggroedHunter(enemy),
+    );
 
     // Build an initial map so the menu backdrop shows the real anchor-1 room.
     this.regenerateMap();
@@ -266,6 +277,9 @@ export class Game {
     // (and the menu canvas-click listener), so this is the reliable
     // user-gesture moment to create/resume the shared AudioContext.
     this.soundManager.unlock();
+    // Crossfade the menu bed into the jungle ambience. Anchor 1 is never the
+    // boss room, so 'gameplay' is always the right opening scene.
+    this.soundManager.setScene('gameplay');
     this.gameState = 'playing';
     this.score = 0;
     this.enemiesKilled = 0;
@@ -371,22 +385,42 @@ export class Game {
       switch (o.edge) {
         case 'N':
           return {
-            rect: { x: o.rangeStart * TILE_SIZE, y: -TILE_SIZE, width: span, height: TILE_SIZE },
+            rect: {
+              x: o.rangeStart * TILE_SIZE,
+              y: -TILE_SIZE,
+              width: span,
+              height: TILE_SIZE,
+            },
             entryDirection: { x: 0, y: 1 },
           };
         case 'S':
           return {
-            rect: { x: o.rangeStart * TILE_SIZE, y: CANVAS_HEIGHT, width: span, height: TILE_SIZE },
+            rect: {
+              x: o.rangeStart * TILE_SIZE,
+              y: CANVAS_HEIGHT,
+              width: span,
+              height: TILE_SIZE,
+            },
             entryDirection: { x: 0, y: -1 },
           };
         case 'W':
           return {
-            rect: { x: -TILE_SIZE, y: o.rangeStart * TILE_SIZE, width: TILE_SIZE, height: span },
+            rect: {
+              x: -TILE_SIZE,
+              y: o.rangeStart * TILE_SIZE,
+              width: TILE_SIZE,
+              height: span,
+            },
             entryDirection: { x: 1, y: 0 },
           };
         case 'E':
           return {
-            rect: { x: CANVAS_WIDTH, y: o.rangeStart * TILE_SIZE, width: TILE_SIZE, height: span },
+            rect: {
+              x: CANVAS_WIDTH,
+              y: o.rangeStart * TILE_SIZE,
+              width: TILE_SIZE,
+              height: span,
+            },
             entryDirection: { x: -1, y: 0 },
           };
         default: {
@@ -500,6 +534,9 @@ export class Game {
     if (inBoss !== this.inBossArena) {
       this.inBossArena = inBoss;
       this.callbacks.onBossArenaChange?.(inBoss);
+      // Audio follows the arena edge: boss music (+ corrupted bed, when its
+      // file exists) inside, the jungle ambience everywhere else.
+      this.soundManager.setScene(inBoss ? 'boss' : 'gameplay');
       this.logger.log('level', inBoss ? 'bossArenaEnter' : 'bossArenaExit', {
         room: { ...coord },
       });
@@ -584,8 +621,10 @@ export class Game {
     const def = this.currentRoomDef();
 
     const dest: RoomGridCoord = {
-      col: this.currentRoomCoord.col + (edge === 'E' ? 1 : edge === 'W' ? -1 : 0),
-      row: this.currentRoomCoord.row + (edge === 'S' ? 1 : edge === 'N' ? -1 : 0),
+      col:
+        this.currentRoomCoord.col + (edge === 'E' ? 1 : edge === 'W' ? -1 : 0),
+      row:
+        this.currentRoomCoord.row + (edge === 'S' ? 1 : edge === 'N' ? -1 : 0),
     };
     if (
       dest.col < 0 ||
@@ -598,7 +637,11 @@ export class Game {
     const destDef = roomAt(this.runMap, dest);
     if (!roomsConnect(def, edge, destDef)) return null;
 
-    return { edge, dest, entry: this.entryPosition(edge, opening, destDef, pos) };
+    return {
+      edge,
+      dest,
+      entry: this.entryPosition(edge, opening, destDef, pos),
+    };
   }
 
   // Departure-side spawn grace — the counterpart to an arrival-side entry-band
@@ -616,7 +659,10 @@ export class Game {
     if (this.inBossArena) return;
     const found = this.approachedOpening(input, EXIT_APPROACH_RANGE_PX);
     if (!found) return;
-    this.globalWaveScheduler?.delayBands([found.bandIndex], now + EXIT_DEPART_GRACE_MS);
+    this.globalWaveScheduler?.delayBands(
+      [found.bandIndex],
+      now + EXIT_DEPART_GRACE_MS,
+    );
   }
 
   // Place the player just inside the destination's opposite edge, preserving
@@ -631,7 +677,12 @@ export class Game {
     const destOpenings = openingsOnEdge(destDef, oppositeEdge(edge));
     const match =
       destOpenings.find((o) =>
-        rangesOverlap(o.rangeStart, o.rangeEnd, srcOpening.rangeStart, srcOpening.rangeEnd),
+        rangesOverlap(
+          o.rangeStart,
+          o.rangeEnd,
+          srcOpening.rangeStart,
+          srcOpening.rangeEnd,
+        ),
       ) ?? destOpenings[0];
     if (!match) return { ...CENTER_SPAWN };
 
@@ -736,7 +787,10 @@ export class Game {
 
   // Inverse of roomKey: decode a room bucket key back to its grid coordinate.
   private roomFromKey(key: number): RoomGridCoord {
-    return { col: key % this.runMap.cols, row: Math.floor(key / this.runMap.cols) };
+    return {
+      col: key % this.runMap.cols,
+      row: Math.floor(key / this.runMap.cols),
+    };
   }
 
   // Lazily build + cache a Level for a parked room so hunters crossing it get
@@ -775,9 +829,15 @@ export class Game {
       const level = this.levelForRoomKey(key);
       for (const enemy of list) {
         if (enemy.getHuntState() !== 'hunting') continue;
-        const step = this.hunterDoorStep(room, key, this.currentRoomCoord, enemy, pathCache);
+        const step = this.hunterDoorStep(
+          room,
+          key,
+          this.currentRoomCoord,
+          enemy,
+          pathCache,
+        );
         if (!step) continue; // no route this frame — hold
-        enemy.update(deltaTime, step.doorTarget, level, list);
+        enemy.update(deltaTime, now, step.doorTarget, level, list);
         if (this.hunterAtDoor(enemy, step.edge, step.opening)) {
           crossings.push({
             enemy,
@@ -817,7 +877,12 @@ export class Game {
     playerRoom: RoomGridCoord,
     enemy: Enemy,
     pathCache: Map<number, RoomGridCoord[] | null>,
-  ): { edge: Edge; dest: RoomGridCoord; opening: RoomOpening; doorTarget: Vector2 } | null {
+  ): {
+    edge: Edge;
+    dest: RoomGridCoord;
+    opening: RoomOpening;
+    doorTarget: Vector2;
+  } | null {
     // One BFS per hunter-room per frame (playerRoom is fixed across the frame),
     // shared by every hunter in that room via the caller's pathCache.
     let path = pathCache.get(hunterRoomKey);
@@ -861,7 +926,12 @@ export class Game {
       }
     }
 
-    return { edge, dest: next, opening, doorTarget: this.doorTargetCell(edge, opening) };
+    return {
+      edge,
+      dest: next,
+      opening,
+      doorTarget: this.doorTargetCell(edge, opening),
+    };
   }
 
   // The cell top-left a hunter walks to in order to exit through `opening`: the
@@ -886,11 +956,16 @@ export class Game {
 
   // True once the hunter has reached the edge cell of `opening` it's heading
   // for — ready to cross into the next room.
-  private hunterAtDoor(enemy: Enemy, edge: Edge, opening: RoomOpening): boolean {
+  private hunterAtDoor(
+    enemy: Enemy,
+    edge: Edge,
+    opening: RoomOpening,
+  ): boolean {
     const pos = enemy.getPosition();
     const col = Math.floor((pos.x + TILE_SIZE / 2) / TILE_SIZE);
     const row = Math.floor((pos.y + TILE_SIZE / 2) / TILE_SIZE);
-    const inSpan = (v: number) => v >= opening.rangeStart && v <= opening.rangeEnd;
+    const inSpan = (v: number) =>
+      v >= opening.rangeStart && v <= opening.rangeEnd;
     switch (edge) {
       case 'N':
         return row <= 0 && inSpan(col);
@@ -920,7 +995,12 @@ export class Game {
   ): boolean {
     const destDef = roomAt(this.runMap, dest);
     enemy.setPosition(
-      this.hunterEntryPosition(exitEdge, srcOpening, destDef, enemy.getPosition()),
+      this.hunterEntryPosition(
+        exitEdge,
+        srcOpening,
+        destDef,
+        enemy.getPosition(),
+      ),
     );
     enemy.setCurrentRoom(dest);
     // Just teleported across a room border: drop the stale cached door target
@@ -959,7 +1039,12 @@ export class Game {
     const destOpenings = openingsOnEdge(destDef, oppositeEdge(exitEdge));
     const match =
       destOpenings.find((o) =>
-        rangesOverlap(o.rangeStart, o.rangeEnd, srcOpening.rangeStart, srcOpening.rangeEnd),
+        rangesOverlap(
+          o.rangeStart,
+          o.rangeEnd,
+          srcOpening.rangeStart,
+          srcOpening.rangeEnd,
+        ),
       ) ?? destOpenings[0];
     if (!match) return { ...CENTER_SPAWN };
 
@@ -1075,7 +1160,8 @@ export class Game {
       if (key !== curKey) {
         const spot = this.findFreeTileInRoom(enemy, key);
         if (spot) {
-          if (key !== startKey) this.rebucketSettledEnemy(enemy, startKey, key, room);
+          if (key !== startKey)
+            this.rebucketSettledEnemy(enemy, startKey, key, room);
           // Just teleported: drop the stale pursuit target so it re-paths cleanly
           // if it ever re-aggros.
           enemy.resetPathfinding();
@@ -1086,7 +1172,12 @@ export class Game {
       for (const [edge, dc, dr] of ROOM_DIRS) {
         const nc = room.col + dc;
         const nr = room.row + dr;
-        if (nc < 0 || nr < 0 || nc >= this.runMap.cols || nr >= this.runMap.rows) {
+        if (
+          nc < 0 ||
+          nr < 0 ||
+          nc >= this.runMap.cols ||
+          nr >= this.runMap.rows
+        ) {
           continue;
         }
         const next: RoomGridCoord = { col: nc, row: nr };
@@ -1388,15 +1479,24 @@ export class Game {
     // cooldown must respond on the very next check.
     const effectiveCooldown =
       ARROW_COOLDOWN_MS / this.stamina.getArrowRateMultiplier();
-    if (visibleTarget && currentTime - this.lastArrowTime >= effectiveCooldown) {
+    if (
+      visibleTarget &&
+      currentTime - this.lastArrowTime >= effectiveCooldown
+    ) {
       this.fireArrow(visibleTarget);
       this.lastArrowTime = currentTime;
     }
 
     // Update the current room's enemies (all 'active'). Pass the live enemy
     // list so each can enforce enemy-vs-enemy no-overlap at its movement step.
-    this.enemies.forEach(enemy => {
-      enemy.update(deltaTime, this.player.getPosition(), this.level, this.enemies);
+    this.enemies.forEach((enemy) => {
+      enemy.update(
+        deltaTime,
+        currentTime,
+        this.player.getPosition(),
+        this.level,
+        this.enemies,
+      );
     });
 
     // Hunt machine (Step 4, roadmap §5.12). tick() advances activation timers
@@ -1408,17 +1508,27 @@ export class Game {
     this.updateHunters(deltaTime, currentTime);
 
     // Update arrows
-    this.arrows = this.arrows.filter(arrow => {
+    this.arrows = this.arrows.filter((arrow) => {
       arrow.pos.x += arrow.dir.x * ARROW_SPEED * (deltaTime / 1000);
       arrow.pos.y += arrow.dir.y * ARROW_SPEED * (deltaTime / 1000);
 
       // Check bounds
-      if (arrow.pos.x < 0 || arrow.pos.x > CANVAS_WIDTH || arrow.pos.y < 0 || arrow.pos.y > CANVAS_HEIGHT) {
+      if (
+        arrow.pos.x < 0 ||
+        arrow.pos.x > CANVAS_WIDTH ||
+        arrow.pos.y < 0 ||
+        arrow.pos.y > CANVAS_HEIGHT
+      ) {
         return false;
       }
 
       // Check wall collision
-      if (this.level.isWall(Math.floor(arrow.pos.x / TILE_SIZE), Math.floor(arrow.pos.y / TILE_SIZE))) {
+      if (
+        this.level.isWall(
+          Math.floor(arrow.pos.x / TILE_SIZE),
+          Math.floor(arrow.pos.y / TILE_SIZE),
+        )
+      ) {
         return false;
       }
 
@@ -1653,13 +1763,20 @@ export class Game {
     }
 
     // Check arrow-enemy collisions
-    this.arrows = this.arrows.filter(arrow => {
+    this.arrows = this.arrows.filter((arrow) => {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const enemy = this.enemies[i];
-        if (this.collisionManager.checkCollision(
-          { x: arrow.pos.x, y: arrow.pos.y, width: 4, height: 4 },
-          { x: enemy.getPosition().x, y: enemy.getPosition().y, width: TILE_SIZE, height: TILE_SIZE }
-        )) {
+        if (
+          this.collisionManager.checkCollision(
+            { x: arrow.pos.x, y: arrow.pos.y, width: 4, height: 4 },
+            {
+              x: enemy.getPosition().x,
+              y: enemy.getPosition().y,
+              width: TILE_SIZE,
+              height: TILE_SIZE,
+            },
+          )
+        ) {
           const enemyType = enemy.getType();
           this.enemies.splice(i, 1);
           this.score += 10;
@@ -1683,6 +1800,8 @@ export class Game {
     if (this.gameState === 'gameOver') return;
     this.gameState = 'gameOver';
     this.callbacks.onStateChange('gameOver');
+    // Fade the beds out so the loss sting lands over silence.
+    this.soundManager.setScene('silent');
     this.soundManager.play('game-over');
 
     const verdict = this.classifyGameOver(reason);
@@ -1711,10 +1830,14 @@ export class Game {
       throw err;
     }
 
-    this.logger.reportNonHalting('gameOver', new Error(`gameOver: ${reasonLabel}`), {
-      reason,
-      verdict,
-    });
+    this.logger.reportNonHalting(
+      'gameOver',
+      new Error(`gameOver: ${reasonLabel}`),
+      {
+        reason,
+        verdict,
+      },
+    );
   }
 
   private classifyGameOver(reason: GameOverReason): GameOverVerdict {
@@ -1736,7 +1859,9 @@ export class Game {
       }
     }
 
-    const msSinceLevelStart = Math.round(performance.now() - this.levelStartedAt);
+    const msSinceLevelStart = Math.round(
+      performance.now() - this.levelStartedAt,
+    );
     const flags: string[] = [];
 
     if (reason.kind === 'manual') flags.push('manual-trigger');
@@ -1785,6 +1910,8 @@ export class Game {
       room: { ...this.currentRoomCoord },
       score: this.score,
     });
+    // Fade the boss beds out so the victory sting lands over silence.
+    this.soundManager.setScene('silent');
     this.soundManager.play('victory');
   }
 
@@ -1825,7 +1952,11 @@ export class Game {
       if (this.inBossArena) {
         this.renderer.renderCorruptedGrowth(this.lastTime);
       }
-      this.renderer.renderPlayer(this.player, this.stamina.isBurstActive(), this.lastTime);
+      this.renderer.renderPlayer(
+        this.player,
+        this.stamina.isBurstActive(),
+        this.lastTime,
+      );
 
       if (this.enemies.length > 0) {
         // lastTime drives the doorway-arrival materialize flash on hunters
@@ -1837,15 +1968,29 @@ export class Game {
         this.renderer.renderArrows(this.arrows);
       }
 
-      // Render line of sight indicator
-      if (this.gameState === 'playing') {
-        this.renderer.renderLineOfSightIndicator(this.player, this.hasLineOfSight);
-      }
+      // The dashed LOS indicator box around the player is intentionally not
+      // drawn (owner request 2026-06-15). `hasLineOfSight` is still tracked for
+      // the crash-logger snapshots, and Renderer.renderLineOfSightIndicator
+      // remains available should the on-screen cue be re-enabled.
     }
   }
 
   setSoundEnabled(enabled: boolean) {
     this.soundManager.setEnabled(enabled);
+  }
+
+  // Bridge for the "Main Menu" buttons on the game-over/victory overlays.
+  // Before menu music existed, App swapped its own overlay state and left
+  // Game's internal state stale on the terminal screen; routing the return
+  // through Game keeps the two in sync and swaps the audio scene to the
+  // menu bed. Clicking the button is the user gesture, so the bed starts
+  // immediately.
+  returnToMenu() {
+    if (this.gameState === 'menu') return;
+    this.gameState = 'menu';
+    this.callbacks.onStateChange('menu');
+    this.soundManager.setScene('menu');
+    this.logger.log('state', 'returnToMenu');
   }
 
   // Bridge for on-screen mobile controls. Touch handlers in App.tsx call
@@ -1860,8 +2005,8 @@ export class Game {
     this.inputManager.setBurstPressed();
   }
 
-  // Bridge for the on-screen mobile A button. Equivalent to a Shift or
-  // KeyA keydown — sets the edge-triggered dash flag in InputManager.
+  // Bridge for the on-screen mobile A button. Equivalent to a Shift
+  // keydown — sets the edge-triggered dash flag in InputManager.
   triggerDash() {
     this.inputManager.setDashPressed();
   }
