@@ -215,8 +215,8 @@ export const PLAYER_HURTBOX_PX = 16;
 // (never Date.now — Invariant 8).
 
 // Delay between the player entering a room and its dormant sitters waking
-// (dormant → activating → active). One second per §5.11.
-export const STATIC_AGGRO_DELAY_MS = 1000;
+// (dormant → activating → active).
+export const STATIC_AGGRO_DELAY_MS = 200;
 
 // Hunt range, in Manhattan room-grid distance. A 'hunting' enemy keeps
 // pursuing across rooms as long as its room is within this many rooms of the
