@@ -371,7 +371,8 @@ export class Enemy {
       const gridY = Math.floor(checkY / TILE_SIZE);
 
       if (level.isWall(gridX, gridY)) {
-        // Path blocked, try alternative routes
+        // Direct line is blocked by a wall — route around it with a real
+        // shortest-path search rather than a greedy step (see findAlternativePath).
         return this.findAlternativePath(playerPosition, level);
       }
     }
@@ -379,8 +380,144 @@ export class Enemy {
     return playerPosition;
   }
 
+  // Shortest-route pathfinding around walls. The original fallback was a greedy
+  // hill-climb — "step to the open cardinal neighbour nearest the player in
+  // straight-line distance" — which gets trapped in local minima: when a wall
+  // column extends between the enemy and the player, every step that shrinks the
+  // straight-line gap runs into the wall, while routing down and around the
+  // wall's end momentarily *increases* it, so the enemy never takes it and just
+  // oscillates in place (the "panther stuck going up and down" bug). Instead we
+  // run a breadth-first search over the room's tile grid (≤493 cells — cheap
+  // even per-frame for cross-room hunters) from the enemy's tile to the target's
+  // tile, giving the true nearest route. Then we aim the enemy at the farthest
+  // tile along that route it still has a clear straight line to (path smoothing)
+  // so it slides in long segments toward the corner instead of tile-stepping.
+  // The old best-cardinal step survives only as a last resort when the target is
+  // walled off entirely (bestCardinalStep).
   private findAlternativePath(playerPosition: Vector2, level: Level): Vector2 {
-    // Try moving in cardinal directions to find a clear path
+    const w = level.getWidth();
+    const h = level.getHeight();
+    const half = TILE_SIZE / 2;
+    const clamp = (v: number, max: number) => (v < 0 ? 0 : v > max ? max : v);
+
+    // Work in tile coords, anchored on each box's centre (position is cell
+    // top-left, so the occupied cell is centre / TILE_SIZE).
+    const startTX = clamp(
+      Math.floor((this.position.x + half) / TILE_SIZE),
+      w - 1,
+    );
+    const startTY = clamp(
+      Math.floor((this.position.y + half) / TILE_SIZE),
+      h - 1,
+    );
+    const goalTX = clamp(
+      Math.floor((playerPosition.x + half) / TILE_SIZE),
+      w - 1,
+    );
+    const goalTY = clamp(
+      Math.floor((playerPosition.y + half) / TILE_SIZE),
+      h - 1,
+    );
+
+    const startIdx = startTY * w + startTX;
+    const goalIdx = goalTY * w + goalTX;
+    if (startIdx === goalIdx) return playerPosition;
+
+    // BFS over open tiles. `prev` doubles as the visited marker (-1 = unvisited);
+    // the start cell is its own parent so it reads as visited without a sentinel.
+    const prev = new Int32Array(w * h).fill(-1);
+    const queue = new Int32Array(w * h);
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = startIdx;
+    prev[startIdx] = startIdx;
+    let found = false;
+    while (head < tail) {
+      const cur = queue[head++];
+      if (cur === goalIdx) {
+        found = true;
+        break;
+      }
+      const cx = cur % w;
+      const cy = (cur - cx) / w;
+      const neighbours = [
+        cy > 0 ? cur - w : -1, // up
+        cy < h - 1 ? cur + w : -1, // down
+        cx > 0 ? cur - 1 : -1, // left
+        cx < w - 1 ? cur + 1 : -1, // right
+      ];
+      for (const nb of neighbours) {
+        if (nb < 0 || prev[nb] !== -1) continue;
+        const nx = nb % w;
+        const ny = (nb - nx) / w;
+        if (level.isWall(nx, ny)) continue;
+        prev[nb] = cur;
+        queue[tail++] = nb;
+      }
+    }
+
+    // Target walled off / unreachable — greedy step is the best we can do.
+    if (!found) return this.bestCardinalStep(playerPosition, level);
+
+    // Reconstruct the route goal→start, reverse to start→goal.
+    const path: number[] = [];
+    let n = goalIdx;
+    while (n !== startIdx) {
+      path.push(n);
+      n = prev[n];
+    }
+    path.push(startIdx);
+    path.reverse(); // path[0] = start tile
+
+    // Path smoothing: aim at the farthest route tile the enemy can still reach by
+    // a clear straight ray, so it cuts toward the wall's corner in one motion.
+    let waypoint = path.length > 1 ? path[1] : path[0];
+    for (let i = path.length - 1; i >= 1; i--) {
+      const tx = path[i] % w;
+      const ty = (path[i] - tx) / w;
+      if (
+        this.clearRayToCenter(
+          tx * TILE_SIZE + half,
+          ty * TILE_SIZE + half,
+          level,
+        )
+      ) {
+        waypoint = path[i];
+        break;
+      }
+    }
+    const wx = waypoint % w;
+    const wy = (waypoint - wx) / w;
+    return { x: wx * TILE_SIZE, y: wy * TILE_SIZE };
+  }
+
+  // Center-to-center wall raycast from this enemy's centre to a world point,
+  // sampled every ~8 px (mirrors Game.hasDirectLineOfSight). True if unblocked.
+  private clearRayToCenter(
+    targetX: number,
+    targetY: number,
+    level: Level,
+  ): boolean {
+    const ex = this.position.x + TILE_SIZE / 2;
+    const ey = this.position.y + TILE_SIZE / 2;
+    const dx = targetX - ex;
+    const dy = targetY - ey;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) return true;
+    const steps = Math.ceil(dist / 8);
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const gx = Math.floor((ex + dx * t) / TILE_SIZE);
+      const gy = Math.floor((ey + dy * t) / TILE_SIZE);
+      if (level.isWall(gx, gy)) return false;
+    }
+    return true;
+  }
+
+  // Greedy fallback used only when BFS finds no route (target walled off): step
+  // to the open cardinal neighbour nearest the target in straight-line distance.
+  // Can stall in local minima — acceptable as a genuine last resort.
+  private bestCardinalStep(playerPosition: Vector2, level: Level): Vector2 {
     const directions = [
       { x: 0, y: -TILE_SIZE }, // Up
       { x: TILE_SIZE, y: 0 }, // Right
