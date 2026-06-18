@@ -7,13 +7,16 @@ import {
   ENEMY_AABB_PX,
   BOSS_GROWTH_CENTER,
 } from './constants';
-// ArMM1998's "Zelda-like tilesets and sprites" pack, CC0 / public domain
-// (opengameart.org/content/zelda-like-tilesets-and-sprites). Owner-approved
-// 2026-05-10 as the player-only sprite swap; see CLAUDE.md §9.
+// Player sprite: composited from Time Elements "Character Core Set"
+// (finalbossblues / Jason Perry, timefantasy.net) — paid royalty-free, the
+// same art line as the beasts and jungle tileset. Modular pieces
+// head1+bottom1+top10+hair7 + the bow1 stave, recolored to the Adivasi palette
+// and repacked to the 16×32 / 4-frame layout below. Owner-approved 2026-06-15
+// (replaces the prior ArMM1998 CC0 sheet). See docs/ART-CREDITS.md, CLAUDE.md §6.
 import playerSpriteUrl from '../assets/player-sprite.png';
-// Family sheets — Tier 2 of docs/ART-ASSETS.md, owner-greenlit 2026-06-11.
-// Recolored from Charles Gabriel (Antifarea)'s CC-BY 3.0 charsets
-// (opengameart.org); attribution logged in docs/ART-CREDITS.md.
+// Family sheets — wife/son/daughter, rebuilt 2026-06-15 as Time Elements
+// modular composites (same Core Set + Adivasi palette as the player; the prior
+// Antifarea CC-BY sheets are retired). 16×32 cells; see docs/ART-CREDITS.md.
 import familyWifeUrl from '../assets/sprites/family-wife.png';
 import familySonUrl from '../assets/sprites/family-son.png';
 import familyDaughterUrl from '../assets/sprites/family-daughter.png';
@@ -35,9 +38,9 @@ import gibbonSpriteUrl from '../assets/sprites/gibbon.png';
 // cycled by cell parity to break up repetition.
 import jungleTilesUrl from '../assets/sprites/jungle-tiles.png';
 
-// Sprite-sheet layout — character.png from ArMM1998's pack uses 16-wide ×
-// 32-tall cells, 4-frame walk per direction across columns, one direction
-// per row. Row order inferred visually from the sheet: down, left, up, right.
+// Sprite-sheet layout — the player sheet is 16-wide × 32-tall cells: 4 walk
+// columns (stand / step / stand / step, so col 0 is the idle pose) × 4
+// direction rows in SPRITE_DIR_ROW order (down, right, up, left).
 const SPRITE_CELL_W = 16;
 const SPRITE_CELL_H = 32;
 const SPRITE_WALK_FRAMES = 4;
@@ -57,12 +60,12 @@ const SPRITE_DIR_ROW: Record<Facing, number> = {
 };
 
 // Family-sheet layout — each sheet is 3 walk columns (walk1 / stand / walk2)
-// x 4 direction rows of 16x18 cells, recomposed to the same row order as
+// x 4 direction rows of 16x32 cells, recomposed to the same row order as
 // SPRITE_DIR_ROW so a future FamilyMember entity can animate them exactly
 // like the player. renderNpcs draws only the down-facing stand frame today
 // (family is render-only; CLAUDE.md §5).
 const FAMILY_CELL_W = 16;
-const FAMILY_CELL_H = 18;
+const FAMILY_CELL_H = 32;
 const FAMILY_STAND_COL = 1;
 
 // Beast sprites draw at a size that tracks the per-type collision AABB
@@ -105,12 +108,12 @@ const BEAST_SHEET: Record<EnemyType, BeastSheetSpec> = {
   snake: {
     cellW: 16,
     cellH: 16,
-    eyes: { down: [[4, 8], [11, 8]], right: [[9, 7]], left: [[6, 7]] },
+    eyes: { down: [[4, 8], [10, 8]], right: [[9, 7]], left: [[6, 7]] },
   },
   gibbon: {
     cellW: 24,
     cellH: 28,
-    eyes: { down: [[8, 8], [14, 8]], right: [[15, 8]], left: [[4, 8]] },
+    eyes: { down: [[8, 7], [13, 7]], right: [[15, 8]], left: [[4, 8]] },
   },
 };
 const BEAST_WALK_FRAME_MS = 170;
@@ -390,7 +393,7 @@ export class Renderer {
     this.ctx.globalAlpha = 0.7;
     positions.forEach((pos, i) => {
       const sheet = this.familySprites[i % this.familySprites.length];
-      // Native 16x18 cell, horizontally centered and foot-aligned in the
+      // Native 16x32 cell, horizontally centered and foot-aligned in the
       // 32 px tile (same convention as the player sprite's 16x32 cell).
       this.ctx.drawImage(
         sheet,

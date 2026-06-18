@@ -9,8 +9,11 @@ Steam-page credits screen when it gets built.
 
 ## CC-BY attributions (required)
 
-### Family sprites — wife, son, daughter
+### Family sprites — wife, son, daughter (RETIRED 2026-06-15)
 
+- **Status: RETIRED 2026-06-15** — replaced by Time Elements modular composites
+  (see the paid royalty-free section below); these Antifarea sheets no longer
+  ship. Attribution retained here for provenance.
 - **Titles:** "Twelve 16x18 RPG sprites, plus base" (wife — female Townfolk)
   and "Twelve more characters + 3 free characters and a child template"
   (son — Child M; daughter — Child F)
@@ -52,6 +55,44 @@ Steam-page credits screen when it gets built.
 ---
 
 ## Paid royalty-free licenses (recorded, attribution optional)
+
+### Player sprite — Adivasi archer
+
+- **Status: LANDED 2026-06-15** (owner reopened the player sprite 2026-06-14,
+  paid OK; Core Set purchased on itch.io 2026-06-15). Replaces the prior
+  ArMM1998 CC0 sheet.
+- **Title:** "Time Elements: Character Core Set" ($20)
+- **Author:** Jason Perry (finalbossblues), timefantasy.net — the same art line
+  as the beasts and the jungle tileset.
+- **Source:** https://finalbossblues.itch.io/time-elements-character-core-set
+- **License:** Time Fantasy royalty-free terms (creator's published statement on
+  the product page): "you are welcome to use these assets in any commercial
+  project … no restrictions on how you use them within your game"; recolors and
+  edits allowed; no standalone redistribution of the raw assets. Listing tagged
+  "No generative AI was used" and carries no AI-adjacency clause (clean for this
+  AI-assisted repo).
+- **Changes:** composited from modular pieces (head1 + bottom1 + top10 + hair7)
+  recolored to the Adivasi palette (deep warm-brown skin, black hair, cream
+  tunic, dark dhoti, dark eyes); the `bow1` stave seated in the offhand per
+  facing as a wood-recolored overlay; walk frames repacked into a 64×128 sheet
+  (4 columns stand/step/stand/step × 4 direction rows down/right/up/left of
+  16×32). Shipped as `src/assets/player-sprite.png`.
+- **Courtesy credit line (optional):** "Character sprites: Time Fantasy by Jason
+  Perry (finalbossblues), timefantasy.net."
+
+### Family sprites — wife, son, daughter
+
+- **Status: LANDED 2026-06-15** (rebuilt to match the new player; the prior
+  Antifarea CC-BY sheets retired — see the CC-BY section above).
+- **Source:** "Time Elements: Character Core Set" (finalbossblues / Jason Perry)
+  — same pack and license as the player sprite above.
+- **Changes:** modular composites recolored to the Adivasi palette — wife
+  (`head1+bottom5+top10+hair10`): long black hair, red dress, deep-brown skin;
+  son (`head1+bottom1+top6+hair4`): short hair, red tunic, dark shorts; daughter
+  (`head1+bottom5+top10+hair11`): long hair, turmeric-ochre dress. Repacked into
+  48×128 sheets (3 walk columns × 4 direction rows down/right/up/left of 16×32).
+  Shipped as `src/assets/sprites/family-wife.png`, `family-son.png`,
+  `family-daughter.png`.
 
 ### Beast sprites — panther, bear, gibbon
 
@@ -107,7 +148,8 @@ Steam-page credits screen when it gets built.
 
 - **Player sprite** — ArMM1998, "Zelda-like tilesets and sprites"
   (https://opengameart.org/content/zelda-like-tilesets-and-sprites), CC0.
-  Recolored to the Adivasi-coded archer. In use since 2026-05-10.
+  Recolored to the Adivasi-coded archer. In use 2026-05-10 → 2026-06-15;
+  **replaced** by the Time Elements composite above (no longer shipped).
 
 All assets above were verified human-made (no generative AI) at sourcing
 time per the policy in `docs/ART-ASSETS.md`.
