@@ -98,9 +98,9 @@ export class Hunt {
           ) {
             // Wake complete. If the player is still in this enemy's room it
             // pursues in-room ('active'); if the player already left during the
-            // 1 s delay it commits straight to the cross-room hunt (mirroring
+            // aggro delay it commits straight to the cross-room hunt (mirroring
             // onPlayerLeftRoom). Without this room check a static the player
-            // briefly poked then walked away from before 1 s would strand as a
+            // briefly poked then walked away from before waking would strand as a
             // frozen parked 'active' — never hunting — until the player
             // happened to return. (Resolves the §5.12 "wake while player
             // absent" race the roadmap table leaves unspecified.)

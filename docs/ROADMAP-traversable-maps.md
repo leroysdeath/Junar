@@ -419,7 +419,7 @@ export const WAVE_PER_C_INCREMENT = 6;   // +1 static per ~2 triplets
 
 **Dormancy.** Sitter is inactive until the player **enters the room** containing it.
 
-**Aggro delay.** **1 second** after player enters the room, all sitters in that room activate.
+**Aggro delay.** **200 ms** after player enters the room, all sitters in that room activate.
 
 **Telegraph.** None for prototype. (Plan to revisit if playtest shows fairness issues.)
 
@@ -431,7 +431,7 @@ State machine, driven entirely by spatial position and room transitions. No dama
 
 | State | Enter on | Exit on |
 |---|---|---|
-| Dormant | Placed at static tile (template `s`/`S` roll); room not yet entered | Player enters room → start 1 s timer (transitions to Activating) |
+| Dormant | Placed at static tile (template `s`/`S` roll); room not yet entered | Player enters room → start aggro timer (transitions to Activating) |
 | Activating | Aggro timer running | Timer expires → Active |
 | Active | Pursuit AI in current room (either wake-from-static or wave-spawn) | Player transitions out → Hunting |
 | Hunting | Pursuing across rooms | Player room Manhattan-distance > HUNT_RANGE from hunter room → de-aggro → settle as static via BFS |
@@ -439,7 +439,7 @@ State machine, driven entirely by spatial position and room transitions. No dama
 **Constants:**
 
 ```ts
-export const STATIC_AGGRO_DELAY_MS = 1000;
+export const STATIC_AGGRO_DELAY_MS = 200;
 export const HUNT_RANGE = 2;  // Manhattan, in room-grid coords
 ```
 
@@ -447,7 +447,7 @@ export const HUNT_RANGE = 2;  // Manhattan, in room-grid coords
 
 **Hunt indefinite within range.** No time-based de-aggro. As long as Manhattan ≤ 2, the hunter is hunting. Hiding doesn't work.
 
-**Wake-while-absent race (Step 4 resolution).** The table above doesn't say what happens if an `activating` sitter's 1 s delay completes *after* the player has already left its room. Resolution: on wake, if the enemy is in the player's current room it becomes `active` (in-room pursuit); otherwise it becomes `hunting` (commits straight to the cross-room chase). Without this room check a static the player briefly poked then walked away from before 1 s would strand as a frozen, never-hunting parked `active`. Implemented in `Hunt.tick` (the `activating → active`/`hunting` branch).
+**Wake-while-absent race (Step 4 resolution).** The table above doesn't say what happens if an `activating` sitter's aggro delay completes *after* the player has already left its room. Resolution: on wake, if the enemy is in the player's current room it becomes `active` (in-room pursuit); otherwise it becomes `hunting` (commits straight to the cross-room chase). Without this room check a static the player briefly poked then walked away from before waking would strand as a frozen, never-hunting parked `active`. Implemented in `Hunt.tick` (the `activating → active`/`hunting` branch).
 
 **Step 4 implementation status (2026-05-30).** The 4-state machine lives in `src/game/Hunt.ts` (pure logic, driven by gameLoop `currentTime`; holds no listeners/timers, so no disposal). Wave spawns are born `active`; the `active → hunting` flip fires when the player leaves a room (`onPlayerLeftRoom`), and parked hunters are walked room-to-room toward the player by `Game.updateHunters` (BFS routing via `RoomGrid.findPath`, one cached BFS per hunter-room per frame). De-aggro settlement uses a registered callback; **Steps 5+6 (implemented)** register `Game.settleDeaggroedHunter` — the real map-wide BFS placement (§5.13) — over Hunt's default, roll `dormant` statics on the player's first entry to a room, and wake them via `startActivating`. The formerly deferred doorway edge — a hunter crossing into the player's current room could contact-kill on its arrival frame with zero rendered frames if the player loitered in that exact doorway — is resolved (owner-approved 2026-06-10): `Game.settleHunterIntoRoom` stamps a `HUNTER_ARRIVAL_GRACE_MS` (350 ms) kill grace on the arriving hunter and `Renderer.renderEnemies` draws a fading white materialize flash over it for the window, an interim arrival telegraph. The full static-spawn telegraph work (§9) remains deferred.
 
@@ -522,7 +522,7 @@ Foundational. Must land cleanly before Phase C.
 | Step | Scope | Files |
 |---|---|---|
 | **4** | Hunt 4-state machine + Manhattan tracking across rooms. | `Hunt.ts` (new), `Enemy.ts`, `Game.ts` |
-| **5+6** | Static spawning: candidate-tile parsing (`s`/`S`); B+C density formula; on-first-entry roll; 1 s aggro delay; hunter-runoff BFS placement; snake stacking exception integration. | `levels.ts`, `RoomTemplates.ts`, `Game.ts`, `Enemy.ts`, `constants.ts` |
+| **5+6** | Static spawning: candidate-tile parsing (`s`/`S`); B+C density formula; on-first-entry roll; aggro delay; hunter-runoff BFS placement; snake stacking exception integration. | `levels.ts`, `RoomTemplates.ts`, `Game.ts`, `Enemy.ts`, `constants.ts` |
 | **9** | Boss-room gating. Player entering anchor 10 triggers boss-arena state. Wave timer pauses. "Reached Boss" overlay. (Boss combat itself is deferred.) | `Game.ts`, `App.tsx` |
 
 ### Step 7 — anchor static authoring
@@ -556,7 +556,7 @@ These are knowingly out of scope for the refactor itself:
 - **Boss design** — anchor 10 combat mechanics, visual treatment of the corrupted plant.
 - **Family beyond single anchor** — escort behavior, multi-member carryover, multiple endings system.
 - **Gibbon in wave pools** — currently static-only.
-- **Static spawn telegraph** — visual / audio cue during the 1 s aggro delay.
+- **Static spawn telegraph** — visual / audio cue during the aggro delay.
 - **Cultural consultation** — see separate brief; engage before any custom-art commission.
 - **Per-anchor static authoring content** — empty defaults are acceptable for prototype.
 - **Anchor 1 visual marker / minimap / "you're here" indicator** — none for prototype; reconsider after playtest.
@@ -602,7 +602,7 @@ export const BOSS_HALO_RADIUS = 6;
 export const WAVE_PER_C_INCREMENT = 6;
 
 // Hunt
-export const STATIC_AGGRO_DELAY_MS = 1000;
+export const STATIC_AGGRO_DELAY_MS = 200;
 export const HUNT_RANGE = 2; // Manhattan, in room-grid coords
 ```
 

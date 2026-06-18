@@ -496,7 +496,7 @@ export class Game {
     // First entry rolls this room's per-run statics from the template
     // candidates (§5.10) and buckets them as dormant sitters; locked thereafter
     // (no re-roll on revisit, §5.13). The doTransition caller then runs
-    // Hunt.onPlayerEnteredRoom, which starts each sitter's 1 s aggro delay and
+    // Hunt.onPlayerEnteredRoom, which starts each sitter's aggro delay and
     // flips any parked hunter back to active.
     // Anchors (incl. the boss arena) carry no candidates, so this is a no-op there.
     const key = this.roomKey(coord);
