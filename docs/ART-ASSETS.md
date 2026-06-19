@@ -91,9 +91,9 @@ recolored green→olive for the Indian-rat-snake read — a 16 px sliver on
 screen, the least visible cross-artist seam. Sheets are recomposed to
 3 walk cols × 4 dir rows (down/right/up/left, the player-sheet convention)
 with tight union-bbox cells, named to the Keys in `src/assets/sprites/`.
-`Renderer.drawBeast` fits each frame into its `max(AABB, readability-floor)`
-box (so the visible body now matches the kill box), faces movement
-direction, animates a walk1/stand/walk2/stand gait, and stamps the red-eye
+`Renderer.drawBeast` fits each frame into its per-type `ENEMY_VISUAL_PX`
+box (decoupled from the kill AABB; panther/bear enlarged 2026-06-19), faces
+movement direction, animates a walk1/stand/walk2/stand gait, and stamps the red-eye
 cue (INFECTED_EYE_RED) over the sprite's own eye pixels per facing —
 up-facing shows the back of the head, no eyes. Per-asset checklist
 completed for all four (game-scale floor previews + live dev-server run +
@@ -103,10 +103,10 @@ published statements).
 
 Replaces the procedural bodies of `renderPanther` / `renderBear` /
 `renderSnake` / `renderGibbon`. All four should come from one pack (or one
-artist) so the bestiary reads as a set. Drawn size today scales to the
-per-type `ENEMY_AABB_PX` with a 0.5 readability floor
-(`ENEMY_VISUAL_SCALE_FLOOR`, `Renderer.ts`) — sprite swaps should keep each
-type's relative bulk: bear biggest, snake smallest-but-visible.
+artist) so the bestiary reads as a set. Drawn size today is a per-type
+`ENEMY_VISUAL_PX` box (`constants.ts`), decoupled from the kill AABB — sprite
+swaps should keep each type's relative bulk: bear biggest, snake
+smallest-but-visible.
 
 | Key | Replaces | Sheet spec | Identity / direction |
 |-----|----------|------------|----------------------|
@@ -160,18 +160,20 @@ by Jason Perry (finalbossblues),
 https://finalbossblues.itch.io/tf-jungle-tileset — royalty-free commercial +
 edits, human-made ("No generative AI was used"), credited in
 `docs/ART-CREDITS.md`. Built into `src/assets/sprites/jungle-tiles.png` (16px
-tiles drawn ×2 to the 32px grid): dirt-path floor recolored from the set's
-seamless grass autotile; 6 pure-leaf canopy interior tiles hash-picked per
-cell in `Renderer.renderLevel` to avoid a regular grid; a lit canopy top-edge
-drawn where a wall is exposed to open floor above. Verified in-engine
-(corridor-readability spike + live dev-server screenshots). Do not land
-**hut** tiles without a fresh owner decision.
+tiles drawn ×2 to the 32px grid). Re-sliced 2026-06-19 to render wall masses
+as **actual jungle trees** (owner "option C — actual trees"): a 10-tile atlas
+(dirt floor + 4 canopy interiors + 2 lit crowns + 2 canopy undersides + 1
+trunk/roots base, all sliced from the pack's own tree objects) that
+`Renderer.renderLevel` selects neighbour-aware — crowns on floor-facing top
+edges, trunks/leafy overhang at corridor bases, dense interior, plus a
+procedural canopy depth-shadow. Verified in-engine (live dev-server
+screenshots). Do not land **hut** tiles without a fresh owner decision.
 
 The most visible swap per pixel: every frame is mostly walls and floor.
 
 | Key | Replaces | Sheet spec | Identity / direction |
 |-----|----------|------------|----------------------|
-| `jungle-tiles` (walls) | wall branch of `renderLevel` | ✅ LANDED 2026-06-15 — 6 hash-picked 16px canopy interior tiles + a lit top-edge, atlas tiles 1–7 | Dense jungle canopy — reads as impassable tree, not hedge |
+| `jungle-tiles` (walls) | wall branch of `renderLevel` | ✅ LANDED 2026-06-15; re-sliced to neighbour-aware tree objects 2026-06-19 — crowns/undersides/trunk + 4 interiors, atlas tiles 1–9 | A stand of jungle trees — reads as impassable tree mass, not flat squares |
 | `jungle-tiles` (floor) | floor branch of `renderLevel` | ✅ LANDED 2026-06-15 — dirt recolored from the set's grass autotile, atlas tile 0 | Tan jungle path — stays quiet so entities pop (readability pillar) |
 | `hut` | `renderHuts` | ❌ still procedural (not greenlit) | Family hut — thatch/wood, pre-industrial, warm |
 

@@ -209,6 +209,23 @@ export const ENEMY_AABB_PX: Record<EnemyType, number> = {
 // arrows still hit the full 32 px enemy cell — only the kill test changes.
 export const PLAYER_HURTBOX_PX = 16;
 
+// Per-type *visual* sprite size (px): the square box each beast sprite is fitted
+// into for DRAWING, fully decoupled from the collision/kill box (ENEMY_AABB_PX).
+// VS's forgiving-swarm convention — the visible body may be ≥ its hitbox, never
+// smaller — so an apex threat reads at threat-appropriate size while the kill test
+// stays the small, fair box (deaths read as the player's mistake, pillar §3).
+// Sized to real-world body proportions (~19 px per metre at FEET_PER_TILE 5.5):
+// sloth bear bulkiest, leopard ~1.8× the gibbon (real leopard:gibbon body ratio),
+// the small-bodied hoolock gibbon + thin rat snake held at the readability floor.
+// Owner decision 2026-06-19 (panther/bear ↑, snake/gibbon realistic). RENDER-ONLY
+// (Renderer.drawBeast) — collision always uses ENEMY_AABB_PX via Enemy.getAABB.
+export const ENEMY_VISUAL_PX: Record<EnemyType, number> = {
+  bear: 39, // ↑ from 34 — apex bulk (real body 1.4–1.9 m)
+  panther: 29, // ↑ from 21 — ~1.8× the gibbon (real leopard proportion)
+  gibbon: 16, // realistic small primate (real body 0.6–0.9 m)
+  snake: 16, // thin rat snake; abstracted to the readability floor
+};
+
 // --- Hunt system (Step 4 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.11 (static aggro) and §5.12 (the
 // 4-state Hunt machine). All Hunt timing flows from the gameLoop currentTime
