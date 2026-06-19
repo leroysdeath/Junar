@@ -1,5 +1,18 @@
 # Plan: Unit sprite & jungle-tile sizing/quality pass
 
+> **STATUS — IMPLEMENTED 2026-06-19** (branch `claude/sprite-tile-sizing`). Owner
+> decisions: player/family **1.5×** (24×48); panther **29 px** / bear **39 px**
+> visual (kill boxes unchanged), snake & gibbon **16 px** (realistic — driven by
+> real-world body-size research for the gibbon call); jungle walls → **option C,
+> "actual trees"** (a 10-tile neighbour-aware atlas sliced from the pack's own
+> tree objects: crowns on top edges, trunks at corridor bases, dense interior +
+> a procedural canopy depth-shadow). A1/A2/A4 done via a new `ENEMY_VISUAL_PX`
+> map + `UNIT_SPRITE_SCALE`; A3 (raise the floor) subsumed by the explicit
+> per-type visual sizes; B1's depth-shadow folded into the option-C
+> `renderLevel`; B2 (autotile) superseded by option C. Verified in-engine,
+> lint/typecheck clean, adversarial review passed. Everything from "## Verified
+> current state" down is the **pre-change snapshot**, left as authored.
+
 > **How to use this plan (read first).** This document is a *starting point*, not a
 > locked spec. A later session will execute it. For **every** item below:
 > 1. **Re-verify against the live code first** — line numbers, constants, and the

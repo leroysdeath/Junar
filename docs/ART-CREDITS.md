@@ -132,13 +132,19 @@ Steam-page credits screen when it gets built.
   allowed; only direct redistribution of the raw assets is prohibited. Free /
   name-your-own-price. NOT share-alike / NC / ND; the itch listing is tagged
   "No generative AI was used."
-- **Changes:** from the plain 16px tilesheet, built a small in-repo atlas
-  `src/assets/sprites/jungle-tiles.png` — tile 0 = dirt-path floor recolored
-  from the set's seamless grass autotile (green→earth ramp); tiles 1–6 =
-  pure-leaf canopy interior tiles (sheet cols 11–13, rows 6–7), hash-picked
-  per cell in `Renderer.renderLevel` to avoid a regular grid; tile 7 = a lit
-  canopy top-edge (top rows brightened) drawn where a wall is exposed to floor
-  above. 16px tiles upscaled ×2 to the 32px grid.
+- **Changes:** built a small in-repo atlas `src/assets/sprites/jungle-tiles.png`
+  by slicing the pack's own tree objects. Re-sliced 2026-06-19 to render wall
+  masses as **actual jungle trees** (owner "option C — actual trees"), replacing
+  the earlier flat canopy-fill. The atlas is now **10 tiles**: tile 0 = dirt-path
+  floor recolored from the set's seamless grass autotile (green→earth ramp);
+  tiles 1–4 = pure-leaf canopy interiors (sheet cols 11–13, rows 6–7); tiles 5–6
+  = lit tree-crowns with transparent shoulders (canopy tops, cols 12 & 17 row 5);
+  tiles 7–8 = soft canopy-underside overhang (cols 16–17 row 8); tile 9 = a
+  canopy + tree-trunk/roots base composited from the standalone tree's trunk.
+  `Renderer.renderLevel` paints dirt on every cell, then picks crown / underside-
+  or-trunk / interior per wall cell by whether the cell above/below is open
+  (neighbour-aware), so each wall mass reads as a stand of trees. 16px tiles
+  upscaled ×2 to the 32px grid; render-only — collision is untouched.
 - **Courtesy credit line (optional):** "Jungle tileset: Time Fantasy by Jason
   Perry (finalbossblues), timefantasy.net."
 

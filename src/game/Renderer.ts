@@ -2,7 +2,7 @@ import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
 import { EnemyType, Facing, Vector2 } from './types';
-import { TILE_SIZE, ENEMY_AABB_PX, BOSS_GROWTH_CENTER } from './constants';
+import { TILE_SIZE, ENEMY_VISUAL_PX, BOSS_GROWTH_CENTER } from './constants';
 // Player sprite: composited from Time Elements "Character Core Set"
 // (finalbossblues / Jason Perry, timefantasy.net) — paid royalty-free, the
 // same art line as the beasts and jungle tileset. Modular pieces
@@ -26,12 +26,14 @@ import pantherSpriteUrl from '../assets/sprites/panther.png';
 import bearSpriteUrl from '../assets/sprites/bear.png';
 import snakeSpriteUrl from '../assets/sprites/snake.png';
 import gibbonSpriteUrl from '../assets/sprites/gibbon.png';
-// Jungle tileset — Tier 3 (tree walls + dirt floor), owner-greenlit 2026-06-15.
-// "Jungle Tileset" free Time Fantasy mini-expansion (Jason Perry / finalbossblues,
-// royalty-free commercial use + edits, raw redistribution prohibited — credited in
-// docs/ART-CREDITS.md). Atlas is a 16px-tile row: [0] dirt-path floor (recolored
-// from the set's seamless grass autotile), [1..4] seamless canopy wall variants
-// cycled by cell parity to break up repetition.
+// Jungle tileset — Tier 3 (tree walls + dirt floor), owner-greenlit 2026-06-15;
+// expanded to neighbour-aware tree objects 2026-06-19 (owner "option C — actual
+// trees"). "Jungle Tileset" free Time Fantasy mini-expansion (Jason Perry /
+// finalbossblues, royalty-free commercial use + edits, raw redistribution
+// prohibited — credited in docs/ART-CREDITS.md). The atlas tiles are sliced from
+// the pack's own tree objects (dirt recolored from the grass autotile; crowns,
+// canopy interiors, undersides and a trunk/roots base from the standalone trees)
+// so wall masses render as a stand of jungle trees rather than flat stamps.
 import jungleTilesUrl from '../assets/sprites/jungle-tiles.png';
 
 // Sprite-sheet layout — the player sheet is 16-wide × 32-tall cells: 4 walk
@@ -41,13 +43,27 @@ const SPRITE_CELL_W = 16;
 const SPRITE_CELL_H = 32;
 const SPRITE_WALK_FRAMES = 4;
 const SPRITE_WALK_FRAME_MS = 140;
-// Jungle tileset atlas: 16px source tiles, upscaled to TILE_SIZE on draw.
-// Layout: index 0 = dirt-path floor, 1..JUNGLE_WALL_VARIANTS = interior canopy
-// variants (hash-picked per cell), JUNGLE_WALL_TOP = lit canopy top-edge used
-// where a wall cell is exposed to open floor above.
+// Player & family draw at 1.5× their native 16×32 cell (owner decision
+// 2026-06-19) so the characters carry more presence against the ×2 jungle
+// tiles. Render-only: the figure is foot-aligned (feet on the tile floor) and
+// the head overflows the 32 px cell upward; collision (PLAYER_SIZE /
+// PLAYER_HURTBOX_PX) is untouched. 1.5× keeps the drawn size and centering
+// whole-pixel: 24×48, +4 px x-offset, −16 px y-offset.
+const UNIT_SPRITE_SCALE = 1.5;
+// Jungle tileset atlas (src/assets/sprites/jungle-tiles.png): 16px source tiles
+// upscaled ×2 to TILE_SIZE on draw. The tree tiles carry real transparency, so
+// renderLevel paints them over a full dirt-floor pass and the tree mass reads
+// with an irregular leafy silhouette instead of hard 32px square seams.
+// Layout (10 tiles): [0] dirt-path floor · [1..4] dense interior canopy
+// (hash-picked) · [5..6] lit bumpy tree-crowns (transparent shoulders, drawn on
+// floor-facing top edges) · [7..8] soft canopy-underside overhang (corridor-
+// facing bottom edges) · [9] canopy + tree-trunk/roots (occasional, at bases).
 const JUNGLE_TILE_SRC = 16;
-const JUNGLE_WALL_VARIANTS = 6;
-const JUNGLE_WALL_TOP = 7;
+const JUNGLE_DIRT = 0;
+const JUNGLE_INTERIOR = [1, 2, 3, 4];
+const JUNGLE_CROWN = [5, 6];
+const JUNGLE_UNDERSIDE = [7, 8];
+const JUNGLE_TRUNK = 9;
 const SPRITE_DIR_ROW: Record<Facing, number> = {
   down: 0,
   right: 1,
@@ -64,18 +80,11 @@ const FAMILY_CELL_W = 16;
 const FAMILY_CELL_H = 32;
 const FAMILY_STAND_COL = 1;
 
-// Beast sprites draw at a size that tracks the per-type collision AABB
-// (ENEMY_AABB_PX): each sheet's frame is fitted into a square box of
-// TILE_SIZE × max(AABB/TILE_SIZE, ENEMY_VISUAL_SCALE_FLOOR) px, centred in
-// the cell. The bear reads biggest and the snake smallest, while the floor
-// keeps the smallest beasts (gibbon, snake) identifiable in one frame rather
-// than shrinking to a sub-pixel speck — Pillar 5 (readable at a glance) is a
-// hard constraint, so the drawn size is allowed to exceed the tiny collision
-// box. A side effect of fitting to the AABB box (vs the old procedural art,
-// which drew the panther ~15 px against its 21 px kill box): the visible
-// body now matches the kill box, so contact deaths read fairer. Collision
-// itself always uses the true AABB (Enemy.getAABB), independent of this.
-const ENEMY_VISUAL_SCALE_FLOOR = 0.5;
+// Beast sprites draw at a per-type *visual* size (ENEMY_VISUAL_PX in
+// constants.ts — see there for the visible-≥-hitbox rationale), fully decoupled
+// from the collision/kill box: each sheet's frame is fitted into that square
+// box, centred in the cell. Collision always uses the true AABB
+// (Enemy.getAABB), independent of this drawn size.
 
 // Beast-sheet layout — same convention as the family sheets: 3 walk columns
 // (walk1 / stand / walk2) × 4 direction rows in SPRITE_DIR_ROW order
@@ -210,42 +219,94 @@ export class Renderer {
     this.jungleTiles = load(jungleTilesUrl);
   }
 
+  // A cell counts as "open" (corridor floor) for tree-edge selection when it's
+  // not a wall — and crucially when it's outside this room's grid, so walls on
+  // the room border still get crowns/trunks where they face the openings that
+  // connect to neighbour rooms.
+  private static isOpen(
+    walls: boolean[][],
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): boolean {
+    return x < 0 || x >= w || y < 0 || y >= h || !walls[y][x];
+  }
+
   renderLevel(level: Level) {
     const walls = level.getWalls();
+    const w = level.getWidth();
+    const h = level.getHeight();
 
-    for (let y = 0; y < level.getHeight(); y++) {
-      for (let x = 0; x < level.getWidth(); x++) {
-        const pixelX = x * TILE_SIZE;
-        const pixelY = y * TILE_SIZE;
+    const drawTile = (atlasIndex: number, px: number, py: number) =>
+      this.ctx.drawImage(
+        this.jungleTiles,
+        atlasIndex * JUNGLE_TILE_SRC,
+        0,
+        JUNGLE_TILE_SRC,
+        JUNGLE_TILE_SRC,
+        px,
+        py,
+        TILE_SIZE,
+        TILE_SIZE,
+      );
 
-        // Atlas tile 0 is the dirt path (floor). Wall (tree) cells use the lit
-        // canopy top-edge when open floor is directly above, else an interior
-        // canopy variant chosen by a deterministic per-cell hash so a run of
-        // wall reads as organic foliage rather than a regular grid. 16px source
-        // cells upscale to TILE_SIZE (imageSmoothingEnabled is already false, so
-        // the ×2 stays crisp).
-        let atlasIndex: number;
-        if (!walls[y][x]) {
-          atlasIndex = 0;
-        } else if (y === 0 || !walls[y - 1][x]) {
-          atlasIndex = JUNGLE_WALL_TOP;
-        } else {
-          const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
-          atlasIndex = 1 + (hash % JUNGLE_WALL_VARIANTS);
-        }
-        this.ctx.drawImage(
-          this.jungleTiles,
-          atlasIndex * JUNGLE_TILE_SRC,
-          0,
-          JUNGLE_TILE_SRC,
-          JUNGLE_TILE_SRC,
-          pixelX,
-          pixelY,
-          TILE_SIZE,
-          TILE_SIZE,
-        );
+    // Pass 1 — dirt-path floor on every cell (imageSmoothingEnabled is already
+    // false, so the ×2 upscale stays crisp). Wall cells get tree tiles painted
+    // over it in pass 2; those tiles carry real transparency, so the dirt shows
+    // through at crown shoulders / leafy undersides and the tree mass reads with
+    // an irregular silhouette rather than hard 32px square seams.
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        drawTile(JUNGLE_DIRT, x * TILE_SIZE, y * TILE_SIZE);
       }
     }
+
+    // Pass 2 — neighbour-aware tree tiles on wall cells, so every wall mass
+    // reads as a stand of jungle trees: bumpy lit crowns where it meets open
+    // floor above, an occasional trunk (else soft leafy overhang) where it meets
+    // a corridor below, dense canopy in the interior, a bushy crown for a thin
+    // 1-tile wall. A deterministic per-cell hash breaks up repetition.
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!walls[y][x]) continue;
+        const openAbove = Renderer.isOpen(walls, x, y - 1, w, h);
+        const openBelow = Renderer.isOpen(walls, x, y + 1, w, h);
+        const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+        let atlasIndex: number;
+        if (openAbove && openBelow) {
+          atlasIndex = JUNGLE_CROWN[hash % JUNGLE_CROWN.length];
+        } else if (openBelow) {
+          atlasIndex =
+            hash % 3 === 0
+              ? JUNGLE_TRUNK
+              : JUNGLE_UNDERSIDE[hash % JUNGLE_UNDERSIDE.length];
+        } else if (openAbove) {
+          atlasIndex = JUNGLE_CROWN[hash % JUNGLE_CROWN.length];
+        } else {
+          atlasIndex = JUNGLE_INTERIOR[hash % JUNGLE_INTERIOR.length];
+        }
+        drawTile(atlasIndex, x * TILE_SIZE, y * TILE_SIZE);
+      }
+    }
+
+    // Pass 3 — soft canopy shadow cast onto the corridor floor directly below a
+    // wall, breaking the bottom seam and giving the tree mass depth (procedural
+    // FX lane). Fades over the top few px of the floor cell.
+    this.ctx.save();
+    this.ctx.fillStyle = '#000000';
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (walls[y][x] || y === 0 || !walls[y - 1][x]) continue;
+        const px = x * TILE_SIZE;
+        const py = y * TILE_SIZE;
+        for (let s = 0; s < 5; s++) {
+          this.ctx.globalAlpha = Math.max(0, 60 - 11 * s) / 255;
+          this.ctx.fillRect(px, py + s * 2, TILE_SIZE, 2);
+        }
+      }
+    }
+    this.ctx.restore();
   }
 
   renderPlayer(player: Player, burstActive = false, currentTime = 0) {
@@ -256,13 +317,15 @@ export class Renderer {
     // so the figure remains readable on top. Fixed alpha and color; no
     // multiplier-tied intensity (intentional — keeps the cue binary).
     if (burstActive) {
+      // Aura wraps the 1.5× (24×48, foot-aligned) figure that overflows the
+      // cell upward — kept binary (fixed alpha/colour), just resized to fit.
       this.ctx.save();
       this.ctx.globalAlpha = 0.35;
       this.ctx.fillStyle = '#FFC857';
-      this.ctx.fillRect(pos.x - 6, pos.y - 6, 44, 44);
+      this.ctx.fillRect(pos.x - 6, pos.y - 20, 44, 58);
       this.ctx.globalAlpha = 0.55;
       this.ctx.fillStyle = '#FFD97A';
-      this.ctx.fillRect(pos.x - 3, pos.y - 3, 38, 38);
+      this.ctx.fillRect(pos.x - 2, pos.y - 16, 36, 50);
       this.ctx.restore();
     }
 
@@ -274,19 +337,21 @@ export class Renderer {
       : 0;
     const row = SPRITE_DIR_ROW[facing];
 
-    // Source cell from the sheet. Destination: native scale (16w × 32h)
-    // centered horizontally in the 32×32 AABB so the burst aura still
-    // envelopes the visible character correctly.
+    // Source cell from the sheet. Destination: 1.5× (24w × 48h), centered
+    // horizontally in the 32 px cell (+4) and foot-aligned to the tile floor
+    // (−16), so the head overflows the cell upward. Collision is unaffected.
+    const destW = SPRITE_CELL_W * UNIT_SPRITE_SCALE;
+    const destH = SPRITE_CELL_H * UNIT_SPRITE_SCALE;
     this.ctx.drawImage(
       this.playerSprite,
       frame * SPRITE_CELL_W,
       row * SPRITE_CELL_H,
       SPRITE_CELL_W,
       SPRITE_CELL_H,
-      pos.x + 8,
-      pos.y,
-      SPRITE_CELL_W,
-      SPRITE_CELL_H,
+      pos.x + (TILE_SIZE - destW) / 2,
+      pos.y + (TILE_SIZE - destH),
+      destW,
+      destH,
     );
   }
 
@@ -359,9 +424,7 @@ export class Renderer {
     frameCol: number,
   ) {
     const spec = BEAST_SHEET[type];
-    const box =
-      TILE_SIZE *
-      Math.max(ENEMY_AABB_PX[type] / TILE_SIZE, ENEMY_VISUAL_SCALE_FLOOR);
+    const box = ENEMY_VISUAL_PX[type];
     const k = box / Math.max(spec.cellW, spec.cellH);
     const destW = Math.round(spec.cellW * k);
     const destH = Math.round(spec.cellH * k);
@@ -396,27 +459,31 @@ export class Renderer {
     }
   }
 
-  // Panther — Time Fantasy sheet; black-panther silhouette, reads at its
-  // 21 px AABB box. One method per beast kept for the type dispatch.
+  // Panther — Time Fantasy sheet; black-panther silhouette, drawn at its 29 px
+  // ENEMY_VISUAL_PX box (decoupled from the 21 px kill AABB). One method per
+  // beast kept for the type dispatch.
   private renderPanther(pos: Vector2, facing: Facing, frameCol: number) {
     this.drawBeast('panther', pos, facing, frameCol);
   }
 
   // Gibbon — Time Fantasy gorilla sheet: dark, tailless, long-armed primate
-  // (closest match for the Hoolock); draws at the 0.5 readability floor.
+  // (closest match for the Hoolock); draws at its 16 px ENEMY_VISUAL_PX box —
+  // the readability floor for the small-bodied primate (real body 0.6–0.9 m).
   private renderGibbon(pos: Vector2, facing: Facing, frameCol: number) {
     this.drawBeast('gibbon', pos, facing, frameCol);
   }
 
-  // Bear — Time Fantasy dark adult bear; biggest of the set at its 34 px box.
+  // Bear — Time Fantasy dark adult bear; biggest of the set at its 39 px
+  // ENEMY_VISUAL_PX box (kill AABB stays 34, so it still can't fit a 1-tile
+  // corridor).
   private renderBear(pos: Vector2, facing: Facing, frameCol: number) {
     this.drawBeast('bear', pos, facing, frameCol);
   }
 
   // Snake — TTH sheet recolored to olive (Indian rat snake). Collision AABB
   // stays a tiny 4 px box (ENEMY_AABB_PX) so many snakes pack/stack per
-  // tile; drawn at the 16 px readability floor, and the 32 px cell still
-  // drives arrow-hit in Game.ts, so arrows land reliably.
+  // tile; drawn at its 16 px ENEMY_VISUAL_PX box (the readability floor), and
+  // the 32 px cell still drives arrow-hit in Game.ts, so arrows land reliably.
   private renderSnake(pos: Vector2, facing: Facing, frameCol: number) {
     this.drawBeast('snake', pos, facing, frameCol);
   }
@@ -430,18 +497,21 @@ export class Renderer {
     this.ctx.globalAlpha = 0.7;
     positions.forEach((pos, i) => {
       const sheet = this.familySprites[i % this.familySprites.length];
-      // Native 16x32 cell, horizontally centered and foot-aligned in the
-      // 32 px tile (same convention as the player sprite's 16x32 cell).
+      // 1.5× (24×48) cell, horizontally centered (+4) and foot-aligned (−16)
+      // in the 32 px tile — same convention/scale as the player sprite, so the
+      // family reads at matching presence. Still α=0.7 (not-yet-interactive).
+      const destW = FAMILY_CELL_W * UNIT_SPRITE_SCALE;
+      const destH = FAMILY_CELL_H * UNIT_SPRITE_SCALE;
       this.ctx.drawImage(
         sheet,
         FAMILY_STAND_COL * FAMILY_CELL_W,
         SPRITE_DIR_ROW.down * FAMILY_CELL_H,
         FAMILY_CELL_W,
         FAMILY_CELL_H,
-        pos.x + (TILE_SIZE - FAMILY_CELL_W) / 2,
-        pos.y + (TILE_SIZE - FAMILY_CELL_H),
-        FAMILY_CELL_W,
-        FAMILY_CELL_H,
+        pos.x + (TILE_SIZE - destW) / 2,
+        pos.y + (TILE_SIZE - destH),
+        destW,
+        destH,
       );
     });
     this.ctx.restore();
