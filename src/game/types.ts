@@ -33,10 +33,16 @@ export interface GameCallbacks {
   // enemy count — see Game.enemiesKilled.
   onKillsChange: (kills: number) => void;
   onEnemiesChange: (count: number) => void;
-  // Stamina + burst signals. isLow is bundled with value to avoid a
-  // render race between the bar value and its low-state styling.
+  // Energy (stamina) + burst + sprint signals. isLow is bundled with value to
+  // avoid a render race between the bar value and its low-state styling.
   onStaminaChange?: (value: number, isLow: boolean) => void;
   onBurstChange?: (
+    active: boolean,
+    multiplier: number,
+    endsAtMs: number,
+  ) => void;
+  // Sprint twin of onBurstChange (movement-speed boost). Same shape.
+  onSprintChange?: (
     active: boolean,
     multiplier: number,
     endsAtMs: number,
@@ -52,8 +58,8 @@ export interface InputState {
 }
 
 // Cardinal facing direction, set by Player based on the most recent
-// directional input. Drives both the player render variant and the dash
-// direction (dash teleports opposite of facing).
+// directional input. Drives the player render variant (which directional
+// sprite is drawn).
 export type Facing = 'up' | 'down' | 'left' | 'right';
 
 export type EnemyType = 'panther' | 'snake' | 'gibbon' | 'bear';
@@ -61,6 +67,14 @@ export type EnemyType = 'panther' | 'snake' | 'gibbon' | 'bear';
 export interface EnemySpawn {
   pos: Vector2;
   type: EnemyType;
+}
+
+// A mango pickup (owner 2026-06-19). A static collectible placed at a dead-end
+// chamber's centre; walking over it grants energy and flips `collected`. Lives
+// per-room in Game.roomMangos, rolled once on first room entry (5 per run).
+export interface Mango {
+  tile: Vector2; // top-left of the cell it sits in (world px)
+  collected: boolean;
 }
 
 // A rectangular band, in world-space pixels, where enemies can appear.
@@ -220,19 +234,21 @@ export interface RoomGridCoord {
 //   hunting    — pursuing the player across rooms (player has left its room)
 export type HuntState = 'dormant' | 'activating' | 'active' | 'hunting';
 
-export type RoomKind = 'anchor' | 'connector';
+export type RoomKind = 'anchor' | 'connector' | 'miniboss';
 
 // A resolved room placed in the grid. Connectors are drawn from the connector
-// template pool; anchors are the 10 hand-designed levels. `walls`/`openings`
-// drive collision, rendering, transitions and per-opening wave bands.
-// `candidates`/`authoredStatics` are consumed by later steps (statics); for
-// Step 3 they ride along unused. `npcPositions`/`hutPositions` come from the
-// anchor levels (empty for connectors) so family/hut markers still render.
+// template pool; the `anchor` kind now covers the required start L-bend, the
+// boss arena versions, and the mango dead-ends (the hand-designed levels are
+// demoted to connectors). `walls`/`openings` drive collision, rendering,
+// transitions and per-opening wave bands. `candidates`/`authoredStatics` feed
+// the static-spawn roll. `npcPositions`/`hutPositions` are currently empty
+// everywhere (family rendering paused — see CLAUDE.md §6).
 export interface RoomDef {
   kind: RoomKind;
   templateId: string;
-  // 0..ANCHOR_COUNT-1 for anchors (index into the anchor level list, also the
-  // placement identity: 0 = start, ANCHOR_COUNT-1 = boss); null for connectors.
+  // Vestigial since the 2026-06-20 restructure (start/boss/mango are now
+  // identified by RunMap coords, not this field): always null in current defs.
+  // Retained on the interface so older debug tooling that reads it still compiles.
   anchorIndex: number | null;
   walls: boolean[][];
   openings: RoomOpening[];
@@ -242,15 +258,25 @@ export interface RoomDef {
   hutPositions: Vector2[];
 }
 
-// A generated run: the room grid plus the anchor placements. `cells[row][col]`
-// indexes a RoomDef (connector RoomDefs are shared by reference across cells
-// using the same template). `anchorCoords[i]` is anchor i's grid position;
-// `startCoord` = anchorCoords[0], `bossCoord` = anchorCoords[ANCHOR_COUNT-1].
+// A generated run: the room grid plus the guaranteed-room placements.
+// `cells[row][col]` indexes a RoomDef (connector RoomDefs are shared by
+// reference across cells using the same template). `startCoord` is the run-start
+// L-bend; `bossCoord` is the boss arena (farthest from start).
 export interface RunMap {
   cols: number;
   rows: number;
   cells: RoomDef[][];
-  anchorCoords: RoomGridCoord[];
   startCoord: RoomGridCoord;
   bossCoord: RoomGridCoord;
+  // World-px centre of the boss version's 3×3 stump — the run's win trigger
+  // (Game.isTouchingGrowthHeart). Varies by which of the four boss arenas rolled.
+  bossStumpCenter: Vector2;
+  // Mini-boss rooms (owner 2026-06-19): MINIBOSS_COUNT wide-open arenas. Three
+  // are empty; `pantherBossCoord` is the one (farthest from start) that spawns
+  // the enlarged panther mini-boss.
+  minibossCoords: RoomGridCoord[];
+  pantherBossCoord: RoomGridCoord;
+  // The five dead-end rooms (owner 2026-06-20) that hold the run's mangos; Game
+  // places one mango per room on first entry.
+  mangoRoomCoords: RoomGridCoord[];
 }

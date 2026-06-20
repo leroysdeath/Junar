@@ -47,9 +47,9 @@ The cleanup contract: the mount `useEffect` return in `App.tsx` (around `App.tsx
 
 4. **Extend the bridge, don't replace it.** New game→UI signals (e.g., "family member died", "boss phase changed", "kill streak hit 5") should be added as new callback fields on `GameCallbacks` and called from `Game` at the right moment. The React side wires up a `useState` (or whatever local UI shape it needs) and reads it.
 
-5. **UI→game inputs go through methods on the `Game` instance.** Current examples are `setSoundEnabled` and the mobile controls' path into the game: `setVirtualInput`, `triggerBurst`, `triggerDash`. For things like "pause when the menu opens" or "toggle a debug mode", add an instance method and call it from `App.tsx`. Don't reach into `Game`'s internals from React.
+5. **UI→game inputs go through methods on the `Game` instance.** Current examples are `setSoundEnabled` and the mobile controls' path into the game: `setVirtualInput`, `triggerBurst`, `triggerSprint`. For things like "pause when the menu opens" or "toggle a debug mode", add an instance method and call it from `App.tsx`. Don't reach into `Game`'s internals from React.
 
-6. **Keyboard input is owned by `InputManager`, not by React handlers.** `InputManager` attaches listeners to `window`. Don't add `onKeyDown` to the canvas or to a React element to drive gameplay. The one sanctioned touch exception: the React pointer handlers in `MobileControls.tsx` funnel through `Game.setVirtualInput` / `triggerBurst` / `triggerDash` into `InputManager`, so the game loop sees one unified `InputState`. Don't add a second React input path outside that funnel.
+6. **Keyboard input is owned by `InputManager`, not by React handlers.** `InputManager` attaches listeners to `window`. Don't add `onKeyDown` to the canvas or to a React element to drive gameplay. The one sanctioned touch exception: the React pointer handlers in `MobileControls.tsx` funnel through `Game.setVirtualInput` / `triggerBurst` / `triggerSprint` into `InputManager`, so the game loop sees one unified `InputState`. Don't add a second React input path outside that funnel.
 
 ## Adding a new game→UI signal — the pattern
 

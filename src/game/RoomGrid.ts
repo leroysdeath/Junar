@@ -1,20 +1,23 @@
 // Room-grid generator for the traversable-maps refactor (Step 3).
 //
 // A run is a ROOM_GRID_COLS × ROOM_GRID_ROWS grid of rooms (493 total),
-// regenerated every run. Ten of the cells are anchors (the hand-designed
-// levels: anchor 1 = start, anchor 10 = boss); the rest are connectors drawn
-// from CONNECTOR_TEMPLATE_POOL. The player traverses room-to-room from anchor
-// 1 toward the boss. See docs/ROADMAP-traversable-maps.md §5.1 (run structure),
-// §5.2 (templates), §5.3 (transitions).
+// regenerated every run. REQUIRED_ROOM_COUNT (11) cells are guaranteed each run
+// — the start (a random L-bend), the boss arena (one of four versions), the four
+// mini-boss arenas, and five mango dead-ends; the rest are connectors drawn from
+// CONNECTOR_TEMPLATE_POOL (which now also carries the demoted anchor-1/-5/-9
+// layouts). The player traverses room-to-room from the start toward the boss.
+// See docs/ROADMAP-traversable-maps.md §5.1 (run structure), §5.2 (templates),
+// §5.3 (transitions).
 //
 // Generation pipeline (generateRunMap):
-//   1. Poisson-disk place the 10 anchors in the interior (≥ MIN_ANCHOR_SPACING
-//      Manhattan rooms apart; kept off the outer ring so anchor openings never
-//      point off-map).
-//   2. Fill every non-anchor cell with a connector whose openings are
-//      compatible with already-placed neighbors and the grid border.
-//   3. BFS for path-existence from anchor 1; if the boss (anchor 10) isn't
-//      reachable, regenerate.
+//   1. Poisson-disk place the 11 required rooms in the INNER interior (≥
+//      MIN_ANCHOR_SPACING apart; two rings off the border so even a single-
+//      opening room's door faces a fully-connectable interior neighbour), then
+//      assign roles (farthest-from-start = boss; rest split mini-boss / mango).
+//   2. Fill every other cell with a connector whose openings are compatible with
+//      already-placed neighbors and the grid border.
+//   3. BFS path-existence from the start; if any required room is unreachable,
+//      regenerate.
 //
 // ── Adjacency model (a pragmatic reading of §5.3) ───────────────────────────
 // Two adjacent CONNECTORS must have IDENTICAL opening sets on their shared edge
@@ -28,14 +31,23 @@
 // guarantees the boss is reachable or the map regenerates. Transitions at
 // runtime use the same overlap rule (see roomsConnect / openingsOnEdge).
 
-import { Edge, RoomDef, RoomGridCoord, RoomOpening, RunMap } from './types';
+import {
+  Edge,
+  RoomDef,
+  RoomGridCoord,
+  RoomOpening,
+  RunMap,
+  Vector2,
+} from './types';
 import {
   ROOM_GRID_COLS,
   ROOM_GRID_ROWS,
-  ANCHOR_COUNT,
+  MINIBOSS_COUNT,
+  MANGO_RUN_CAP,
   MIN_ANCHOR_SPACING,
   GRID_WIDTH,
   GRID_HEIGHT,
+  TILE_SIZE,
 } from './constants';
 import { levels } from './levels';
 import { CONNECTOR_TEMPLATE_POOL, deriveOpenings } from './RoomTemplates';
@@ -177,96 +189,481 @@ function carveAnchorDoors(src: boolean[][]): boolean[][] {
   return walls;
 }
 
-// The 10 anchors, from the existing levels. Walls are the authored interior
-// with canonical doorways carved in; openings are derived from those carved
-// walls. NPC/hut markers ride along so family/hut placeholders still render in
-// anchor rooms. Statics are empty until Step 7 authors per-anchor manifests.
-const ANCHOR_DEFS: RoomDef[] = levels.slice(0, ANCHOR_COUNT).map((lvl, i) => {
-  const walls = carveAnchorDoors(lvl.walls);
+// anchor-1 / -5 / -9 demoted to CONNECTORS (owner 2026-06-20): only the boss
+// (anchor-10, now its own four-version registry below) remains a required
+// hand-authored room. Their canonical carved doorways (cross-like, all four
+// edges) make them ordinary corridor fabric — big rooms the player passes
+// through. NPC/hut markers are STRIPPED here: connector defs are shared by
+// reference across many cells, so keeping the markers would duplicate the
+// family across the map. Family rendering is paused until the FamilyMember
+// entity lands and re-places them (CLAUDE.md §6).
+const ANCHOR_CONNECTOR_LEVEL_INDICES = [0, 4, 8]; // levels.ts: anchor-1, -5, -9
+const ANCHOR_CONNECTOR_DEFS: RoomDef[] = ANCHOR_CONNECTOR_LEVEL_INDICES.map(
+  (lvlIdx) => {
+    const walls = carveAnchorDoors(levels[lvlIdx].walls);
+    return {
+      kind: 'connector' as const,
+      templateId: `anchor-${lvlIdx + 1}`,
+      anchorIndex: null,
+      walls,
+      openings: deriveOpenings(walls),
+      candidates: [],
+      authoredStatics: [],
+      npcPositions: [],
+      hutPositions: [],
+    };
+  },
+);
+
+// The connector pool as RoomDefs. Shared by reference across every cell that
+// uses the same template — they're read-only, so no per-cell copy is needed.
+// The demoted anchor rooms (above) ride along in the same pool.
+const CONNECTOR_DEFS: RoomDef[] = [
+  ...CONNECTOR_TEMPLATE_POOL.map((t) => ({
+    kind: 'connector' as const,
+    templateId: t.id,
+    anchorIndex: null,
+    walls: t.walls,
+    openings: t.openings,
+    candidates: t.candidates,
+    authoredStatics: t.authoredStatics,
+    npcPositions: [],
+    hutPositions: [],
+  })),
+  ...ANCHOR_CONNECTOR_DEFS,
+];
+
+// Mini-boss arena templates (owner 2026-06-20). Hand-authored 29×17 arenas
+// ('#' = tree wall, '.' = dirt floor). Openings are authored into each grid and
+// derived from geometry (no door-carving — each room keeps its exact silhouette),
+// connecting to the corridor fabric via opening OVERLAP like anchors.
+//
+// Of the four mini-boss rooms a run places, ONE (the panther arena, farthest from
+// start) spawns the coded enlarged-panther boss; the other three are EMPTY themed
+// rooms whose minibosses are documented ideas, not yet built (docs/IDEATION.md).
+// Each `active` slot has an `alt` kept here as a ready swap-in.
+//
+//   panther → emptyThrone (active) | motherStump (alt — centre is a WALL, so
+//             swapping it in needs an off-centre boss spawn; boss spawns at the
+//             centre CENTER_SPAWN today)
+//   empty   → bear (active) | bearAlt; snake (active) | snakeAlt, snakeAlt2; gibbon
+//
+// NOTE (connectivity): the bear arena uses the standard canonical doorways
+// (N/S 13-15, E/W 7-9). The snake arena's openings are non-canonical (corner
+// offsets) and the gibbon arena opens only N/S — both still overlap the connector
+// fabric on the analysed edges, so they connect, just not on the canonical centre.
+// The all-mini-boss-reachable gate in generateRunMap regenerates any map where a
+// room is stranded, so connectivity is guaranteed; see notes for the door-carving
+// fallback if a future map proves hard to connect.
+const MINIBOSS_ARENAS = {
+  // The panther Empty Throne — the former t-maze-cross-pillars connector,
+  // promoted here (owner 2026-06-20) and removed from the connector pool. Four
+  // corner tree-blocks frame an open centre + cross; canonical doorways; centre
+  // tile open so the boss spawns at CENTER_SPAWN.
+  emptyThrone: {
+    id: 'miniboss-empty-throne',
+    ascii: [
+      '#############...#############',
+      '#...........................#',
+      '#...######.........######...#',
+      '#...######.........######...#',
+      '#...######.........######...#',
+      '#...######.........######...#',
+      '#...........................#',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#...........................#',
+      '#...######.........######...#',
+      '#...######.........######...#',
+      '#...######.........######...#',
+      '#...######.........######...#',
+      '#...........................#',
+      '#############...#############',
+    ],
+  },
+  // Previous Empty Throne design (four 5×3 corner tree-stands) — saved alt.
+  emptyThroneAlt: {
+    id: 'miniboss-empty-throne-v1',
+    ascii: [
+      '#############...#############',
+      '#...........................#',
+      '#...........................#',
+      '#....#####.........#####....#',
+      '#....#####.........#####....#',
+      '#....#####.........#####....#',
+      '#...........................#',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#...........................#',
+      '#....#####.........#####....#',
+      '#....#####.........#####....#',
+      '#....#####.........#####....#',
+      '#...........................#',
+      '#...........................#',
+      '#############...#############',
+    ],
+  },
+  motherStump: {
+    id: 'miniboss-mother-stump',
+    ascii: [
+      '#############...#############',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '............#####............',
+      '............#####............',
+      '............#####............',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#############...#############',
+    ],
+  },
+  bear: {
+    id: 'miniboss-bear',
+    ascii: [
+      '#############...#############',
+      '#####...................#####',
+      '##.........................##',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '#...........................#',
+      '##.........................##',
+      '#####...................#####',
+      '#############...#############',
+    ],
+  },
+  bearAlt: {
+    id: 'miniboss-bear-octagon',
+    ascii: [
+      '#######...............#######',
+      '#####...................#####',
+      '##.........................##',
+      '#...........................#',
+      '.............................',
+      '.............................',
+      '.............................',
+      '.............................',
+      '.............................',
+      '.............................',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#...........................#',
+      '##.........................##',
+      '#####...................#####',
+      '#######...............#######',
+    ],
+  },
+  snake: {
+    id: 'miniboss-snake',
+    ascii: [
+      '######...###########...######',
+      '.######......###......######.',
+      '..#####...............#####..',
+      '...#####.............#####...',
+      '#....####...........####....#',
+      '#......##...........##......#',
+      '#.......##.........##.......#',
+      '#...........................#',
+      '##.........................##',
+      '.###.....................###.',
+      '...###.................###...',
+      '.....###.............###.....',
+      '#......##...........##......#',
+      '#.............#.............#',
+      '###...........#...........###',
+      '####..........#..........####',
+      '#####...#############...#####',
+    ],
+  },
+  snakeAlt: {
+    id: 'miniboss-snake-v1',
+    ascii: [
+      '######......#####......######',
+      '.######......###......######.',
+      '..#####...............#####..',
+      '...#####.............#####...',
+      '.....####...........####.....',
+      '.......##...........##.......',
+      '........##.........##........',
+      '.............................',
+      '##.........................##',
+      '.###.....................###.',
+      '...###.................###...',
+      '.....###.............###.....',
+      '.......##...........##.......',
+      '..............#..............',
+      '###...........#...........###',
+      '####..........#..........####',
+      '#####........###........#####',
+    ],
+  },
+  // Snake alt 2 — same diamond/star silhouette but with clean CANONICAL doorways
+  // (N/S 13-15, E/W 7-9), so it connects on the standard 3-wide entries. Best-
+  // connecting snake design; a candidate to promote to the active `snake` slot.
+  snakeAlt2: {
+    id: 'miniboss-snake-v2',
+    ascii: [
+      '#############...#############',
+      '#######...............#######',
+      '#.#####......###......#####.#',
+      '#..#####.............#####..#',
+      '#....####...........####....#',
+      '#......##...........##......#',
+      '#.......##.........##.......#',
+      '..#.......................#..',
+      '..#.......................#..',
+      '..##.....................##..',
+      '#..###.................###..#',
+      '#....###.............###....#',
+      '#......##...........##......#',
+      '#............###............#',
+      '###...........#...........###',
+      '####.....................####',
+      '#############...#############',
+    ],
+  },
+  gibbon: {
+    id: 'miniboss-gibbon',
+    ascii: [
+      '#...#########...#############',
+      '#.........###...###.........#',
+      '#.........###...###.........#',
+      '#.........###...###.........#',
+      '#######...###...###...###...#',
+      '#######...###...###...###...#',
+      '#######...###...###...###...#',
+      '#...............###...###...#',
+      '#...............###...###...#',
+      '#...............###...###...#',
+      '#...#########...###...#######',
+      '#...#########...###...#######',
+      '#...#########...###...#######',
+      '#.........###...............#',
+      '#.........###...............#',
+      '#.........###...............#',
+      '#############...#########...#',
+    ],
+  },
+} as const;
+
+// Active arenas. The panther arena (the only one with a coded boss) uses
+// emptyThrone; the three empty rooms use the bear/snake/gibbon designs.
+const PANTHER_ARENA = MINIBOSS_ARENAS.emptyThrone;
+const EMPTY_ARENAS = [
+  MINIBOSS_ARENAS.bear,
+  MINIBOSS_ARENAS.snake,
+  MINIBOSS_ARENAS.gibbon,
+];
+
+// Build a mini-boss RoomDef from an authored arena: walls straight from the ASCII,
+// openings derived from geometry. Shared by reference (read-only).
+function buildMinibossDef(arena: {
+  id: string;
+  ascii: readonly string[];
+}): RoomDef {
+  const walls = arena.ascii.map((row) => [...row].map((ch) => ch === '#'));
   return {
-    kind: 'anchor' as const,
-    templateId: `anchor-${i + 1}`,
-    anchorIndex: i,
+    kind: 'miniboss',
+    templateId: arena.id,
+    anchorIndex: null,
     walls,
     openings: deriveOpenings(walls),
     candidates: [],
     authoredStatics: [],
-    npcPositions: lvl.npcPositions,
-    hutPositions: lvl.hutPositions,
+    npcPositions: [],
+    hutPositions: [],
   };
-});
-
-// The connector pool as RoomDefs. Shared by reference across every cell that
-// uses the same template — they're read-only, so no per-cell copy is needed.
-const CONNECTOR_DEFS: RoomDef[] = CONNECTOR_TEMPLATE_POOL.map((t) => ({
-  kind: 'connector' as const,
-  templateId: t.id,
-  anchorIndex: null,
-  walls: t.walls,
-  openings: t.openings,
-  candidates: t.candidates,
-  authoredStatics: t.authoredStatics,
-  npcPositions: [],
-  hutPositions: [],
-}));
-
-// ───────────────────────────────────────────────────────────────────────────
-// Anchor placement (Poisson-disk, interior only).
-// ───────────────────────────────────────────────────────────────────────────
-function tryPlaceAnchors(
-  rng: () => number,
-  minSpacing: number,
-  maxAttempts: number,
-): RoomGridCoord[] | null {
-  const anchors: RoomGridCoord[] = [];
-  let attempts = 0;
-  while (anchors.length < ANCHOR_COUNT) {
-    if (attempts++ > maxAttempts) return null;
-    // Interior only (1..COLS-2 / 1..ROWS-2): keeps anchor openings off the
-    // outer ring so they always face a neighbor cell, never off-map.
-    const col = 1 + randInt(rng, ROOM_GRID_COLS - 2);
-    const row = 1 + randInt(rng, ROOM_GRID_ROWS - 2);
-    const coord = { col, row };
-    if (anchors.some((a) => manhattan(a, coord) < minSpacing)) continue;
-    anchors.push(coord);
-  }
-  return anchors;
 }
+const PANTHER_DEF = buildMinibossDef(PANTHER_ARENA);
+const EMPTY_DEFS = EMPTY_ARENAS.map(buildMinibossDef);
 
-function placeAnchors(rng: () => number): RoomGridCoord[] {
-  // Try the target spacing, relaxing toward 1 if a sparse RNG run can't fit
-  // all 10 (vanishingly rare with 405 interior cells).
-  for (let spacing = MIN_ANCHOR_SPACING; spacing >= 1; spacing--) {
-    const placed = tryPlaceAnchors(rng, spacing, 3000);
-    if (placed) return placed;
+// ───────────────────────────────────────────────────────────────────────────
+// Boss arena (anchor-10) — four versions (owner 2026-06-20).
+// ───────────────────────────────────────────────────────────────────────────
+// Each is a wide-open arena ringed by border trees with EXACTLY ONE canonical
+// doorway and a solid 3×3 tree "stump" at the FAR end (M = its centre tile).
+// Touching the stump wins the run (Game.isTouchingGrowthHeart vs
+// RunMap.bossStumpCenter). One version is picked at random per run. The single
+// opening is why the boss is placed inner-interior (placeRequired) — its door
+// always faces a fully-connectable interior neighbour.
+interface BossVersion {
+  def: RoomDef;
+  stumpCenter: Vector2;
+}
+function buildBossVersion(
+  id: string,
+  door: Edge,
+  stumpCol: number,
+  stumpRow: number,
+): BossVersion {
+  const lastRow = GRID_HEIGHT - 1;
+  const lastCol = GRID_WIDTH - 1;
+  // Open arena: solid border ring, floor interior.
+  const walls: boolean[][] = Array.from({ length: GRID_HEIGHT }, (_, r) =>
+    Array.from(
+      { length: GRID_WIDTH },
+      (_, c) => r === 0 || r === lastRow || c === 0 || c === lastCol,
+    ),
+  );
+  // Carve the one canonical doorway (N/S cols 13-15, E/W rows 7-9).
+  for (const col of DOOR_COLS) {
+    if (door === 'N') walls[0][col] = false;
+    if (door === 'S') walls[lastRow][col] = false;
   }
-  // Deterministic last resort: a sparse interior lattice. Guarantees a result
-  // so callers never have to handle a null placement.
+  for (const row of DOOR_ROWS) {
+    if (door === 'W') walls[row][0] = false;
+    if (door === 'E') walls[row][lastCol] = false;
+  }
+  // Stamp the solid 3×3 stump centred on (stumpCol, stumpRow).
+  for (let r = stumpRow - 1; r <= stumpRow + 1; r++) {
+    for (let c = stumpCol - 1; c <= stumpCol + 1; c++) {
+      walls[r][c] = true;
+    }
+  }
+  return {
+    def: {
+      kind: 'anchor',
+      templateId: id,
+      anchorIndex: null,
+      walls,
+      openings: deriveOpenings(walls),
+      candidates: [],
+      authoredStatics: [],
+      npcPositions: [],
+      hutPositions: [],
+    },
+    stumpCenter: {
+      x: stumpCol * TILE_SIZE + TILE_SIZE / 2,
+      y: stumpRow * TILE_SIZE + TILE_SIZE / 2,
+    },
+  };
+}
+// Door at one end, stump at the FAR end. Stump centres (px): v1 (464,112),
+// v2 (464,432), v3 (816,272), v4 (112,272).
+const BOSS_VERSIONS: BossVersion[] = [
+  buildBossVersion('boss-v1', 'S', 14, 3),
+  buildBossVersion('boss-v2', 'N', 14, 13),
+  buildBossVersion('boss-v3', 'W', 25, 8),
+  buildBossVersion('boss-v4', 'E', 3, 8),
+];
+
+// Required connector-layout rooms placed as guaranteed cells: the start L-bend
+// (one of four rotations, random per run) and the five mango dead-ends (random
+// rotations). Built kind:'anchor' so the connector fill biases toward wiring
+// them in (anchorAgreement) and the reachability gate stays cheap. Statics are
+// suppressed (candidates [] — required rooms stay clean).
+function requiredFromTemplate(id: string): RoomDef {
+  const t = CONNECTOR_TEMPLATE_POOL.find((x) => x.id === id);
+  if (!t) throw new Error(`[Junar] required template not found: ${id}`);
+  return {
+    kind: 'anchor',
+    templateId: t.id,
+    anchorIndex: null,
+    walls: t.walls,
+    openings: t.openings,
+    candidates: [],
+    authoredStatics: [],
+    npcPositions: [],
+    hutPositions: [],
+  };
+}
+const START_LBEND_DEFS: RoomDef[] = [
+  't-lbend-ne',
+  't-lbend-nw',
+  't-lbend-se',
+  't-lbend-sw',
+].map(requiredFromTemplate);
+const MANGO_DEADEND_DEFS: RoomDef[] = [
+  't-deadend-n',
+  't-deadend-s',
+  't-deadend-e',
+  't-deadend-w',
+].map(requiredFromTemplate);
+
+// Required rooms per run: start L-bend + boss + mini-bosses + mango dead-ends.
+const REQUIRED_ROOM_COUNT = 2 + MINIBOSS_COUNT + MANGO_RUN_CAP; // 11
+
+// ───────────────────────────────────────────────────────────────────────────
+// Required-room placement (Poisson-disk, inner-interior).
+// ───────────────────────────────────────────────────────────────────────────
+// Inner-interior margin: required rooms keep TWO rings off the border so even a
+// single-opening room (boss, dead-end) has its door facing a fully-connectable
+// interior neighbour (a border-ring connector is constrained on its off-map
+// edge and connects less reliably).
+const INNER_MARGIN = 2;
+
+// Place REQUIRED_ROOM_COUNT rooms in the inner-interior with Poisson-disk
+// spacing, relaxing toward 1, with a deterministic lattice fallback so a result
+// always lands. Roles (start / boss / mini-boss / mango) are assigned afterward
+// in generateRunMap.
+function placeRequired(rng: () => number, count: number): RoomGridCoord[] {
+  const lo = INNER_MARGIN;
+  const hiCol = ROOM_GRID_COLS - 1 - INNER_MARGIN;
+  const hiRow = ROOM_GRID_ROWS - 1 - INNER_MARGIN;
+  const spanCol = hiCol - lo + 1;
+  const spanRow = hiRow - lo + 1;
+  for (let spacing = MIN_ANCHOR_SPACING; spacing >= 1; spacing--) {
+    const placed: RoomGridCoord[] = [];
+    let attempts = 0;
+    while (placed.length < count && attempts++ < 5000) {
+      const coord = {
+        col: lo + randInt(rng, spanCol),
+        row: lo + randInt(rng, spanRow),
+      };
+      if (placed.some((p) => manhattan(p, coord) < spacing)) continue;
+      placed.push(coord);
+    }
+    if (placed.length === count) return placed;
+  }
+  // Deterministic last resort: a sparse inner-interior lattice.
   const out: RoomGridCoord[] = [];
-  for (
-    let row = 1;
-    row < ROOM_GRID_ROWS - 1 && out.length < ANCHOR_COUNT;
-    row += 2
-  ) {
-    for (
-      let col = 1;
-      col < ROOM_GRID_COLS - 1 && out.length < ANCHOR_COUNT;
-      col += 3
-    ) {
+  for (let row = lo; row <= hiRow && out.length < count; row += 2) {
+    for (let col = lo; col <= hiCol && out.length < count; col += 3) {
       out.push({ col, row });
     }
   }
   return out;
 }
 
+// Fisher-Yates shuffle (seeded). Used to spread mini-boss vs mango roles across
+// the non-start, non-boss required coords.
+function shuffle<T>(rng: () => number, arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randInt(rng, i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Connector fill.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Reward for placing `def` at (col,row) given already-placed ANCHOR neighbors:
-// strongly prefer connecting to an adjacent anchor's opening, and avoid opening
-// into an adjacent anchor's wall. Connector neighbors are handled by the hard
-// equality constraint, not here.
+// Reward for placing `def` at (col,row) given already-placed ANCHOR or
+// MINI-BOSS neighbors: strongly prefer connecting to such a neighbor's opening,
+// and avoid opening into its wall. Both anchors and mini-bosses connect via
+// overlap (not the per-set equality the hard constraint enforces between
+// connectors), so both get this soft bias — otherwise a connector could wall
+// off a mini-boss doorway and strand the arena.
 function anchorAgreement(
   def: RoomDef,
   cells: (RoomDef | null)[][],
@@ -280,7 +677,9 @@ function anchorAgreement(
     if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS)
       continue;
     const nb = cells[nr][nc];
-    if (!nb || nb.kind !== 'anchor') continue;
+    // Only anchors + mini-bosses use overlap-adjacency; connector↔connector
+    // seams are governed by the hard equality constraint in satisfiesNeighbors.
+    if (!nb || nb.kind === 'connector') continue;
     const anchorOpensHere = openingsOnEdge(nb, oppositeEdge(edge)).length > 0;
     if (anchorOpensHere) {
       score += roomsConnect(def, edge, nb) ? 2 : -1;
@@ -430,35 +829,96 @@ export function generateRunMap(seed?: number): RunMap {
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const rng = mulberry32((baseSeed + attempt * 0x9e3779b1) >>> 0);
-    const anchorCoords = placeAnchors(rng);
+
+    // 11 required rooms, inner-interior so every single-opening room's door
+    // faces a fully-connectable interior neighbour.
+    const required = placeRequired(rng, REQUIRED_ROOM_COUNT);
 
     const cells: (RoomDef | null)[][] = Array.from(
       { length: ROOM_GRID_ROWS },
       () =>
         Array.from({ length: ROOM_GRID_COLS }, () => null as RoomDef | null),
     );
-    anchorCoords.forEach((coord, i) => {
-      cells[coord.row][coord.col] = ANCHOR_DEFS[i];
+
+    // Roles: [0] = start (random L-bend). Of the rest, the farthest from start
+    // is the boss (so the final goal reads as distant); the remaining nine split
+    // into 4 mini-bosses + 5 mango dead-ends. Panther = farthest mini-boss.
+    const startCoord = required[0];
+    const rest = required
+      .slice(1)
+      .sort((a, b) => manhattan(b, startCoord) - manhattan(a, startCoord));
+    const bossCoord = rest[0];
+    const others = shuffle(rng, rest.slice(1)); // 9 coords
+    const minibossCoords = others.slice(0, MINIBOSS_COUNT); // 4
+    const mangoRoomCoords = others.slice(MINIBOSS_COUNT); // 5
+
+    // Start: one of four L-bend rotations, random per run.
+    cells[startCoord.row][startCoord.col] =
+      START_LBEND_DEFS[randInt(rng, START_LBEND_DEFS.length)];
+
+    // Boss: one of four arena versions, random per run; its stump centre drives
+    // the win trigger.
+    const bossVersion = BOSS_VERSIONS[randInt(rng, BOSS_VERSIONS.length)];
+    cells[bossCoord.row][bossCoord.col] = bossVersion.def;
+    const bossStumpCenter = bossVersion.stumpCenter;
+
+    // The enlarged panther lives in the mini-boss farthest (Manhattan) from the
+    // start, so it reads as a late, distant encounter.
+    const pantherBossCoord = minibossCoords.reduce(
+      (far, c) =>
+        manhattan(c, startCoord) > manhattan(far, startCoord) ? c : far,
+      minibossCoords[0],
+    );
+    // Distinct arena per slot: the panther room gets the Empty Throne; the other
+    // three empty rooms get the bear/snake/gibbon designs (rotated in order).
+    let emptyIdx = 0;
+    minibossCoords.forEach((coord) => {
+      const isPanther =
+        coord.col === pantherBossCoord.col && coord.row === pantherBossCoord.row;
+      cells[coord.row][coord.col] = isPanther
+        ? PANTHER_DEF
+        : EMPTY_DEFS[emptyIdx++ % EMPTY_DEFS.length];
     });
+
+    // Mango dead-ends: five required dead-end rooms (random rotations) that hold
+    // the run's mangos (Game places them on first entry).
+    mangoRoomCoords.forEach((coord) => {
+      cells[coord.row][coord.col] =
+        MANGO_DEADEND_DEFS[randInt(rng, MANGO_DEADEND_DEFS.length)];
+    });
+
     fillConnectors(rng, cells);
     const filled = cells as RoomDef[][];
 
-    const startCoord = anchorCoords[0];
-    const bossCoord = anchorCoords[ANCHOR_COUNT - 1];
     last = {
       cols: ROOM_GRID_COLS,
       rows: ROOM_GRID_ROWS,
       cells: filled,
-      anchorCoords,
       startCoord,
       bossCoord,
+      bossStumpCenter,
+      minibossCoords,
+      pantherBossCoord,
+      mangoRoomCoords,
     };
-    if (findPath(filled, startCoord, bossCoord)) return last;
+    // Require EVERY required room reachable from start: boss, the 4 mini-bosses,
+    // and the 5 mango dead-ends (start is trivially reachable). The connector
+    // fabric is highly connected, so the rare stranding just re-seeds — cheap.
+    const allRequired = [
+      bossCoord,
+      ...minibossCoords,
+      ...mangoRoomCoords,
+    ];
+    if (allRequired.every((c) => findPath(filled, startCoord, c) !== null)) {
+      return last;
+    }
   }
 
   // Essentially unreachable (P(200 disconnected fabrics) ≈ 0). Return the last
   // attempt so the game still runs; warn so it surfaces if it ever happens.
-  console.warn('[Junar] generateRunMap: boss unreachable after max attempts');
+  console.warn(
+    '[Junar] generateRunMap: required rooms unreachable after max attempts',
+  );
   return last!;
 }
 
@@ -469,22 +929,16 @@ export function roomAt(map: RunMap, coord: RoomGridCoord): RoomDef {
 
 // ───────────────────────────────────────────────────────────────────────────
 // Debug ASCII render (used by the generation harness / not shipped in the loop).
-// Each room is a 3×3 block: centre glyph (S=start, B=boss, b–i=anchors 2–9,
-// '.'=connector) framed by door marks on its open edges. Path rooms upper-cased
-// to '*' centres when `markPath` is set.
+// Each room is a 3×3 block: centre glyph (S=start, B=boss, M=mini-boss,
+// g=mango dead-end, '.'=connector) framed by door marks on its open edges. Path
+// rooms upper-cased to '*' centres when `markPath` is set.
 // ───────────────────────────────────────────────────────────────────────────
 export function renderRunMapAscii(map: RunMap, markPath = true): string {
   const path = markPath
     ? findPath(map.cells, map.startCoord, map.bossCoord)
     : null;
   const onPath = new Set((path ?? []).map((c) => cellKey(c.col, c.row)));
-
-  const anchorGlyph = (def: RoomDef): string => {
-    const i = def.anchorIndex ?? -1;
-    if (i === 0) return 'S';
-    if (i === ANCHOR_COUNT - 1) return 'B';
-    return String.fromCharCode('a'.charCodeAt(0) + i); // b..i for anchors 2..9
-  };
+  const mango = new Set(map.mangoRoomCoords.map((c) => cellKey(c.col, c.row)));
 
   const lines: string[] = [];
   for (let row = 0; row < map.rows; row++) {
@@ -497,9 +951,13 @@ export function renderRunMapAscii(map: RunMap, markPath = true): string {
       const s = edgeClosed(def, 'S') ? ' ' : '|';
       const w = edgeClosed(def, 'W') ? ' ' : '-';
       const e = edgeClosed(def, 'E') ? ' ' : '-';
-      let centre = def.kind === 'anchor' ? anchorGlyph(def) : '.';
-      if (onPath.has(cellKey(col, row)) && def.kind === 'connector')
-        centre = '*';
+      let centre = '.';
+      if (col === map.startCoord.col && row === map.startCoord.row) centre = 'S';
+      else if (col === map.bossCoord.col && row === map.bossCoord.row)
+        centre = 'B';
+      else if (def.kind === 'miniboss') centre = 'M';
+      else if (mango.has(cellKey(col, row))) centre = 'g';
+      if (onPath.has(cellKey(col, row)) && centre === '.') centre = '*';
       r0.push(' ', n, ' ');
       r1.push(w, centre, e);
       r2.push(' ', s, ' ');

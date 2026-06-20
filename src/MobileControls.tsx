@@ -255,7 +255,7 @@ export function MobileControls({
         forceLandscape={forceLandscape}
       />
 
-      {/* Actions: A (dash) / B (burst) pinned to the lower-right, semi-transparent
+      {/* Actions: A (sprint) / B (burst) pinned to the lower-right, semi-transparent
           (Task 5). z-50 keeps them above the mobile HUD (z-auto) and the
           "Reached Boss" banner (z-10, also pointer-events-none). When the root
           is force-rotated into landscape these `fixed` buttons re-anchor to that

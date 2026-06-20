@@ -38,12 +38,8 @@ export const STAMINA_LOW_PENALTY = 0.5; // multiplier on speed + arrow rate when
 export const STAMINA_PER_TILE_MOVED = 0.001; // per TILE_SIZE px traveled
 export const STAMINA_PER_ARROW = 0.001;
 export const STAMINA_BURST_COST = 5;
-export const STAMINA_DASH_COST = 0.5;
-
-// Dash teleport distance — instant blink in the direction opposite the
-// player's current facing. Walks the AABB in small steps along the path,
-// stopping at the last open tile before a wall or canvas edge.
-export const DASH_DISTANCE_PX = 96; // 3 tiles
+// Sprint costs the same energy per activation as burst (owner 2026-06-19).
+export const STAMINA_SPRINT_COST = 5;
 
 // Burst rapid-fire. Multiplier applied as: effective_cooldown =
 // ARROW_COOLDOWN_MS / (burstMultiplier * lowStaminaMultiplier). Decay is
@@ -53,6 +49,23 @@ export const BURST_DURATION_MS = 5_000;
 export const BURST_BASE_MULTIPLIER = 2.0;
 export const BURST_DECAY_FACTOR = 0.75;
 export const BURST_RESET_BREAK_MS = 15_000;
+
+// Sprint — a timed movement-speed boost that mirrors the burst state machine
+// (owner 2026-06-19, replacing the old dash teleport). Edge-triggered, it runs
+// for SPRINT_DURATION_MS multiplying movement speed by SPRINT_BASE_MULTIPLIER,
+// then follows the same decay-vs-reset rule as burst: re-activating within
+// SPRINT_RESET_BREAK_MS multiplies the next multiplier by SPRINT_DECAY_FACTOR
+// (compounding self-debuff, no floor), otherwise it resets to base. It composes
+// with the low-energy penalty exactly like burst does for fire rate (effective
+// speed = PLAYER_SPEED * sprint * lowEnergy). Duration / reset / decay / cost
+// match burst; the speed multiplier is 1.5× (not burst's 2.0×) so a sprinting
+// player just edges past the bear (1.45× player) while the panther (2.63×)
+// still runs them down — chokepoints over foot-races (pillar §3). Kept as
+// separate constants so sprint speed can be tuned independently of burst.
+export const SPRINT_DURATION_MS = 5_000; // = BURST_DURATION_MS
+export const SPRINT_BASE_MULTIPLIER = 1.5; // ×1.5 move speed (just beats the bear)
+export const SPRINT_DECAY_FACTOR = 0.75; // = BURST_DECAY_FACTOR
+export const SPRINT_RESET_BREAK_MS = 15_000; // = BURST_RESET_BREAK_MS
 
 // Wave scheduler defaults. Per-level/per-wave overrides live in levels.ts.
 export const DEFAULT_INTER_WAVE_LULL_MS = 3000;
@@ -158,13 +171,21 @@ export const WAVE_POOL_LATE_UNLOCK = 9;
 export const ROOM_GRID_COLS = 29;
 export const ROOM_GRID_ROWS = 17;
 
-// Hand-designed anchor rooms (the 10 existing levels). Anchor 1 is the run
-// start; anchor 10 is the boss room. The rest of the grid is connectors.
-export const ANCHOR_COUNT = 10;
+// Required rooms placed every run (owner 2026-06-20): the start L-bend, the boss
+// arena (one of four versions), MINIBOSS_COUNT mini-boss arenas, and
+// MANGO_RUN_CAP mango dead-ends — REQUIRED_ROOM_COUNT (= 2 + 4 + 5 = 11) total,
+// see RoomGrid.ts. The hand-authored anchor-1/-5/-9 layouts are demoted to the
+// connector pool; only the boss remains a required hand-authored room. The rest
+// of the grid is connectors.
 
-// Poisson-disk spacing: a newly placed anchor must be at least this far (in
-// Manhattan room-grid distance) from every already-placed anchor. Tunable
-// 4–6 per roadmap §5.1.
+// Mini-boss rooms (owner 2026-06-19): wide-open arenas. Three are empty (no
+// effect yet); one spawns the enlarged panther mini-boss. They connect via
+// authored openings like the boss arena.
+export const MINIBOSS_COUNT = 4;
+
+// Poisson-disk spacing: a newly placed required room must be at least this far
+// (in Manhattan room-grid distance) from every already-placed required room.
+// Tunable 4–6 per roadmap §5.1.
 export const MIN_ANCHOR_SPACING = 5;
 
 // --- Per-enemy AABB sizing (Step 2 of the traversable-maps refactor) ---
@@ -280,11 +301,6 @@ export const BOSS_HALO_RADIUS = 6;
 // triplets.
 export const WAVE_PER_C_INCREMENT = 6;
 
-// Weighting for a small ('s') static candidate: P(snake) vs P(gibbon). §5.9
-// specifies "snake heavier, gibbon lighter" without a ratio — this 80/20 split
-// is a chosen starting value (tune in playtest). 'S' (any) candidates ignore
-// this and roll snake/gibbon/panther uniformly instead.
-export const STATIC_SMALL_SNAKE_WEIGHT = 0.8;
 
 // --- Boss-arena stub win trigger (input-agnostic walk-on) ---
 // Until boss combat lands (roadmap §5.15), the run is won by walking into the
@@ -301,4 +317,77 @@ export const BOSS_GROWTH_CENTER: Vector2 = {
 // Trigger AABB extent (px), centred on BOSS_GROWTH_CENTER — the growth's
 // glowing heart. Deliberately smaller than the rendered goo mass so victory
 // reads as "stepped into the heart", not "brushed the fringe".
+// NOTE: superseded by BOSS_STUMP_TRIGGER_PX below — the four-version boss arenas
+// (owner 2026-06-20) win by touching a SOLID 3×3 stump (RunMap.bossStumpCenter),
+// not by walking onto a floor heart. BOSS_GROWTH_CENTER/TRIGGER are retained as
+// the canonical grid centre for any other use.
 export const BOSS_GROWTH_TRIGGER_PX = 16;
+
+// Win-trigger AABB extent (px) for the boss version's solid 3×3 stump. The stump
+// is impassable walls, so the player can never reach its centre — the trigger box
+// is sized so reach = (PLAYER_SIZE + this)/2 = 80 px, extending ONE cell past
+// each 3-tile (96 px) face. Walking up against any stump edge wins the run
+// (Game.isTouchingGrowthHeart). 4 × TILE_SIZE.
+export const BOSS_STUMP_TRIGGER_PX = 4 * TILE_SIZE;
+
+// --- Mango collectible (owner 2026-06-19) ---
+// A static pickup placed at the centre of dead-end ("teardrop") chambers.
+// Walking over it (positional overlap, like the boss-growth heart) grants
+// MANGO_ENERGY_GAIN energy — allowed to OVERCAP past STAMINA_MAX
+// (Stamina.addEnergy). Exactly MANGO_RUN_CAP mangos roll per run, one per
+// dead-end room entered, until the cap is hit.
+export const MANGO_ENERGY_GAIN = 5;
+export const MANGO_RUN_CAP = 5;
+// Pickup overlap extent (px), centred on the mango's cell. Combined with the
+// player's full 32 px cell (PLAYER_SIZE, NOT the 16 px hurtbox) this gives
+// reach = (PLAYER_SIZE + MANGO_TRIGGER_PX)/2 = 24 px per axis — identical to
+// the growth-heart trigger (Game.isTouchingGrowthHeart).
+export const MANGO_TRIGGER_PX = 16;
+// Draw size (px) the 32 px mango sprite is fitted into, centred in its tile —
+// decoupled from the trigger box, like ENEMY_VISUAL_PX vs ENEMY_AABB_PX.
+export const MANGO_VISUAL_PX = 24;
+
+// The chamber-centre tile (top-left world px) where a mango sits in each of the
+// four dead-end ("teardrop") rotations. Keyed by RoomTemplate id; a room whose
+// templateId isn't here never spawns a mango. Authored to match the floor
+// centre of each chamber in RoomTemplates.ts (validated: each is open floor).
+export const MANGO_TILE_BY_TEMPLATE: Record<string, Vector2> = {
+  't-deadend-n': { x: 14 * TILE_SIZE, y: 8 * TILE_SIZE },
+  't-deadend-s': { x: 14 * TILE_SIZE, y: 7 * TILE_SIZE },
+  't-deadend-e': { x: 8 * TILE_SIZE, y: 8 * TILE_SIZE },
+  't-deadend-w': { x: 20 * TILE_SIZE, y: 8 * TILE_SIZE },
+};
+
+// --- Enlarged panther mini-boss (owner 2026-06-19) ---
+// A single arena-bound panther variant (NOT a new EnemyType — an `isBoss` flag +
+// per-instance overrides on Enemy). It is faster than arrows, tanky, large, and
+// moves with a bespoke stalk→lunge→retreat AI (Game.updateBossPanther) that
+// weaves to dodge auto-fire and reactively jukes incoming arrows. Speed is the
+// one stat above the normal panther's 395; the rest are size/HP/AI.
+export const BOSS_PANTHER_SPEED = 420; // px/s — just above ARROW_SPEED (400)
+export const BOSS_PANTHER_HP = 12; // arrow hits to kill (many miss to the dodge)
+export const BOSS_PANTHER_AABB_PX = 38; // enlarged kill/collision box (vs 21)
+export const BOSS_PANTHER_VISUAL_PX = 52; // ~1.8× the 29 px panther sprite
+
+// Stalk/lunge/retreat tuning. Distances in px (player↔boss centre); times in ms
+// (gameLoop currentTime, never Date.now — Invariant 8).
+export const BOSS_STANDOFF_PX = 300; // hold distance — inside the 450 px fire range
+export const BOSS_STANDOFF_BAND_PX = 40; // hysteresis around the ring (no jitter)
+export const BOSS_LUNGE_TRIGGER_PX = 340; // stalk→lunge only when this close
+export const BOSS_LUNGE_END_PX = 60; // lunge→retreat once this close (overshoot)
+export const BOSS_STALK_MIN_MS = 1500; // min time stalking before another lunge
+export const BOSS_LUNGE_MAX_MS = 700; // hard cap on a committed lunge
+export const BOSS_RETREAT_MAX_MS = 1200; // hard cap on retreat (anti wall-stuck)
+export const BOSS_LUNGE_SPEED_MULT = 1.5; // lunge dash speed = SPEED × this
+// Never let the boss drift past this distance from the player — beyond the
+// 450 px auto-fire range it would be unshootable AND (contact-only) unable to
+// attack, a stalemate. Caps the outward (retreat/standoff) component.
+export const BOSS_LEASH_PX = 420;
+
+// Weave (constant lateral oscillation) + reactive juke (sidestep an arrow about
+// to connect). Weave amp/juke speed are fractions/multiples of the boss speed.
+export const BOSS_WEAVE_AMP = 0.7; // tangential weave magnitude (× speed)
+export const BOSS_WEAVE_PERIOD_MS = 900; // weave oscillation period
+export const BOSS_JUKE_LOOKAHEAD_MS = 250; // react to arrows arriving within this
+export const BOSS_JUKE_RADIUS_PX = 8; // extra "will hit" margin past the hitbox
+export const BOSS_JUKE_SPEED_MULT = 2.0; // juke lateral speed = SPEED × this

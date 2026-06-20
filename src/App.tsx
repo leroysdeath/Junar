@@ -248,6 +248,7 @@ function App() {
   const [showCredits, setShowCredits] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
   const [burst, setBurst] = useState({ active: false, multiplier: 1 });
+  const [sprint, setSprint] = useState({ active: false, multiplier: 1 });
   // Boss-arena sub-state (Step 9): true while the player is inside anchor 10.
   // Drives the non-blocking "Reached Boss" banner; the game stays in 'playing'.
   const [bossArena, setBossArena] = useState(false);
@@ -285,7 +286,7 @@ function App() {
     if (action === 'b') {
       gameRef.current?.triggerBurst();
     } else if (action === 'a') {
-      gameRef.current?.triggerDash();
+      gameRef.current?.triggerSprint();
     }
   }, []);
 
@@ -317,6 +318,8 @@ function App() {
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
+        onSprintChange: (active, multiplier) =>
+          setSprint({ active, multiplier }),
         soundEnabled,
       });
       gameRef.current.start();
@@ -398,12 +401,22 @@ function App() {
   }, [forceLandscape]);
 
   const renderHud = () => {
-    // Stamina bar fill — red when low, warm gold while bursting, amber
+    // Energy bar fill — red when low, warm gold while bursting, amber
     // otherwise. Width is rounded so the bar visibly steps as the value
-    // crosses each percent boundary.
+    // crosses each percent boundary. Burst and sprint share this one pool;
+    // each shows its own multiplier line below the bar when active.
     const fillPct = Math.max(
       0,
       Math.min(100, (stamina.value / STAMINA_MAX) * 100),
+    );
+    // Mango overcap: energy can exceed STAMINA_MAX (up to ~125). The bar stays
+    // full yellow at/above 100 and the leftmost (value−100) points paint GREEN
+    // to signal the surplus (104 → 4% green band). 1 energy point = 1% of the
+    // STAMINA_MAX-wide bar, so the surplus maps 1:1 to percent width; clamp to
+    // 25 (the 5-mango ceiling) so the band can't overrun the track.
+    const overcapPct = Math.max(
+      0,
+      Math.min(25, stamina.value - STAMINA_MAX),
     );
     const fillColor = stamina.isLow
       ? 'bg-red-500'
@@ -435,20 +448,31 @@ function App() {
                     : 'text-amber-400'
               }
             />
-            <span>Stamina</span>
+            <span>Energy</span>
             <span className="ml-auto tabular-nums">
               {Math.floor(stamina.value)}/{STAMINA_MAX}
             </span>
           </div>
-          <div className="mt-1 h-2 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
+          <div className="relative mt-1 h-2 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
             <div
               className={`h-full ${fillColor} transition-[width] duration-100`}
               style={{ width: `${fillPct}%` }}
             />
+            {overcapPct > 0 && (
+              <div
+                className="absolute left-0 top-0 h-full bg-emerald-500 transition-[width] duration-100"
+                style={{ width: `${overcapPct}%` }}
+              />
+            )}
           </div>
           {burst.active && (
             <div className="text-[10px] text-amber-200 mt-1 tabular-nums">
               Burst {burst.multiplier.toFixed(2)}×
+            </div>
+          )}
+          {sprint.active && (
+            <div className="text-[10px] text-sky-200 mt-1 tabular-nums">
+              Sprint {sprint.multiplier.toFixed(2)}×
             </div>
           )}
         </div>
@@ -661,7 +685,7 @@ function App() {
                 <div className="ml-4">B button (Mobile)</div>
               </li>
               <li>
-                <strong>Dash:</strong>
+                <strong>Sprint:</strong>
                 <div className="ml-4">Shift (Desktop)</div>
                 <div className="ml-4">A button (Mobile)</div>
               </li>

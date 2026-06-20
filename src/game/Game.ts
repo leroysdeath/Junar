@@ -14,7 +14,6 @@ import {
   GameCallbacks,
   Vector2,
   EnemyType,
-  Facing,
   InputState,
   Edge,
   RoomDef,
@@ -24,6 +23,7 @@ import {
   BandSpec,
   LevelData,
   StaticCandidateKind,
+  Mango,
 } from './types';
 import { WAVE_POOL_EARLY, WAVE_POOL_MID, WAVE_POOL_LATE } from './levels';
 import {
@@ -46,22 +46,37 @@ import {
   ARROW_SPEED,
   ARROW_COOLDOWN_MS,
   STAMINA_MAX,
-  DASH_DISTANCE_PX,
   CENTER_SPAWN,
   EXIT_APPROACH_RANGE_PX,
   EXIT_DEPART_GRACE_MS,
   STATIC_BASE_DENSITY,
   BOSS_HALO_RADIUS,
   WAVE_PER_C_INCREMENT,
-  STATIC_SMALL_SNAKE_WEIGHT,
   ENTRY_BAND_GRACE_MIN_MS,
   ENTRY_BAND_GRACE_MAX_MS,
-  BOSS_GROWTH_CENTER,
-  BOSS_GROWTH_TRIGGER_PX,
+  BOSS_STUMP_TRIGGER_PX,
   PLAYER_HURTBOX_PX,
   ARRIVAL_KILL_GRACE_MS,
   ARRIVAL_GRACE_REARM_MS,
   HUNTER_ARRIVAL_GRACE_MS,
+  MANGO_ENERGY_GAIN,
+  MANGO_RUN_CAP,
+  MANGO_TRIGGER_PX,
+  MANGO_TILE_BY_TEMPLATE,
+  BOSS_STANDOFF_PX,
+  BOSS_STANDOFF_BAND_PX,
+  BOSS_LUNGE_TRIGGER_PX,
+  BOSS_LUNGE_END_PX,
+  BOSS_STALK_MIN_MS,
+  BOSS_LUNGE_MAX_MS,
+  BOSS_RETREAT_MAX_MS,
+  BOSS_LUNGE_SPEED_MULT,
+  BOSS_LEASH_PX,
+  BOSS_WEAVE_AMP,
+  BOSS_WEAVE_PERIOD_MS,
+  BOSS_JUKE_LOOKAHEAD_MS,
+  BOSS_JUKE_RADIUS_PX,
+  BOSS_JUKE_SPEED_MULT,
 } from './constants';
 
 type GameOverReason =
@@ -90,21 +105,6 @@ const EARLY_DEATH_MS = 500;
 const EDGE_EPS_PX = 0.5;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-
-// Dash teleports the player in the direction opposite to their current
-// facing — a back-step / disengage move. Returns a cardinal unit vector.
-const dashDirectionFromFacing = (facing: Facing): Vector2 => {
-  switch (facing) {
-    case 'up':
-      return { x: 0, y: 1 };
-    case 'down':
-      return { x: 0, y: -1 };
-    case 'left':
-      return { x: 1, y: 0 };
-    case 'right':
-      return { x: -1, y: 0 };
-  }
-};
 
 // Room-grid step directions (edge + grid delta), used by the de-aggro
 // settlement BFS to walk outward through connected rooms. Mirrors RoomGrid's
@@ -158,6 +158,7 @@ export class Game {
   // emission for state transitions.
   private stamina = new Stamina();
   private wasBurstActive = false;
+  private wasSprintActive = false;
   private wasLowStamina = false;
   private wasDepleted = false;
   private lastEmittedStaminaValue = STAMINA_MAX;
@@ -169,6 +170,18 @@ export class Game {
   private runMap!: RunMap;
   private currentRoomCoord!: RoomGridCoord;
   private roomEnemies = new Map<number, Enemy[]>();
+  // Per-room mango pickups (owner 2026-06-19), keyed by roomKey. Rolled once on
+  // first entry like statics (no re-roll on revisit); a collected mango keeps
+  // its `collected` flag so it stays gone. `mangosPlaced` enforces the run-wide
+  // 5-mango cap across all rooms. Both reset each run in startRun.
+  private roomMangos = new Map<number, Mango[]>();
+  private mangosPlaced = 0;
+  // Enlarged-panther mini-boss AI state (owner 2026-06-19). One boss per run, so
+  // a single inline state machine here drives Game.updateBossPanther. Persists
+  // for the run (the boss Enemy persists in its room bucket); set on spawn.
+  private bossPhase: 'stalk' | 'lunge' | 'retreat' = 'stalk';
+  private bossPhaseSince = 0;
+  private bossLungeDir: Vector2 = { x: 0, y: 0 };
   private globalWaveScheduler: GlobalWaveScheduler | null = null;
   // Boss-arena sub-state (Step 9). True while the player occupies the boss room
   // (anchor 10). It is NOT a separate GameState — the run stays 'playing' so
@@ -251,11 +264,13 @@ export class Game {
     this.lastArrowTime = 0;
     this.stamina.reset();
     this.wasBurstActive = false;
+    this.wasSprintActive = false;
     this.wasLowStamina = false;
     this.wasDepleted = false;
     this.lastEmittedStaminaValue = STAMINA_MAX;
     this.callbacks.onStaminaChange?.(STAMINA_MAX, false);
     this.callbacks.onBurstChange?.(false, 1, 0);
+    this.callbacks.onSprintChange?.(false, 1, 0);
     this.logger.log('lifecycle', 'restart');
     // A new run regenerates the whole map (roadmap §5.1).
     this.regenerateMap();
@@ -287,6 +302,8 @@ export class Game {
     this.arrows = [];
     this.lastArrowTime = 0;
     this.roomEnemies = new Map();
+    this.roomMangos = new Map();
+    this.mangosPlaced = 0;
     this.enteredRooms = new Set();
     this.enemies = [];
     this.hasLineOfSight = false;
@@ -352,12 +369,29 @@ export class Game {
     return coord.row * this.runMap.cols + coord.col;
   }
 
-  // True if `coord` is the boss room (anchor 10). bossCoord is anchor
-  // ANCHOR_COUNT-1's placement (see RunMap), set fresh by each regenerateMap().
+  // True if `coord` is the boss room. bossCoord is the required room farthest
+  // from start (see RunMap / generateRunMap), set fresh by each regenerateMap().
   private isBossRoom(coord: RoomGridCoord): boolean {
     return (
       coord.col === this.runMap.bossCoord.col &&
       coord.row === this.runMap.bossCoord.row
+    );
+  }
+
+  // The mini-boss arena that holds the enlarged panther (owner 2026-06-19). The
+  // other three mini-boss rooms are empty, so only this one spawns an enemy.
+  private isPantherBossRoom(coord: RoomGridCoord): boolean {
+    return (
+      coord.col === this.runMap.pantherBossCoord.col &&
+      coord.row === this.runMap.pantherBossCoord.row
+    );
+  }
+
+  // True if `coord` is one of the run's five pre-selected mango dead-ends
+  // (owner 2026-06-20). Mangos roll only in these rooms, not in any dead-end.
+  private isMangoRoom(coord: RoomGridCoord): boolean {
+    return this.runMap.mangoRoomCoords.some(
+      (c) => c.col === coord.col && c.row === coord.row,
     );
   }
 
@@ -513,8 +547,65 @@ export class Game {
         if (bucket) bucket.push(...statics);
         else this.roomEnemies.set(key, statics);
       }
+      // Mango roll (owner 2026-06-20): the run pre-selects 5 dead-end rooms
+      // (runMap.mangoRoomCoords); each places one mango at its chamber centre on
+      // first entry. Gated by the same first-entry check as statics, so it rolls
+      // once and never re-rolls on revisit. The dead-end's templateId maps to the
+      // centre tile; the cap is a belt-and-braces guard (exactly 5 are selected).
+      const mangoTile = this.isMangoRoom(coord)
+        ? MANGO_TILE_BY_TEMPLATE[def.templateId]
+        : undefined;
+      if (mangoTile && this.mangosPlaced < MANGO_RUN_CAP) {
+        this.roomMangos.set(key, [
+          { tile: { ...mangoTile }, collected: false },
+        ]);
+        this.mangosPlaced += 1;
+        this.logger.log('stamina', 'mango_placed', {
+          room: { ...coord },
+          tile: mangoTile,
+          placed: this.mangosPlaced,
+        });
+      }
+      // Mini-boss spawn (owner 2026-06-19): the panther arena spawns one
+      // enlarged boss at the arena centre, bucketed like a static. It's
+      // arena-bound (Hunt skips it) and driven by updateBossPanther, not the
+      // normal Enemy.update. The other three mini-boss rooms spawn nothing.
+      if (this.isPantherBossRoom(coord)) {
+        const boss = new Enemy(
+          { ...CENTER_SPAWN },
+          'panther',
+          this.nextEnemyId++,
+          this.level,
+        );
+        boss.configureAsBoss();
+        boss.setHuntState('active');
+        boss.setCurrentRoom(coord);
+        const bucket = this.roomEnemies.get(key);
+        if (bucket) bucket.push(boss);
+        else this.roomEnemies.set(key, [boss]);
+        this.logger.log('state', 'miniboss_spawn', {
+          room: { ...coord },
+          hp: boss.getHp(),
+        });
+      }
     }
     this.enemies = this.roomEnemies.get(key) ?? [];
+    // Re-anchor the boss AI on EVERY entry to the (still-alive) panther arena,
+    // not just first entry: the boss Enemy persists across leaving/returning
+    // (its HP carries over), but its phase timers are Game-level fields — left
+    // stale they'd make `currentTime - bossPhaseSince` huge and let the boss
+    // skip its stalk telegraph and lunge on the first frame back. Resetting to
+    // 'stalk' with bossPhaseSince=0 re-anchors the stalk delay to the real
+    // arrival frame (via the first-tick branch in updateBossPanther). Runs after
+    // this.enemies is populated, so it also covers the just-spawned first entry.
+    if (
+      this.isPantherBossRoom(coord) &&
+      this.enemies.some((e) => e.getIsBoss())
+    ) {
+      this.bossPhase = 'stalk';
+      this.bossPhaseSince = 0;
+      this.bossLungeDir = { x: 0, y: 0 };
+    }
     // Landing safety: if the player materializes on top of an enemy already
     // parked at the entry opening (a dormant static rolled onto the doorway, or
     // a hunter parked there), nudge the PLAYER one tile inward to the first
@@ -1123,11 +1214,12 @@ export class Game {
   // uniform. Bears (34 px) are never placed statically — they exceed a tile and
   // come only from waves.
   private rollStaticType(kind: StaticCandidateKind): EnemyType {
-    if (kind === 'small') {
-      return Math.random() < STATIC_SMALL_SNAKE_WEIGHT ? 'snake' : 'gibbon';
-    }
-    const roll = Math.floor(Math.random() * 3);
-    return roll === 0 ? 'snake' : roll === 1 ? 'gibbon' : 'panther';
+    // Gibbon statics removed (owner 2026-06-20): gibbons are reserved for the
+    // (unbuilt) gibbon mini-boss — they no longer spawn as regular statics, and
+    // the wave pool already carries none. 'small' candidates (tight tiles) spawn
+    // snakes; 'any' candidates roll snake/panther uniformly.
+    if (kind === 'small') return 'snake';
+    return Math.random() < 0.5 ? 'snake' : 'panther';
   }
 
   // Settlement resolver for a de-aggroing hunter (registered with Hunt,
@@ -1338,8 +1430,9 @@ export class Game {
   }
 
   private update(deltaTime: number, currentTime: number) {
-    // Apply low-stamina speed penalty before player movement so the
-    // multiplier composes against this frame's intended motion.
+    // Apply the composed movement-speed multiplier (sprint × low-energy)
+    // before player movement so it scales this frame's intended motion
+    // (see Stamina.getMovementSpeedMultiplier).
     this.player.setSpeedMultiplier(this.stamina.getMovementSpeedMultiplier());
 
     // Update player. Snapshot position pre/post so we can charge stamina
@@ -1347,9 +1440,8 @@ export class Game {
     // corner-cut slide that produces simultaneous x+y motion isn't
     // overcharged by ~41%.
     const input = this.inputManager.getInput();
-    // Update facing BEFORE the dash check so a same-frame press +
-    // dash uses the freshly-set facing (dash inverts whatever facing
-    // is current at the moment of activation).
+    // Update facing from this frame's input — it drives the player's render
+    // variant (which directional sprite is drawn).
     this.player.updateFacing(input);
     const prePos = this.player.getPosition();
     this.player.update(deltaTime, input, this.level, (rej) => {
@@ -1366,42 +1458,12 @@ export class Game {
       Math.hypot(postPos.x - prePos.x, postPos.y - prePos.y),
     );
 
-    // Dash — instant blink in the direction OPPOSITE of facing, gated by
-    // stamina (0.5/use). Edge-triggered; tryConsumeDash rejects if the
-    // pool can't afford the cost. AABB-vs-enemy collision still applies
-    // at the post-dash position via the per-frame check below, so a dash
-    // that ends inside an enemy still kills the player.
-    if (this.inputManager.consumeDashPress()) {
-      if (this.stamina.tryConsumeDash()) {
-        const dir = dashDirectionFromFacing(this.player.getFacing());
-        const preDash = this.player.getPosition();
-        const traveled = this.player.dash(dir, DASH_DISTANCE_PX, this.level);
-        const postDash = this.player.getPosition();
-        this.logger.log('stamina', 'dash', {
-          facing: this.player.getFacing(),
-          dir,
-          traveled: round2(traveled),
-          from: { x: round2(preDash.x), y: round2(preDash.y) },
-          to: { x: round2(postDash.x), y: round2(postDash.y) },
-          value: round2(this.stamina.getValue()),
-        });
-        // Optional manifest SFX (docs/AUDIO-ASSETS.md §2) — silent until a
-        // dash.ogg lands (no synth fallback), as are the other §2 hooks.
-        this.soundManager.play('dash');
-      } else {
-        this.logger.log('stamina', 'dash_rejected', {
-          reason: 'no_stamina',
-          value: round2(this.stamina.getValue()),
-        });
-      }
-    }
-
     // Win-condition STUB (Step 9). Boss combat is deferred (roadmap §5.15);
     // until it lands, walking into the corrupted growth's heart at the arena
     // center ends the run as a victory. The trigger is positional so it is
     // input-agnostic — keyboard, touch joystick, and any future gamepad all
     // reach it by movement alone (V remains an undocumented desktop debug
-    // shortcut). Checked after movement + dash have settled the position, and
+    // shortcut). Checked after movement has settled the position, and
     // BEFORE checkCollisions below — touching the heart and an enemy on the
     // same frame resolves as a win, not an unfair last-instant death.
     // Consume the key edge every frame (clears a stale press made outside the
@@ -1418,7 +1480,12 @@ export class Game {
       }
     }
 
-    // Room transition (LTTP hard cut). Checked once movement + dash have
+    // Mango pickup (owner 2026-06-19) — positional overlap, like the growth
+    // heart, but works in any room (not gated on the boss arena). Walking over
+    // a mango grants energy (overcap-allowed) and removes it.
+    this.checkMangoPickup();
+
+    // Room transition (LTTP hard cut). Checked once movement has
     // settled the player's position. On a transition we swap rooms and skip
     // the rest of this frame so the new room simulates cleanly next tick.
     const transition = this.detectTransition(input);
@@ -1432,8 +1499,14 @@ export class Game {
       this.sampleTick(input, deltaTime);
     }
 
-    // Burst activation — edge-triggered. Stamina gates on cost +
-    // already-active; rejected presses don't tick the decay multiplier.
+    // Sprint + burst activation — twin edge-triggered timed modes (sprint =
+    // movement speed, burst = fire rate). Each gates on cost + already-active;
+    // rejected presses don't tick the decay multiplier. The sprint speed boost
+    // is read at the top of the NEXT frame (setSpeedMultiplier), a one-frame
+    // delay that's imperceptible for a 5 s mode.
+    if (this.inputManager.consumeSprintPress()) {
+      this.stamina.tryActivateSprint(currentTime);
+    }
     if (this.inputManager.consumeBurstPress()) {
       this.stamina.tryActivateBurst(currentTime);
     }
@@ -1490,13 +1563,20 @@ export class Game {
     // Update the current room's enemies (all 'active'). Pass the live enemy
     // list so each can enforce enemy-vs-enemy no-overlap at its movement step.
     this.enemies.forEach((enemy) => {
-      enemy.update(
-        deltaTime,
-        currentTime,
-        this.player.getPosition(),
-        this.level,
-        this.enemies,
-      );
+      if (enemy.getIsBoss()) {
+        // The mini-boss panther runs a bespoke stalk/lunge/weave/juke AI here
+        // (it needs live arrow positions for the juke, which live in Game), not
+        // the shared pursuit in Enemy.update.
+        this.updateBossPanther(enemy, deltaTime, currentTime);
+      } else {
+        enemy.update(
+          deltaTime,
+          currentTime,
+          this.player.getPosition(),
+          this.level,
+          this.enemies,
+        );
+      }
     });
 
     // Hunt machine (Step 4, roadmap §5.12). tick() advances activation timers
@@ -1541,8 +1621,8 @@ export class Game {
     this.emitStaminaTransitions();
   }
 
-  // Fire callbacks + log events on stamina/burst state transitions. Edge
-  // detection against the was* fields keeps logs to one entry per change
+  // Fire callbacks + log events on stamina/burst/sprint state transitions.
+  // Edge detection against the was* fields keeps logs to one entry per change
   // and avoids per-frame spam in the React HUD; the value emit is
   // throttled to every 10 frames unless the low-state flips.
   private emitStaminaTransitions() {
@@ -1568,6 +1648,31 @@ export class Game {
       this.wasBurstActive = isBurstActive;
     }
 
+    // Sprint transitions — twin of the burst block above (movement speed
+    // instead of fire rate). The 'sprint' SFX is a §2 manifest hook, silent
+    // until a sprint sound lands (no synth fallback), like 'burst-activate'.
+    const isSprintActive = this.stamina.isSprintActive();
+    if (isSprintActive !== this.wasSprintActive) {
+      if (isSprintActive) {
+        this.logger.log('stamina', 'sprint_start', {
+          multiplier: round2(this.stamina.getSprintMultiplier()),
+          value: round2(this.stamina.getValue()),
+        });
+        this.callbacks.onSprintChange?.(
+          true,
+          this.stamina.getSprintMultiplier(),
+          this.stamina.getSprintEndAt() ?? 0,
+        );
+        this.soundManager.play('sprint');
+      } else {
+        this.logger.log('stamina', 'sprint_end', {
+          value: round2(this.stamina.getValue()),
+        });
+        this.callbacks.onSprintChange?.(false, 1, 0);
+      }
+      this.wasSprintActive = isSprintActive;
+    }
+
     const isLow = this.stamina.isLow();
     const lowChanged = isLow !== this.wasLowStamina;
     if (lowChanged) {
@@ -1591,6 +1696,10 @@ export class Game {
     if (v <= 0 && !this.wasDepleted) {
       this.logger.log('stamina', 'depleted', { value: 0 });
       this.wasDepleted = true;
+    } else if (v > 0 && this.wasDepleted) {
+      // Re-arm the latch once energy lifts back off 0 (a mango refill is the
+      // first mid-run source that can do this), so a later depletion logs again.
+      this.wasDepleted = false;
     }
   }
 
@@ -1766,30 +1875,46 @@ export class Game {
     this.arrows = this.arrows.filter((arrow) => {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const enemy = this.enemies[i];
-        if (
-          this.collisionManager.checkCollision(
-            { x: arrow.pos.x, y: arrow.pos.y, width: 4, height: 4 },
-            {
+        const isBoss = enemy.getIsBoss();
+        // Normal enemies use the full 32 px cell as the arrow-hit box (unchanged).
+        // The enlarged boss uses its bigger AABB so its larger body is hittable.
+        const hitBox = isBoss
+          ? enemy.getAABB()
+          : {
               x: enemy.getPosition().x,
               y: enemy.getPosition().y,
               width: TILE_SIZE,
               height: TILE_SIZE,
-            },
+            };
+        if (
+          this.collisionManager.checkCollision(
+            { x: arrow.pos.x, y: arrow.pos.y, width: 4, height: 4 },
+            hitBox,
           )
         ) {
           const enemyType = enemy.getType();
-          this.enemies.splice(i, 1);
-          this.score += 10;
-          this.enemiesKilled += 1;
-          this.callbacks.onScoreChange(this.score);
-          this.callbacks.onKillsChange(this.enemiesKilled);
-          this.callbacks.onEnemiesChange(this.enemies.length);
-          this.logger.log('hit', 'arrow->enemy', {
-            type: enemyType,
-            remaining: this.enemies.length,
-          });
+          // Multi-hit HP: takeHit decrements and reports lethality. Normal
+          // enemies have hp 1 → always lethal (one-hit death preserved); the
+          // boss survives until its HP is spent. The hit SFX plays on every hit
+          // for combat feedback; score/kills credit only on death.
+          const dead = enemy.takeHit();
           this.soundManager.play('enemy-hit');
-          return false; // Remove arrow
+          if (dead) {
+            this.enemies.splice(i, 1);
+            this.score += 10;
+            this.enemiesKilled += 1;
+            this.callbacks.onScoreChange(this.score);
+            this.callbacks.onKillsChange(this.enemiesKilled);
+            this.callbacks.onEnemiesChange(this.enemies.length);
+            this.logger.log('hit', 'arrow->enemy', {
+              type: enemyType,
+              boss: isBoss,
+              remaining: this.enemies.length,
+            });
+          } else {
+            this.logger.log('hit', 'arrow->boss', { hpLeft: enemy.getHp() });
+          }
+          return false; // Remove arrow (consumed on every hit)
         }
       }
       return true; // Keep arrow
@@ -1880,20 +2005,195 @@ export class Game {
     };
   }
 
-  // True when the player's 32 px AABB overlaps the corrupted growth's heart
-  // (BOSS_GROWTH_TRIGGER_PX box centred on BOSS_GROWTH_CENTER). Standard AABB
-  // overlap expressed as a center-distance test. Deliberately uses the full
-  // PLAYER_SIZE cell — a walk-on win trigger should be generous; the
-  // contact-kill check is the one that uses the smaller PLAYER_HURTBOX_PX
-  // core (enemyTouchesPlayer). Only meaningful inside the boss arena — the
-  // caller gates on inBossArena.
+  // True when the player's 32 px cell is touching the boss version's solid 3×3
+  // stump (owner 2026-06-20) — the run's win trigger. The stump is SOLID walls,
+  // so the player can never overlap its centre; the trigger box
+  // (BOSS_STUMP_TRIGGER_PX, reach = (PLAYER_SIZE + that)/2 = 80 px) extends one
+  // cell past each 3-tile face so walking up against any edge wins. Centre is
+  // per-run (runMap.bossStumpCenter — varies by which version rolled).
+  // Deliberately the full PLAYER_SIZE cell, not the kill-core hurtbox. Only
+  // meaningful inside the boss arena — the caller gates on inBossArena.
   private isTouchingGrowthHeart(): boolean {
     const p = this.player.getPosition();
-    const reach = (PLAYER_SIZE + BOSS_GROWTH_TRIGGER_PX) / 2;
+    const c = this.runMap.bossStumpCenter;
+    const reach = (PLAYER_SIZE + BOSS_STUMP_TRIGGER_PX) / 2;
     return (
-      Math.abs(p.x + PLAYER_SIZE / 2 - BOSS_GROWTH_CENTER.x) < reach &&
-      Math.abs(p.y + PLAYER_SIZE / 2 - BOSS_GROWTH_CENTER.y) < reach
+      Math.abs(p.x + PLAYER_SIZE / 2 - c.x) < reach &&
+      Math.abs(p.y + PLAYER_SIZE / 2 - c.y) < reach
     );
+  }
+
+  // Per-frame mango overlap test for the current room. Same center-distance
+  // AABB shape as isTouchingGrowthHeart (player cell centre vs the mango cell
+  // centre, reach = (PLAYER_SIZE + MANGO_TRIGGER_PX)/2). On a hit: flip
+  // `collected` (so it stops rendering + can't re-trigger — the flag persists
+  // in roomMangos across revisits), add overcap energy, and force an immediate
+  // HUD emit so the bar jumps without waiting for the 10-frame throttle.
+  private checkMangoPickup() {
+    const mangos = this.roomMangos.get(this.roomKey(this.currentRoomCoord));
+    if (!mangos) return;
+    const p = this.player.getPosition();
+    const reach = (PLAYER_SIZE + MANGO_TRIGGER_PX) / 2;
+    const pcx = p.x + PLAYER_SIZE / 2;
+    const pcy = p.y + PLAYER_SIZE / 2;
+    for (const m of mangos) {
+      if (m.collected) continue;
+      const cx = m.tile.x + TILE_SIZE / 2;
+      const cy = m.tile.y + TILE_SIZE / 2;
+      if (Math.abs(pcx - cx) < reach && Math.abs(pcy - cy) < reach) {
+        m.collected = true;
+        this.stamina.addEnergy(MANGO_ENERGY_GAIN);
+        const v = this.stamina.getValue();
+        this.callbacks.onStaminaChange?.(v, this.stamina.isLow());
+        this.lastEmittedStaminaValue = v;
+        this.logger.log('stamina', 'mango_pickup', {
+          tile: m.tile,
+          gain: MANGO_ENERGY_GAIN,
+          value: round2(v),
+        });
+      }
+    }
+  }
+
+  // Bespoke mini-boss panther movement (owner 2026-06-19). A stalk → lunge →
+  // retreat state machine: STALK holds BOSS_STANDOFF_PX from the player (inside
+  // the 450 px fire range so it stays shootable) while weaving side-to-side to
+  // slip un-led auto-fire and reactively juking arrows about to connect; once
+  // close enough and after a min stalk it LUNGES — a committed straight dash to
+  // attempt a contact kill — then RETREATS back to standoff. All timing is on
+  // the gameLoop currentTime (Invariant 8). The composed velocity always goes
+  // through Enemy.tryMove, so walls/bounds are respected and the weave/juke can
+  // never tunnel it. Contact-kill itself is the normal checkCollisions pass.
+  private updateBossPanther(
+    boss: Enemy,
+    deltaTime: number,
+    currentTime: number,
+  ) {
+    const dt = deltaTime / 1000;
+    const speed = boss.getSpeed();
+    const bpos = boss.getPosition();
+    const ppos = this.player.getPosition();
+    const bcx = bpos.x + TILE_SIZE / 2;
+    const bcy = bpos.y + TILE_SIZE / 2;
+    const pcx = ppos.x + TILE_SIZE / 2;
+    const pcy = ppos.y + TILE_SIZE / 2;
+    const tox = pcx - bcx;
+    const toy = pcy - bcy;
+    const d = Math.hypot(tox, toy) || 1;
+    const ux = tox / d;
+    const uy = toy / d;
+    const perpx = -uy;
+    const perpy = ux;
+
+    let vx = 0;
+    let vy = 0;
+
+    if (this.bossPhase === 'lunge') {
+      // Committed straight dash along the locked direction — fast, no weave/juke,
+      // and it does NOT home, so it stays dodgeable (a contact death reads as the
+      // player's mistake, pillar §3).
+      vx = this.bossLungeDir.x * speed * BOSS_LUNGE_SPEED_MULT;
+      vy = this.bossLungeDir.y * speed * BOSS_LUNGE_SPEED_MULT;
+    } else {
+      // STALK / RETREAT: radial (hold the ring or back off) + weave + juke.
+      let radial = 0; // +1 toward player, -1 away
+      if (this.bossPhase === 'retreat') {
+        radial = -1;
+      } else if (d > BOSS_STANDOFF_PX + BOSS_STANDOFF_BAND_PX) {
+        radial = 1;
+      } else if (d < BOSS_STANDOFF_PX - BOSS_STANDOFF_BAND_PX) {
+        radial = -1;
+      }
+      // Leash: never drift past the shootable range — a contact-only boss that
+      // out-ranges auto-fire would deadlock the fight.
+      if (radial < 0 && d >= BOSS_LEASH_PX) radial = 0;
+      const weave =
+        Math.sin((currentTime / BOSS_WEAVE_PERIOD_MS) * Math.PI * 2) *
+        BOSS_WEAVE_AMP;
+      vx = (ux * radial + perpx * weave) * speed;
+      vy = (uy * radial + perpy * weave) * speed;
+      const juke = this.computeBossJuke(bcx, bcy, boss);
+      if (juke) {
+        vx += juke.x * speed * BOSS_JUKE_SPEED_MULT;
+        vy += juke.y * speed * BOSS_JUKE_SPEED_MULT;
+      }
+    }
+
+    const res = boss.tryMove(vx * dt, vy * dt, this.level);
+
+    // Phase transitions.
+    if (this.bossPhase === 'stalk') {
+      if (this.bossPhaseSince === 0) {
+        // First tick after spawn: stamp the stalk start so the min-stalk gate is
+        // measured from now, not from time 0.
+        this.bossPhaseSince = currentTime;
+      } else if (
+        currentTime - this.bossPhaseSince >= BOSS_STALK_MIN_MS &&
+        d <= BOSS_LUNGE_TRIGGER_PX
+      ) {
+        this.bossPhase = 'lunge';
+        this.bossPhaseSince = currentTime;
+        this.bossLungeDir = { x: ux, y: uy };
+      }
+    } else if (this.bossPhase === 'lunge') {
+      if (
+        currentTime - this.bossPhaseSince >= BOSS_LUNGE_MAX_MS ||
+        !res.moved ||
+        d <= BOSS_LUNGE_END_PX
+      ) {
+        this.bossPhase = 'retreat';
+        this.bossPhaseSince = currentTime;
+      }
+    } else {
+      // retreat
+      if (
+        d >= BOSS_STANDOFF_PX ||
+        currentTime - this.bossPhaseSince >= BOSS_RETREAT_MAX_MS
+      ) {
+        this.bossPhase = 'stalk';
+        this.bossPhaseSince = currentTime;
+      }
+    }
+  }
+
+  // Reactive juke: find the most-imminent arrow whose straight path will hit the
+  // boss within BOSS_JUKE_LOOKAHEAD_MS, and return a unit sidestep perpendicular
+  // to that arrow's velocity (toward the side that increases the miss distance).
+  // null when nothing threatens. Standard point-vs-ray closest-approach math.
+  private computeBossJuke(
+    bcx: number,
+    bcy: number,
+    boss: Enemy,
+  ): Vector2 | null {
+    if (this.arrows.length === 0) return null;
+    const half = boss.getAABB().width / 2;
+    let bestT = Infinity;
+    let bestDir: Vector2 | null = null;
+    for (const a of this.arrows) {
+      const avx = a.dir.x * ARROW_SPEED;
+      const avy = a.dir.y * ARROW_SPEED;
+      const av2 = avx * avx + avy * avy;
+      if (av2 === 0) continue;
+      const rx = bcx - a.pos.x;
+      const ry = bcy - a.pos.y;
+      const t = (rx * avx + ry * avy) / av2; // seconds to closest approach
+      if (t < 0 || t * 1000 > BOSS_JUKE_LOOKAHEAD_MS) continue;
+      const miss = Math.hypot(a.pos.x + avx * t - bcx, a.pos.y + avy * t - bcy);
+      if (miss > half + BOSS_JUKE_RADIUS_PX) continue; // will miss
+      if (t < bestT) {
+        bestT = t;
+        const pmag = Math.sqrt(av2);
+        let px = -avy / pmag;
+        let py = avx / pmag;
+        // Sidestep toward increasing miss distance (away from the arrow's line).
+        if (avx * ry - avy * rx < 0) {
+          px = -px;
+          py = -py;
+        }
+        bestDir = { x: px, y: py };
+      }
+    }
+    return bestDir;
   }
 
   // Win the run. Step 9 reintroduces this (dormant since Step 3 removed the
@@ -1947,11 +2247,20 @@ export class Game {
       this.renderer.renderLevel(this.level);
       this.renderer.renderHuts(this.level.getHutPositions());
       this.renderer.renderNpcs(this.level.getNpcPositions());
-      // Corrupted growth (boss-arena stub win trigger). A ground feature, so
-      // it draws under the player — the player visibly steps ONTO it to win.
+      // Corrupted growth (boss-arena stub win trigger), drawn over the version's
+      // solid stump so the tree stump reads as the corrupted source the player
+      // walks up to. Centre is per-run (which boss version rolled).
       if (this.inBossArena) {
-        this.renderer.renderCorruptedGrowth(this.lastTime);
+        this.renderer.renderCorruptedGrowth(
+          this.lastTime,
+          this.runMap.bossStumpCenter,
+        );
       }
+      // Mangos are ground items — drawn under the player so the player visibly
+      // steps onto one to collect it (same layering as the growth heart).
+      this.renderer.renderMangos(
+        this.roomMangos.get(this.roomKey(this.currentRoomCoord)) ?? [],
+      );
       this.renderer.renderPlayer(
         this.player,
         this.stamina.isBurstActive(),
@@ -2006,9 +2315,9 @@ export class Game {
   }
 
   // Bridge for the on-screen mobile A button. Equivalent to a Shift
-  // keydown — sets the edge-triggered dash flag in InputManager.
-  triggerDash() {
-    this.inputManager.setDashPressed();
+  // keydown — sets the edge-triggered sprint flag in InputManager.
+  triggerSprint() {
+    this.inputManager.setSprintPressed();
   }
 
   cleanup() {

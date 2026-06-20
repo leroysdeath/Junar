@@ -92,12 +92,14 @@ or reset on level start?
 
 ---
 
-## 5. Dash / roll
+## 5. Dash / roll → Sprint
 
-**Status:** Shipped 2026-05-10 as the dash teleport (CLAUDE.md §5);
-entry trimmed per the exit process below. What shipped: 3-tile blink
-opposite the player's facing, 0.5 stamina per use, Shift (mobile A button), no iframes,
-walls block (the blink stops at the last open tile before a wall).
+**Status:** Shipped 2026-05-10 as the dash teleport, then **reworked into a
+timed sprint 2026-06-19** (CLAUDE.md §5); entry trimmed per the exit process
+below. The dash that shipped (3-tile blink opposite facing, 0.5 stamina, Shift
+/ mobile A button, no iframes, walls block) was replaced by sprint: a 5-second
+1.5× movement-speed boost on the same input that mirrors the burst state
+machine (5 stamina, 15 s reset, ×0.75 decay on re-spam).
 
 ---
 
@@ -142,6 +144,41 @@ family vs. mixed styles?") is answered: the cast ships on CC0 / CC-BY /
 paid royalty-free sheets (player: ArMM1998 CC0; family: Antifarea CC-BY 3.0
 recolors; beasts: Time Fantasy royalty-free). Full original analysis in the
 Archived section below.
+
+---
+
+## 9. Mini-boss roster — bear / snake / gibbon (rooms built, bosses UNBUILT)
+
+**Status: rooms LANDED 2026-06-20; minibosses are IDEAS ONLY — not coded.** The
+run places four mini-boss rooms (`RoomGrid.MINIBOSS_ARENAS`). One — the panther
+arena (Empty Throne) — spawns the coded enlarged-panther boss (CLAUDE.md §5). The
+other three are **empty themed arenas** whose minibosses are documented here but
+**deliberately not implemented** (owner 2026-06-20). When one is built, it spawns
+in its themed room; until then the rooms read as empty stalking-grounds.
+
+Each room has an authored design plus a saved alternate (swap in `RoomGrid.ts`):
+
+- **Bear mini-boss** — *idea:* very high health and simply **rushes the player**;
+  because the bear already outruns the player (1.45×), the pressure is escaping a
+  tanky chaser you cannot out-foot — read chokepoints or die. *Room:* `bear`
+  (canonical-doorway octagon, active) / `bearAlt` (rounded-corner octagon, backup).
+- **Gibbon mini-boss** — *idea:* **pops up out of the trees**, hard to hit with
+  arrows and hard to track/avoid — it keeps vanishing into the canopy and
+  reappearing elsewhere. (Related to IDEATION §2 "gibbons drop from trees.") Likely
+  needs new spawn/teleport + visibility mechanics. *Room:* `gibbon` (a tree-maze
+  arena, N/S openings only). **Regular gibbon spawns (static + wave) were removed
+  2026-06-20** to reserve the gibbon for this mini-boss — `Game.rollStaticType` no
+  longer rolls gibbon, and the wave pool never carried it.
+- **Snake mini-boss** — *idea:* **commands a massive army of snakes**, far larger
+  than a normal snake wave — a swarm encounter, not a duel. *Room:* `snake`
+  (diamond/star arena, active) / `snakeAlt` (original diamond, alternate).
+
+Connectivity of the three rooms was verified (500-seed generation harness, 100%
+reachable, 0 fallbacks) despite their non-canonical openings, so no map or engine
+change was needed to wire the rooms in. Each idea needs its own owner gate +
+mechanics design before it leaves this doc (per the Process below). Do not add a
+new `EnemyType` for these without approval — like the panther boss, prefer an
+`isBoss`-style variant of the existing beast.
 
 ---
 

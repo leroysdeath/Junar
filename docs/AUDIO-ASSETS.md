@@ -91,16 +91,17 @@ listen pass yet) — an owner audition remains the final taste gate.
 including the two "approved, optional" keys (`burst-activate`,
 `stamina-low`). No §2 file lands until the owner re-opens this section.**
 
-Statuses set by owner 2026-06-11. The `dash`, `burst-activate`,
+Statuses set by owner 2026-06-11. The `sprint`, `burst-activate`,
 `stamina-low`, and `room-transition` hooks are already wired in code (silent
 no-ops until a file exists), so for wired keys **the file is the approval
-gate: don't land a file for a key that isn't approved.**
+gate: don't land a file for a key that isn't approved.** (The `dash` key was
+renamed to `sprint` on 2026-06-19 when the dash teleport became a timed sprint.)
 
 | Key | Status | Event | Feel / direction | Length | Loop | Notes |
 |-----|--------|-------|------------------|--------|------|-------|
 | `burst-activate` | approved, optional | burst rapid-fire start (`Stamina.ts`, Space/B) | rising "power-up" swell, short | 300–600 ms | no | 5-stamina cost, used sparingly |
 | `stamina-low` | approved, optional | stamina crosses low threshold (10 pts) | subtle warning pulse — quiet, non-annoying | 200–400 ms | no | Fire once on threshold cross, not per frame |
-| `dash` | optional — **mechanic may be removed** | dash teleport (`Player.ts`, Shift / mobile A button) | quick whoosh / blink | 150–300 ms | no | Don't prioritize sourcing; the dash mechanic itself is under review |
+| `sprint` | optional | sprint start (`Stamina.ts`, Shift / mobile A button) | rising "second-wind" surge / quick breath | 200–500 ms | no | Movement-speed boost (1.5×, 5 s); mirrors `burst-activate`. Renamed from `dash` 2026-06-19 |
 | `room-transition` | **not approved yet** | LTTP hard-cut into neighbor room (`Game.detectTransition`) | soft footstep-into-brush / whoosh | 150–300 ms | no | Could feel busy — owner taste call; needs sign-off before a file lands |
 | `family-death` | **not approved yet** | a family member dies (distinct from generic `game-over`) | sharper grief sting layered before/with `game-over` | 0.5–1 s | no | Family combat unbuilt (CLAUDE.md §5); spec only — no trigger exists yet |
 | `barrier-lay` | **TBD — mechanic unapproved** | placing a stick barrier (stick-barriers idea, `docs/IDEATION.md` §4) | soft woody stake-into-earth thunk | 150–300 ms | no | The barrier mechanic itself is ideation-only and not on a build tier; spec reserved here in case it's greenlit. No code hook exists |
@@ -178,11 +179,11 @@ dropped in `src/assets/audio/` under its Key name is auto-discovered at build
 time and plays immediately — no per-asset code change needed. Variant
 round-robin works via `-2`/`-3` filename suffixes (e.g. `arrow-fire-2.ogg`).
 The §1 keys fall back to the original synth tones until their files land. The
-§2 hooks for `dash`, `burst-activate`, `stamina-low`, and `room-transition`
+§2 hooks for `sprint`, `burst-activate`, `stamina-low`, and `room-transition`
 are triggered by the game and stay silent until files exist — but check the
 §2 Status column before landing a file (`room-transition` and `family-death`
-are not approved; `dash` may be removed with its mechanic; `barrier-lay` has
-no mechanic at all yet).
+are not approved; `barrier-lay` has no mechanic at all yet). The `dash` key
+was renamed to `sprint` on 2026-06-19 when the dash teleport became a sprint.
 
 Looping bed playback landed 2026-06-11 with the §3–4 greenlight. It is
 scene-driven: `Game` declares where the player is via

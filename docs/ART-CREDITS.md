@@ -52,6 +52,24 @@ Steam-page credits screen when it gets built.
   Kacper Woźniak (thkaspar) — https://thkaspar.itch.io/tth-animals —
   CC BY 4.0; recolored for Jungle X."
 
+### Mango pickup sprite
+
+- **Status: LANDED 2026-06-19** (owner greenlit a mango collectible; sprite
+  approved 2026-06-19). First in-world *item* sprite (extends the approved
+  sprite set beyond characters/beasts/tiles, owner-approved).
+- **Title:** "Pixel Art Fruits"
+- **Author:** Thiago Zen (@ZenThiago)
+- **Source:** https://thiagozen.itch.io/pixel-art-fruits
+- **License:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+  Listing explicitly tagged "No generative AI was used" — clean for the
+  human-made-only policy.
+- **Changes:** cropped the single 32×32 mango cell (row 1, col 3) out of the
+  128×96 `Fruits.png` sheet; no recolor. Shipped as
+  `src/assets/sprites/mango.png`.
+- **Required credit line:** "'Pixel Art Fruits' by Thiago Zen
+  (https://thiagozen.itch.io/pixel-art-fruits) — CC BY 4.0; mango sprite
+  cropped for Jungle X."
+
 ---
 
 ## Paid royalty-free licenses (recorded, attribution optional)

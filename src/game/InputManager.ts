@@ -18,11 +18,11 @@ export class InputManager {
   // existing keys Set so browser auto-repeat doesn't refire) or via mobile
   // setBurstPressed(); cleared by consumeBurstPress() on read.
   private burstPressed = false;
-  // Edge-triggered dash flag. Set on Shift keydown (same dedup pattern as
-  // burst) or via mobile setDashPressed(). On the keyboard KeyA is left
-  // movement, not dash — only the on-screen A button triggers dash for
+  // Edge-triggered sprint flag. Set on Shift keydown (same dedup pattern as
+  // burst) or via mobile setSprintPressed(). On the keyboard KeyA is left
+  // movement, not sprint — only the on-screen A button triggers sprint for
   // touch players.
-  private dashPressed = false;
+  private sprintPressed = false;
   // Edge-triggered win-stub flag (Step 9). Set on V keydown (same dedup
   // pattern). An undocumented desktop DEBUG shortcut for the boss-room win —
   // the real (input-agnostic) trigger is walking into the corrupted growth
@@ -39,7 +39,7 @@ export class InputManager {
       (e.code === 'ShiftLeft' && !this.keys.has('ShiftLeft')) ||
       (e.code === 'ShiftRight' && !this.keys.has('ShiftRight'))
     ) {
-      this.dashPressed = true;
+      this.sprintPressed = true;
     }
     if (e.code === 'KeyV' && !this.keys.has('KeyV')) {
       this.winStubPressed = true;
@@ -73,7 +73,7 @@ export class InputManager {
     this.virtual.left = false;
     this.virtual.right = false;
     this.burstPressed = false;
-    this.dashPressed = false;
+    this.sprintPressed = false;
     this.winStubPressed = false;
     this.updateInputState();
     this.onBlurClear?.(cleared);
@@ -91,8 +91,8 @@ export class InputManager {
       this.virtual.up || this.keys.has('KeyW') || this.keys.has('ArrowUp');
     this.inputState.down =
       this.virtual.down || this.keys.has('KeyS') || this.keys.has('ArrowDown');
-    // KeyA is left movement (alongside ArrowLeft). Dash is Shift-only on the
-    // keyboard; the mobile A button drives dash through setDashPressed().
+    // KeyA is left movement (alongside ArrowLeft). Sprint is Shift-only on the
+    // keyboard; the mobile A button drives sprint through setSprintPressed().
     this.inputState.left =
       this.virtual.left || this.keys.has('KeyA') || this.keys.has('ArrowLeft');
     this.inputState.right =
@@ -123,13 +123,14 @@ export class InputManager {
   }
 
   // Mobile bridge for the A button. Equivalent to a Shift keydown edge.
-  setDashPressed() {
-    this.dashPressed = true;
+  // Drives sprint (the old dash teleport was reworked into a timed sprint).
+  setSprintPressed() {
+    this.sprintPressed = true;
   }
 
-  consumeDashPress(): boolean {
-    const r = this.dashPressed;
-    this.dashPressed = false;
+  consumeSprintPress(): boolean {
+    const r = this.sprintPressed;
+    this.sprintPressed = false;
     return r;
   }
 
@@ -142,13 +143,13 @@ export class InputManager {
     return r;
   }
 
-  // Drop any pending one-shot edges (burst / dash / win-stub) without touching
+  // Drop any pending one-shot edges (burst / sprint / win-stub) without touching
   // held-movement state. Game.restart() calls this so an edge pressed on a
   // terminal overlay (e.g. V on the game-over screen, where update() isn't
   // running to consume it) can't carry into the next run.
   clearEdges() {
     this.burstPressed = false;
-    this.dashPressed = false;
+    this.sprintPressed = false;
     this.winStubPressed = false;
   }
 
@@ -164,7 +165,7 @@ export class InputManager {
     window.removeEventListener('blur', this.handleBlur);
     this.keys.clear();
     this.burstPressed = false;
-    this.dashPressed = false;
+    this.sprintPressed = false;
     this.winStubPressed = false;
   }
 }

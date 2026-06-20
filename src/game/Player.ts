@@ -21,7 +21,7 @@ export class Player {
   private size = 32;
   // Cardinal facing — sticky on the most recent direction press. Default
   // 'down' so a freshly-spawned player who hasn't pressed anything still
-  // has a valid render variant and dash direction.
+  // has a valid render variant.
   private facing: Facing = 'down';
   private prevInput: InputState = {
     up: false,
@@ -34,8 +34,9 @@ export class Player {
     this.position = { ...startPosition };
   }
 
-  // Set by Game each frame from stamina state. Composes against baseSpeed;
-  // 1 = full, 0.5 = low-stamina penalty.
+  // Set by Game each frame from stamina state. Composes against baseSpeed:
+  // 1 = normal, 0.5 = low-energy penalty, 1.5 = sprinting, 0.75 = sprinting
+  // while low (the two compose — see Stamina.getMovementSpeedMultiplier).
   setSpeedMultiplier(m: number) {
     this.speedMultiplier = m;
   }
@@ -85,55 +86,6 @@ export class Player {
     }
 
     this.prevInput = { ...input };
-  }
-
-  // Instant blink. Walks the AABB along `direction` (a unit vector,
-  // cardinal — the dash always uses the inverse of facing, set by Game)
-  // in small steps, stopping at the last position where the AABB clears
-  // walls and canvas bounds. Returns the actual distance traveled in px.
-  dash(direction: Vector2, distancePx: number, level: Level): number {
-    const stepPx = 4;
-    let traveled = 0;
-    while (traveled < distancePx) {
-      const step = Math.min(stepPx, distancePx - traveled);
-      const candidateX = this.position.x + direction.x * step;
-      const candidateY = this.position.y + direction.y * step;
-
-      const clampedX = Math.max(
-        0,
-        Math.min(candidateX, CANVAS_WIDTH - this.size),
-      );
-      const clampedY = Math.max(
-        0,
-        Math.min(candidateY, CANVAS_HEIGHT - this.size),
-      );
-
-      // Stop if clamping cut off motion (hit canvas edge).
-      if (clampedX !== candidateX || clampedY !== candidateY) {
-        this.position.x = clampedX;
-        this.position.y = clampedY;
-        traveled += step;
-        break;
-      }
-
-      // AABB-vs-wall: the four corners of the player at the candidate
-      // position. Any corner inside a wall tile blocks the dash.
-      const corners: Array<[number, number]> = [
-        [clampedX, clampedY],
-        [clampedX + this.size - 1, clampedY],
-        [clampedX, clampedY + this.size - 1],
-        [clampedX + this.size - 1, clampedY + this.size - 1],
-      ];
-      const blocked = corners.some(([cx, cy]) =>
-        level.isWall(Math.floor(cx / TILE_SIZE), Math.floor(cy / TILE_SIZE)),
-      );
-      if (blocked) break;
-
-      this.position.x = clampedX;
-      this.position.y = clampedY;
-      traveled += step;
-    }
-    return traveled;
   }
 
   update(
