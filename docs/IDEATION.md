@@ -56,19 +56,27 @@ nearby tree? Do they replace static-spawn gibbons or supplement?
 
 ## 3. Convert beasts to allies
 
-**Status:** Idea under discussion. Trigger source (scripted vs. random)
-undecided.
+**Status:** PARTIALLY BUILT — the **panther** case is greenlit and shipped
+(owner 2026-06-20); its design is migrated to CLAUDE.md §5 "Panther ally". The
+bear / snake / gibbon cases remain ideation and each still needs its own owner
+gate (trigger source for those, scripted vs. random, undecided).
 
 **Sketch:** Player gains the ability to convert one of the four approved
 beasts (panther / bear / snake / gibbon) into a temporary or permanent
 ally that fights enemies. Allies inherit speed and pathfinding of their
 enemy form.
 
-**Open questions:** Trigger source — input action, proximity, item pickup,
-scripted level event? Ally cap? Ally lifetime? What happens when an ally
-is hit (die / convert back / iframes)? Do allies count toward the
-"family death = game over / branching" rule? Visual differentiation of
-ally vs. enemy at-a-glance?
+**Open questions** (answered for the panther — see CLAUDE.md §5; still open for
+the other three): Trigger source — input action, proximity, item pickup,
+scripted level event? *(panther: defeating the panther mini-boss converts it.)*
+Ally cap? *(panther: one per run.)* Ally lifetime? *(panther: permanent for the
+run; follows the player room-to-room.)* What happens when an ally is hit
+(die / convert back / iframes)? *(panther: a committed first-strike lunge grants
+target-only immunity mid-strike; one non-immune contact kills it, no respawn.)*
+Do allies count toward the "family death = game over / branching" rule?
+*(panther: no — an ally beast is not family; its death never ends the run.)*
+Visual differentiation of ally vs. enemy at-a-glance? *(panther: a warm cured
+body tint with no red eyes — the rejected neck-collar's angle-robust replacement.)*
 
 ---
 
