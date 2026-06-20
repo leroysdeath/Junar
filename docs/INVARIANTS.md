@@ -43,11 +43,11 @@ Each invariant is phrased as a **violation predicate** — an evaluator answers 
 - `grep -rEi "tiger|crocodile|jackal|wolf|hyena|leopard" src/game/` returns no hits (only acceptable in CLAUDE.md guardrails, README.md, and docs/ as "not approved" examples).
 **Source:** CLAUDE.md §5 Mechanics; §9 Guardrails "No new enemy type may be added without explicit owner approval"
 
-### 4. Sprite assets are limited to the approved entity set (player, beasts, family)
-**Rule:** Sprite images may be imported and drawn only for the player (approved 2026-05-10), the four beasts, the three family members (Tiers 1–2 of `docs/ART-ASSETS.md`, greenlit 2026-06-11), and the jungle **tree walls + dirt floor** (Tier 3, partial — greenlit 2026-06-15, `src/assets/sprites/jungle-tiles.png`). The **hut**, arrows, HUD, FX (burst aura, LOS indicator, materialize flash), and the corrupted growth / plant boss render via procedural Canvas 2D fills (rest of Tier 3 — the hut — not greenlit; Tier 4 keep-procedural confirmed 2026-06-11). The infected red-eye cue on beasts stays a procedural overlay drawn on top of the sprite. Every sourced sheet is CC0, CC-BY (logged in `docs/ART-CREDITS.md`), or paid royalty-free — never share-alike (CC-BY-SA/GPL/LPC), NC, ND, or AI-generated.
+### 4. Sprite assets are limited to the approved entity set (player, beasts, family, tree-walls/floor, mango)
+**Rule:** Sprite images may be imported and drawn only for the player (approved 2026-05-10), the four beasts, the three family members (Tiers 1–2 of `docs/ART-ASSETS.md`, greenlit 2026-06-11), the jungle **tree walls + dirt floor** (Tier 3, partial — greenlit 2026-06-15, `src/assets/sprites/jungle-tiles.png`), and the **mango pickup** (first in-world *item* sprite, greenlit 2026-06-19, `src/assets/sprites/mango.png` — ThiagoZen "Pixel Art Fruits", CC-BY 4.0). The **hut**, arrows, HUD, FX (burst aura, LOS indicator, materialize flash), and the corrupted growth / plant boss render via procedural Canvas 2D fills (rest of Tier 3 — the hut — not greenlit; Tier 4 keep-procedural confirmed 2026-06-11). The infected red-eye cue on beasts stays a procedural overlay drawn on top of the sprite. Every sourced sheet is CC0, CC-BY (logged in `docs/ART-CREDITS.md`), or paid royalty-free — never share-alike (CC-BY-SA/GPL/LPC), NC, ND, or AI-generated.
 **Verify:**
-- `grep -rEn "import.*from.*assets|\\.png|\\.jpg|\\.webp" src/game/` returns imports (plus comments) only in `Renderer.ts`, and only for: `player-sprite.png`, `sprites/family-*.png`, `sprites/{panther,bear,snake,gibbon}.png`, and `sprites/jungle-tiles.png`.
-- `ctx.drawImage` call sites exist only in `Renderer.renderPlayer`, `Renderer.renderNpcs`, `Renderer.drawBeast` (the shared helper behind `renderPanther` / `renderBear` / `renderSnake` / `renderGibbon`), and `Renderer.renderLevel` (the jungle tree-wall/dirt-floor tiles).
+- `grep -rEn "import.*from.*assets|\\.png|\\.jpg|\\.webp" src/game/` returns imports (plus comments) only in `Renderer.ts`, and only for: `player-sprite.png`, `sprites/family-*.png`, `sprites/{panther,bear,snake,gibbon}.png`, `sprites/jungle-tiles.png`, and `sprites/mango.png`.
+- `ctx.drawImage` call sites exist only in `Renderer.renderPlayer`, `Renderer.renderNpcs`, `Renderer.drawBeast` (the shared helper behind `renderPanther` / `renderBear` / `renderSnake` / `renderGibbon`), `Renderer.renderLevel` (the jungle tree-wall/dirt-floor tiles), and `Renderer.renderMangos` (the mango pickup).
 - `Renderer.renderHuts`, `Renderer.renderArrows`, `Renderer.renderCorruptedGrowth`, and `Renderer.renderLineOfSightIndicator` use only `ctx.fillRect`, `ctx.fill`, `ctx.stroke`, `ctx.beginPath` — never `ctx.drawImage`.
 - Any CC-BY asset import has a matching entry in `docs/ART-CREDITS.md` (title, author, source URL, license, changes).
 **Source:** CLAUDE.md §3 Pillars "Readable at a glance"; §9 Guardrails "Sprite assets are limited to the approved set"; `docs/ART-ASSETS.md` tier statuses
@@ -149,7 +149,7 @@ The following are firm guidance but are design / tuning parameters rather than h
 - Enemy speed ratios (panther 395, bear 218, snake 68, gibbon 34 px/s) — `src/game/Enemy.ts`, balance choice
 - Stamina drain rates and burst-multiplier decay — `src/game/Stamina.ts`, balance choice
 - Sprite walk-frame timing — `src/game/Renderer.ts`, animation tuning
-- Level 10 boss arena layout — arena + corrupted-growth walk-on trigger implemented (`BOSS_GROWTH_CENTER` geometry is a balance choice); boss combat itself (roadmap §5.15) still deferred
+- Boss arena layout — four versions (`BOSS_VERSIONS` in `RoomGrid.ts`), each a single-entrance arena with a solid 3×3 stump; walk-up-to-stump win trigger implemented (`runMap.bossStumpCenter` geometry + `BOSS_STUMP_TRIGGER_PX` reach are balance choices); boss combat itself (roadmap §5.15) still deferred
 - Multiple-endings system structure — documented direction, no invariant until committed to a build tier
 
 ---

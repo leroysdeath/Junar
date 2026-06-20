@@ -1,8 +1,8 @@
 import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
-import { EnemyType, Facing, Vector2 } from './types';
-import { TILE_SIZE, ENEMY_VISUAL_PX, BOSS_GROWTH_CENTER } from './constants';
+import { EnemyType, Facing, Vector2, Mango } from './types';
+import { TILE_SIZE, MANGO_VISUAL_PX } from './constants';
 // Player sprite: composited from Time Elements "Character Core Set"
 // (finalbossblues / Jason Perry, timefantasy.net) — paid royalty-free, the
 // same art line as the beasts and jungle tileset. Modular pieces
@@ -35,6 +35,10 @@ import gibbonSpriteUrl from '../assets/sprites/gibbon.png';
 // canopy interiors, undersides and a trunk/roots base from the standalone trees)
 // so wall masses render as a stand of jungle trees rather than flat stamps.
 import jungleTilesUrl from '../assets/sprites/jungle-tiles.png';
+// Mango pickup — first in-world item sprite (owner-approved 2026-06-19). One
+// 32×32 mango cropped from "Pixel Art Fruits" by Thiago Zen (CC-BY 4.0, no AI;
+// attribution in docs/ART-CREDITS.md).
+import mangoSpriteUrl from '../assets/sprites/mango.png';
 
 // Sprite-sheet layout — the player sheet is 16-wide × 32-tall cells: 4 walk
 // columns (stand / step / stand / step, so col 0 is the idle pose) × 4
@@ -181,6 +185,7 @@ export class Renderer {
   private familySprites: HTMLImageElement[];
   private beastSprites: Record<EnemyType, HTMLImageElement>;
   private jungleTiles: HTMLImageElement;
+  private mangoSprite: HTMLImageElement;
   // Render-side movement tracking so beast sprites face their walk direction
   // and idle on the stand frame. Rebuilt every frame from the live enemy
   // list (no leak across deaths/rooms); purely visual — AI owns real motion.
@@ -217,6 +222,7 @@ export class Renderer {
       gibbon: load(gibbonSpriteUrl),
     };
     this.jungleTiles = load(jungleTilesUrl);
+    this.mangoSprite = load(mangoSpriteUrl);
   }
 
   // A cell counts as "open" (corridor floor) for tree-edge selection when it's
@@ -388,18 +394,21 @@ export class Renderer {
           ]
         : BEAST_STAND_COL;
 
+      // Per-instance draw size (the mini-boss panther overrides the type default
+      // to read ~1.8× larger; everything else returns its ENEMY_VISUAL_PX).
+      const visual = enemy.getVisualSize();
       switch (type) {
         case 'panther':
-          this.renderPanther(pos, facing, frameCol);
+          this.renderPanther(pos, facing, frameCol, visual);
           break;
         case 'snake':
-          this.renderSnake(pos, facing, frameCol);
+          this.renderSnake(pos, facing, frameCol, visual);
           break;
         case 'gibbon':
-          this.renderGibbon(pos, facing, frameCol);
+          this.renderGibbon(pos, facing, frameCol, visual);
           break;
         case 'bear':
-          this.renderBear(pos, facing, frameCol);
+          this.renderBear(pos, facing, frameCol, visual);
           break;
       }
       // No doorway-arrival flash: the white materialize square was removed by
@@ -422,9 +431,10 @@ export class Renderer {
     pos: Vector2,
     facing: Facing,
     frameCol: number,
+    visual: number,
   ) {
     const spec = BEAST_SHEET[type];
-    const box = ENEMY_VISUAL_PX[type];
+    const box = visual;
     const k = box / Math.max(spec.cellW, spec.cellH);
     const destW = Math.round(spec.cellW * k);
     const destH = Math.round(spec.cellH * k);
@@ -462,30 +472,50 @@ export class Renderer {
   // Panther — Time Fantasy sheet; black-panther silhouette, drawn at its 29 px
   // ENEMY_VISUAL_PX box (decoupled from the 21 px kill AABB). One method per
   // beast kept for the type dispatch.
-  private renderPanther(pos: Vector2, facing: Facing, frameCol: number) {
-    this.drawBeast('panther', pos, facing, frameCol);
+  private renderPanther(
+    pos: Vector2,
+    facing: Facing,
+    frameCol: number,
+    visual: number,
+  ) {
+    this.drawBeast('panther', pos, facing, frameCol, visual);
   }
 
   // Gibbon — Time Fantasy gorilla sheet: dark, tailless, long-armed primate
   // (closest match for the Hoolock); draws at its 16 px ENEMY_VISUAL_PX box —
   // the readability floor for the small-bodied primate (real body 0.6–0.9 m).
-  private renderGibbon(pos: Vector2, facing: Facing, frameCol: number) {
-    this.drawBeast('gibbon', pos, facing, frameCol);
+  private renderGibbon(
+    pos: Vector2,
+    facing: Facing,
+    frameCol: number,
+    visual: number,
+  ) {
+    this.drawBeast('gibbon', pos, facing, frameCol, visual);
   }
 
   // Bear — Time Fantasy dark adult bear; biggest of the set at its 39 px
   // ENEMY_VISUAL_PX box (kill AABB stays 34, so it still can't fit a 1-tile
   // corridor).
-  private renderBear(pos: Vector2, facing: Facing, frameCol: number) {
-    this.drawBeast('bear', pos, facing, frameCol);
+  private renderBear(
+    pos: Vector2,
+    facing: Facing,
+    frameCol: number,
+    visual: number,
+  ) {
+    this.drawBeast('bear', pos, facing, frameCol, visual);
   }
 
   // Snake — TTH sheet recolored to olive (Indian rat snake). Collision AABB
   // stays a tiny 4 px box (ENEMY_AABB_PX) so many snakes pack/stack per
   // tile; drawn at its 16 px ENEMY_VISUAL_PX box (the readability floor), and
   // the 32 px cell still drives arrow-hit in Game.ts, so arrows land reliably.
-  private renderSnake(pos: Vector2, facing: Facing, frameCol: number) {
-    this.drawBeast('snake', pos, facing, frameCol);
+  private renderSnake(
+    pos: Vector2,
+    facing: Facing,
+    frameCol: number,
+    visual: number,
+  ) {
+    this.drawBeast('snake', pos, facing, frameCol, visual);
   }
 
   // Family NPCs at N markers — sprite-based (Tier 2 swap, owner-greenlit
@@ -515,6 +545,22 @@ export class Renderer {
       );
     });
     this.ctx.restore();
+  }
+
+  // Mango pickups — the 32×32 sprite drawn at MANGO_VISUAL_PX, centred in its
+  // cell. Collected mangos are skipped (Game flips `collected` on pickup).
+  renderMangos(mangos: Mango[]) {
+    const off = (TILE_SIZE - MANGO_VISUAL_PX) / 2;
+    for (const m of mangos) {
+      if (m.collected) continue;
+      this.ctx.drawImage(
+        this.mangoSprite,
+        m.tile.x + off,
+        m.tile.y + off,
+        MANGO_VISUAL_PX,
+        MANGO_VISUAL_PX,
+      );
+    }
   }
 
   // Placeholder hut marker. Translucent peaked-roof shape.
@@ -592,9 +638,9 @@ export class Renderer {
   // the dark fringe is safe to stand on — readable in one frame against the
   // arena's empty floor. `time` is the gameLoop rAF timestamp (drives the
   // pulse; never Date.now — Invariant 8).
-  renderCorruptedGrowth(time: number) {
-    const cx = BOSS_GROWTH_CENTER.x;
-    const cy = BOSS_GROWTH_CENTER.y;
+  renderCorruptedGrowth(time: number, center: Vector2) {
+    const cx = center.x;
+    const cy = center.y;
 
     // Goo pool — irregular blob from overlapping rects, oily black.
     this.ctx.fillStyle = GOO_BLACK;

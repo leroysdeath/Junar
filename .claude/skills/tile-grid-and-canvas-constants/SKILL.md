@@ -22,7 +22,7 @@ export const GRID_WIDTH = 29;
 export const GRID_HEIGHT = 17;
 ```
 
-It also already owns the gameplay-tuning constants (`MAX_DETECTION_RANGE`, `ARROW_SPEED`, `ARROW_COOLDOWN_MS`, `PLAYER_SPEED`, the stamina/burst/dash costs, wave defaults). The newer constants families live here too — `ENEMY_AABB_PX`, the `ROOM_GRID_*` run-map dimensions, Hunt tuning, static-spawn density, the spawn-band graces, the wave-pool unlocks, and `BOSS_GROWTH_*` — constants.ts is the home for all of them. Already imported across nearly all of `src/game/` (`Game.ts`, `Player.ts`, `Enemy.ts`, `Renderer.ts`, `levels.ts`, `RoomGrid.ts`, `RoomTemplates.ts`, `Hunt.ts`, `WaveScheduler.ts`, `Stamina.ts`, `Logger.ts`). **Promote new values here when you touch the files that use them.** Don't fork local constants in individual modules.
+It also already owns the gameplay-tuning constants (`MAX_DETECTION_RANGE`, `ARROW_SPEED`, `ARROW_COOLDOWN_MS`, `PLAYER_SPEED`, the stamina/burst/sprint costs + tuning, wave defaults). The newer constants families live here too — `ENEMY_AABB_PX`, the `ROOM_GRID_*` run-map dimensions, Hunt tuning, static-spawn density, the spawn-band graces, the wave-pool unlocks, and `BOSS_GROWTH_*` — constants.ts is the home for all of them. Already imported across nearly all of `src/game/` (`Game.ts`, `Player.ts`, `Enemy.ts`, `Renderer.ts`, `levels.ts`, `RoomGrid.ts`, `RoomTemplates.ts`, `Hunt.ts`, `WaveScheduler.ts`, `Stamina.ts`, `Logger.ts`). **Promote new values here when you touch the files that use them.** Don't fork local constants in individual modules.
 
 ## What lives at each magic number today
 
@@ -37,7 +37,7 @@ The grid is uniform: all 10 levels are 29×17, and `parseLevel` in `levels.ts` t
 
 ## Gameplay tuning numbers
 
-Most have already been promoted into `constants.ts` (`ARROW_COOLDOWN_MS = 500`, `ARROW_SPEED = 400`, `MAX_DETECTION_RANGE = 450`, `PLAYER_SPEED = 150`, stamina/burst/dash costs, wave defaults). Read from those exports, not inline literals. A few still live inline — when you touch the file that owns one, lift it:
+Most have already been promoted into `constants.ts` (`ARROW_COOLDOWN_MS = 500`, `ARROW_SPEED = 400`, `MAX_DETECTION_RANGE = 450`, `PLAYER_SPEED = 150`, stamina/burst/sprint costs + tuning, wave defaults). Read from those exports, not inline literals. A few still live inline — when you touch the file that owns one, lift it:
 
 | Value | Meaning | Where |
 |---|---|---|

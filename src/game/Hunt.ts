@@ -66,6 +66,9 @@ export class Hunt {
   // (they keep waiting / counting down).
   onPlayerLeftRoom(enemies: Enemy[]): void {
     for (const enemy of enemies) {
+      // The mini-boss panther is arena-bound: it never joins the cross-room
+      // hunt (its bespoke AI keeps it in its room), so leave it alone.
+      if (enemy.getIsBoss()) continue;
       if (enemy.getHuntState() === 'active') enemy.setHuntState('hunting');
     }
   }
@@ -75,6 +78,7 @@ export class Hunt {
   // sitters begin their aggro delay.
   onPlayerEnteredRoom(enemies: Enemy[], currentTime: number): void {
     for (const enemy of enemies) {
+      if (enemy.getIsBoss()) continue; // arena-bound; not Hunt-managed
       const state = enemy.getHuntState();
       if (state === 'hunting') enemy.setHuntState('active');
       else if (state === 'dormant') this.startActivating(enemy, currentTime);
@@ -90,6 +94,7 @@ export class Hunt {
   // (dormant wakes via onPlayerEnteredRoom; active flips via onPlayerLeftRoom).
   tick(currentTime: number, enemies: Enemy[], playerRoom: RoomGridCoord): void {
     for (const enemy of enemies) {
+      if (enemy.getIsBoss()) continue; // arena-bound; not Hunt-managed
       switch (enemy.getHuntState()) {
         case 'activating':
           if (

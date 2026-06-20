@@ -11,7 +11,12 @@ import {
   CANVAS_HEIGHT,
   TILE_SIZE,
   ENEMY_AABB_PX,
+  ENEMY_VISUAL_PX,
   ENEMY_PATHFIND_REPOLL_MS,
+  BOSS_PANTHER_SPEED,
+  BOSS_PANTHER_HP,
+  BOSS_PANTHER_AABB_PX,
+  BOSS_PANTHER_VISUAL_PX,
 } from './constants';
 
 export class Enemy {
@@ -46,6 +51,18 @@ export class Enemy {
   private currentRoom: RoomGridCoord = { col: 0, row: 0 };
   private activatingSince = 0;
 
+  // --- Mini-boss overrides (owner 2026-06-19) ---
+  // A boss is a normal panther with isBoss=true plus per-instance size/visual/
+  // speed/hp overrides (set by configureAsBoss). hp defaults to 1 so every
+  // normal enemy keeps one-hit death; the boss takes BOSS_PANTHER_HP arrow hits.
+  // Its bespoke movement runs in Game.updateBossPanther (not Enemy.update), so
+  // these fields only carry identity + stats, not the AI state machine.
+  private isBossFlag = false;
+  private hp = 1;
+  // Per-instance render size; defaults to the type's ENEMY_VISUAL_PX, overridden
+  // for the boss. Renderer reads getVisualSize() instead of the type constant.
+  private visualSize: number;
+
   // Doorway-arrival kill grace: a gameLoop-currentTime deadline before which
   // this enemy cannot contact-kill (Game.checkCollisions skips it) and the
   // renderer draws a materialize flash over it. Stamped by
@@ -66,6 +83,7 @@ export class Enemy {
     this.id = id;
     // Per-type collision AABB extent (px), centred inside the 32 px cell.
     this.size = ENEMY_AABB_PX[type];
+    this.visualSize = ENEMY_VISUAL_PX[type];
 
     // Entering enemies spawn at world coords outside the canvas; they
     // shouldn't be snapped to a "safe" tile. Skip findSafeSpawnPosition.
@@ -249,6 +267,28 @@ export class Enemy {
       !this.collidesWall(cellX, cellY, level) &&
       !this.overlapsEnemy(cellX, cellY, others)
     );
+  }
+
+  // Move by (dx,dy) px this frame, resolving walls per-axis (slide along a wall)
+  // with the same rules as update(): try X against current Y, then Y against the
+  // resolved X, testing the centred AABB via collidesWall. Clamps to the canvas.
+  // Returns whether any net movement happened (the boss AI uses this to detect a
+  // lunge that hit a wall). Used by Game.updateBossPanther so the boss respects
+  // walls exactly like every other enemy and its weave/juke can't tunnel through.
+  tryMove(dx: number, dy: number, level: Level): { moved: boolean } {
+    const newX = this.position.x + dx;
+    const newY = this.position.y + dy;
+    let candX = this.position.x;
+    let candY = this.position.y;
+    if (!this.collidesWall(newX, this.position.y, level)) candX = newX;
+    if (!this.collidesWall(candX, newY, level)) candY = newY;
+    candX = Math.max(0, Math.min(candX, CANVAS_WIDTH - TILE_SIZE));
+    candY = Math.max(0, Math.min(candY, CANVAS_HEIGHT - TILE_SIZE));
+    const moved =
+      candX !== this.position.x || candY !== this.position.y;
+    this.position.x = candX;
+    this.position.y = candY;
+    return { moved };
   }
 
   private aabbAt(cellX: number, cellY: number): Rectangle {
@@ -586,6 +626,43 @@ export class Enemy {
 
   getId(): number {
     return this.id;
+  }
+
+  getSpeed(): number {
+    return this.speed;
+  }
+
+  // --- Mini-boss (owner 2026-06-19) ---
+
+  // Promote this panther to the enlarged mini-boss: bigger kill/collision box,
+  // bigger sprite, faster than arrows, and multi-hit HP. Movement is driven by
+  // Game.updateBossPanther, not Enemy.update. Call once right after construction.
+  configureAsBoss(): void {
+    this.isBossFlag = true;
+    this.size = BOSS_PANTHER_AABB_PX;
+    this.visualSize = BOSS_PANTHER_VISUAL_PX;
+    this.speed = BOSS_PANTHER_SPEED;
+    this.hp = BOSS_PANTHER_HP;
+  }
+
+  getIsBoss(): boolean {
+    return this.isBossFlag;
+  }
+
+  getHp(): number {
+    return this.hp;
+  }
+
+  // Apply one arrow hit. Returns true if this hit was lethal (hp ≤ 0), so the
+  // caller splices the enemy. Normal enemies have hp 1 → always lethal (one-hit
+  // death preserved); the boss survives until its HP is spent.
+  takeHit(): boolean {
+    this.hp -= 1;
+    return this.hp <= 0;
+  }
+
+  getVisualSize(): number {
+    return this.visualSize;
   }
 
   // --- Hunt state machine accessors (Step 4, roadmap §5.12) ---

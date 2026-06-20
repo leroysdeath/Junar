@@ -34,7 +34,7 @@ export type SoundKey =
   | 'enemy-hit'
   | 'game-over'
   | 'victory'
-  | 'dash'
+  | 'sprint'
   | 'burst-activate'
   | 'stamina-low'
   | 'room-transition'

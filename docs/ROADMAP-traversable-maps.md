@@ -366,8 +366,8 @@ export const ENEMY_AABB_PX: Record<EnemyType, number> = {
 **Connectors per-run pool (rolled).** Each connector template declares `s` / `S` candidate tiles. At run start (or on first room entry — see §5.10), the actual statics are rolled from the candidates per the B+C density formula.
 
 **Type rules at roll time:**
-- `s` tile rolls a snake (heavier weighting) or gibbon (lighter). Once gibbon-in-waves is decided, gibbon weights may shift.
-- `S` tile rolls snake, gibbon, or panther — any 1-tile-fitting type. No bears.
+- `s` tile rolls a snake. (Gibbon statics removed 2026-06-20 — gibbons are reserved for the unbuilt gibbon mini-boss; `s` was snake-heavy / gibbon-light before.)
+- `S` tile rolls snake or panther — any 1-tile-fitting type. No bears, no gibbons.
 
 **Per-tile occupancy cap.** AABB no-overlap is the structural limit. The "1 per tile" framing was superseded by variable AABB sizes (see §5.7). Snakes can pack ~8 per tile linearly.
 
@@ -538,7 +538,7 @@ Each step's PR / branch must:
 1. **Lint clean** — `npm run lint` exits 0; no error lines.
 2. **Typecheck clean** — `npm run typecheck` (app, node, and api tsconfigs) exits 0; empty stdout.
 3. **Code review** — invoke the `code-review` skill at high effort; address all findings or document why ignored.
-4. **Manual verify** — run the app and exercise the new behavior in browser. The `verify` skill is the recommended path. If the step is purely refactor with no visible UI change, manual verify confirms no regression in existing flows (player movement, auto-fire, dash, burst, stamina drain, sound).
+4. **Manual verify** — run the app and exercise the new behavior in browser. The `verify` skill is the recommended path. If the step is purely refactor with no visible UI change, manual verify confirms no regression in existing flows (player movement, auto-fire, sprint, burst, stamina drain, sound).
 5. **Pillar/invariant check** — re-read `CLAUDE.md` §3 and `docs/INVARIANTS.md`. No pillar weakened, no invariant violated. Invoke the `junar-pillars` skill if in doubt.
 6. **Docs sync** — if the step changes architecture-level behavior described in `CLAUDE.md`, update `CLAUDE.md` in the same PR. Do not let docs drift.
 7. **Disposal** — any new `addEventListener`, `setTimeout`, `setInterval`, or `requestAnimationFrame` registration in `src/game/` has a matching tear-down reachable from `Game.cleanup()` (Invariant 16).
