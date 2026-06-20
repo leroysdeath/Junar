@@ -506,7 +506,11 @@ export class Renderer {
     const prev = this.allyTrack;
     const dx = prev ? pos.x - prev.x : 0;
     const dy = prev ? pos.y - prev.y : 0;
-    const moving = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
+    // A teleport (fresh spawn, room-transition reposition, or a new run reusing
+    // the persistent tracker) yields an implausibly large one-frame delta — don't
+    // infer a walk facing from it (a panther moves only ~7 px/frame).
+    const teleport = Math.abs(dx) > 2 * TILE_SIZE || Math.abs(dy) > 2 * TILE_SIZE;
+    const moving = !teleport && (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01);
     let facing: Facing = prev?.facing ?? 'down';
     if (moving) {
       facing =

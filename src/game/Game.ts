@@ -1453,6 +1453,14 @@ export class Game {
       staminaLow: this.stamina.isLow(),
       burstActive: this.stamina.isBurstActive(),
       burstMultiplier: round2(this.stamina.getBurstMultiplier()),
+      ally: this.ally
+        ? {
+            phase: this.allyPhase,
+            targetId: this.allyTargetId,
+            x: Math.round(this.ally.getPosition().x),
+            y: Math.round(this.ally.getPosition().y),
+          }
+        : null,
       pressedKeys,
       enemyPositions,
     };
@@ -1787,6 +1795,10 @@ export class Game {
     let nearestDistance = Infinity;
 
     for (const enemy of this.enemies) {
+      // The ally lives outside this.enemies, but honour the faction explicitly so
+      // the player's auto-fire can never lock onto a friendly (defensive — the
+      // owner-asked contract is "targeting respects the faction").
+      if (enemy.getIsAlly()) continue;
       const enemyPos = enemy.getPosition();
       const enemyCenter: Vector2 = {
         x: enemyPos.x + TILE_SIZE / 2,
@@ -1898,6 +1910,7 @@ export class Game {
     // that just materialized in this room (owner-approved 2026-06-10).
     if (now >= this.arrivalKillGraceUntil) {
       for (const enemy of this.enemies) {
+        if (enemy.getIsAlly()) continue; // a friendly never contact-kills the player
         if (now < enemy.getArrivalGraceUntil()) continue;
         if (this.enemyTouchesPlayer(enemy, playerPos)) {
           const enemyPos = enemy.getPosition();
@@ -1924,6 +1937,7 @@ export class Game {
     this.arrows = this.arrows.filter((arrow) => {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const enemy = this.enemies[i];
+        if (enemy.getIsAlly()) continue; // arrows pass through a friendly
         const isBoss = enemy.getIsBoss();
         // Normal enemies use the full 32 px cell as the arrow-hit box (unchanged).
         // The enlarged boss uses its bigger AABB so its larger body is hittable.
@@ -1976,54 +1990,29 @@ export class Game {
       return true; // Keep arrow
     });
 
-    // Pass 3: panther-ally contact combat (owner 2026-06-20). The ally lives
-    // outside this.enemies, so it's resolved here separately. Order matters: the
-    // ally lands its first-strike on the locked target FIRST (so a swarmed ally
-    // still gets its kill), then enemies that touch a vulnerable ally kill it.
+    // Pass 3: panther-ally death (owner 2026-06-20). The ally lives outside
+    // this.enemies, so it's resolved here separately. Its first-strike KILL is
+    // resolved during the lunge step in updateAllyPanther (allyStrikeContact), so
+    // it can't be lost to a same-frame phase flip; this pass only handles enemies
+    // killing the ally.
     if (this.ally) {
-      this.resolveAllyCombat();
+      this.resolveAllyCombat(now);
     }
   }
 
-  // Resolve the panther ally's first-strike and its death (owner 2026-06-20).
-  // (a) While lunging, the ally kills ONLY its locked target on contact (+10,
-  //     like any kill, for HUD consistency). (b) Any enemy that touches the ally
-  //     kills it — except, mid-lunge, the one enemy it's striking (first-strike
-  //     immunity is target-specific; every other enemy can still hit it, and
-  //     during jump-back/cooldown it's fully exposed). The player-side doorway
-  //     graces are deliberately NOT honoured here — they protect the player, not
-  //     the ally. Ally death does NOT end the run (an ally beast is not family).
-  private resolveAllyCombat(): void {
+  // Resolve the panther ally's death (owner 2026-06-20). Any enemy that touches
+  // the ally kills it — except, mid-lunge, the one enemy it's striking
+  // (first-strike immunity is target-specific; every other enemy can still hit
+  // it, and during jump-back/cooldown it's fully exposed). The ally's own KILL is
+  // handled in updateAllyPanther's lunge step (allyStrikeContact), not here. Ally
+  // death does NOT end the run (an ally beast is not family). The ally shares the
+  // player's post-transition doorway grace so a sitter parked at the entry
+  // opening can't invisibly kill it on the arrival frame (mirrors Pass 1).
+  private resolveAllyCombat(now: number): void {
     const ally = this.ally;
     if (!ally) return;
+    if (now < this.arrivalKillGraceUntil) return;
     const allyBox = ally.getAABB();
-
-    // (a) First-strike: the committed lunge kills its locked target on contact.
-    if (this.allyPhase === 'lunge' && this.allyTargetId !== null) {
-      for (let i = this.enemies.length - 1; i >= 0; i--) {
-        const e = this.enemies[i];
-        if (e.getId() !== this.allyTargetId) continue;
-        if (this.collisionManager.checkCollision(allyBox, e.getAABB())) {
-          const enemyType = e.getType();
-          if (e.takeHit()) {
-            this.enemies.splice(i, 1);
-            this.score += 10;
-            this.enemiesKilled += 1;
-            this.callbacks.onScoreChange(this.score);
-            this.callbacks.onKillsChange(this.enemiesKilled);
-            this.callbacks.onEnemiesChange(this.enemies.length);
-            this.soundManager.play('enemy-hit');
-            this.logger.log('hit', 'ally->enemy', {
-              type: enemyType,
-              remaining: this.enemies.length,
-            });
-          }
-        }
-        break; // only the one target carries this id
-      }
-    }
-
-    // (b) Enemies that touch the ally kill it (except the lunge target mid-lunge).
     for (const e of this.enemies) {
       if (this.allyPhase === 'lunge' && e.getId() === this.allyTargetId) {
         continue; // first-strike immunity — target only
@@ -2037,6 +2026,37 @@ export class Game {
         this.allyTargetId = null;
         break;
       }
+    }
+  }
+
+  // First-strike kill: while lunging, the ally kills its locked target on contact
+  // (+10, like any kill). Called from updateAllyPanther's lunge step — i.e. WHILE
+  // the ally is still in the lunge phase — so the kill (and the target-immunity
+  // it implies) can never be lost to a same-frame phase transition.
+  private allyStrikeContact(): void {
+    const ally = this.ally;
+    if (!ally || this.allyTargetId === null) return;
+    const allyBox = ally.getAABB();
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      if (e.getId() !== this.allyTargetId) continue;
+      if (this.collisionManager.checkCollision(allyBox, e.getAABB())) {
+        const enemyType = e.getType();
+        if (e.takeHit()) {
+          this.enemies.splice(i, 1);
+          this.score += 10;
+          this.enemiesKilled += 1;
+          this.callbacks.onScoreChange(this.score);
+          this.callbacks.onKillsChange(this.enemiesKilled);
+          this.callbacks.onEnemiesChange(this.enemies.length);
+          this.soundManager.play('enemy-hit');
+          this.logger.log('hit', 'ally->enemy', {
+            type: enemyType,
+            remaining: this.enemies.length,
+          });
+        }
+      }
+      return; // only the one target carries this id
     }
   }
 
@@ -2352,6 +2372,9 @@ export class Game {
         this.allyLungeDir.y * speed * ALLY_LUNGE_SPEED_MULT * dt,
         this.level,
       );
+      // Land the first-strike WHILE still in the lunge phase, so the kill (and
+      // the implied target-immunity) can't be lost to the phase flip below.
+      this.allyStrikeContact();
       const targetGone =
         this.allyTargetId === null ||
         !this.enemies.some((e) => e.getId() === this.allyTargetId);
@@ -2362,10 +2385,7 @@ export class Game {
       ) {
         this.allyPhase = 'jumpback';
         this.allyPhaseSince = currentTime;
-        this.allyJumpbackDir = {
-          x: -this.allyLungeDir.x,
-          y: -this.allyLungeDir.y,
-        };
+        this.allyJumpbackDir = this.allyRetreatDir();
         this.allyTargetId = null;
       }
       return;
@@ -2419,6 +2439,22 @@ export class Game {
       this.allyLungeDir = { x: lungeUx, y: lungeUy };
       this.allyTargetId = target.getId();
     }
+  }
+
+  // Jump-back retreat direction: opposite the lunge, or — if the lunge direction
+  // was degenerate (target sat exactly on top of the ally) — directly away from
+  // the player, so a strike always ends in the ally gaining some space.
+  private allyRetreatDir(): Vector2 {
+    const lmag = Math.hypot(this.allyLungeDir.x, this.allyLungeDir.y);
+    if (lmag > 0.001) {
+      return { x: -this.allyLungeDir.x / lmag, y: -this.allyLungeDir.y / lmag };
+    }
+    const a = this.ally?.getPosition() ?? { x: 0, y: 0 };
+    const p = this.player.getPosition();
+    const ax = a.x - p.x;
+    const ay = a.y - p.y;
+    const am = Math.hypot(ax, ay) || 1;
+    return { x: ax / am, y: ay / am };
   }
 
   // Nearest enemy to the ally, restricted to foes within ALLY_LEASH_PX of the
