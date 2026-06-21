@@ -391,3 +391,39 @@ export const BOSS_WEAVE_PERIOD_MS = 900; // weave oscillation period
 export const BOSS_JUKE_LOOKAHEAD_MS = 250; // react to arrows arriving within this
 export const BOSS_JUKE_RADIUS_PX = 8; // extra "will hit" margin past the hitbox
 export const BOSS_JUKE_SPEED_MULT = 2.0; // juke lateral speed = SPEED × this
+
+// --- Panther ally (owner 2026-06-20) ---
+// Defeating the enlarged panther mini-boss converts it into an ALLY on the
+// player's side. It is NOT a new EnemyType — a `panther` Enemy with an `isAlly`
+// flag (Enemy.configureAsAlly), kept at the normal panther's stats (395 px/s,
+// 21 px AABB, 29 px visual) and driven by a bespoke Game.updateAllyPanther. It
+// hunts the nearest enemy near the player and escorts when none is in range,
+// attacking with a committed "first-strike" lunge: it dashes in, kills its
+// locked target on contact (invulnerable to THAT target only mid-lunge), then
+// jumps back and cools down (fully vulnerable the whole time). One non-immune
+// enemy contact kills it — and it is deliberately NOT wired into the
+// family-death = game-over rule (an ally beast is not family; the run continues).
+// Approach/escort reuse the shared BFS pursuit (Enemy.update); the lunge and
+// jump-back are committed dashes via Enemy.tryMove, mirroring the boss. Timing is
+// gameLoop currentTime (Invariant 8). One ally per run (one panther mini-boss).
+
+// Engage only enemies within this distance of the PLAYER (the leash): farther
+// foes are ignored so the ally stays a bodyguard near the player rather than
+// running off across the room. With no enemy in leash, the ally escorts.
+export const ALLY_LEASH_PX = 420;
+// Escort: while leashing to the player with no target in range, hold position
+// unless the ally has drifted farther than this from the player.
+export const ALLY_FOLLOW_DIST_PX = 64;
+// Stalk→strike: commit the lunge once within this centre-to-centre distance of
+// the target. Larger than the contact distance so the ally commits (and gains
+// its target-immunity) a beat BEFORE the bodies touch.
+export const ALLY_LUNGE_TRIGGER_PX = 130;
+// Lunge dash speed = speed × this (a fast committed strike); hard time cap so a
+// whiffed lunge can't run forever.
+export const ALLY_LUNGE_SPEED_MULT = 1.6;
+export const ALLY_LUNGE_MAX_MS = 600;
+// Jump-back: a short retreat dash opposite the lunge, then a recovery cooldown.
+// The ally is fully vulnerable through both (the swarm-punish window).
+export const ALLY_JUMPBACK_SPEED_MULT = 1.3;
+export const ALLY_JUMPBACK_MS = 220;
+export const ALLY_COOLDOWN_MS = 700;

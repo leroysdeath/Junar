@@ -58,6 +58,10 @@ export class Enemy {
   // Its bespoke movement runs in Game.updateBossPanther (not Enemy.update), so
   // these fields only carry identity + stats, not the AI state machine.
   private isBossFlag = false;
+  // Allegiance (owner 2026-06-20). A freed panther ally is a normal-stat panther
+  // with isAlly=true; Game stores it OUTSIDE this.enemies and drives it via
+  // Game.updateAllyPanther, so this flag only carries identity (friend vs foe).
+  private isAllyFlag = false;
   private hp = 1;
   // Per-instance render size; defaults to the type's ENEMY_VISUAL_PX, overridden
   // for the boss. Renderer reads getVisualSize() instead of the type constant.
@@ -663,6 +667,22 @@ export class Enemy {
 
   getVisualSize(): number {
     return this.visualSize;
+  }
+
+  // --- Ally (owner 2026-06-20) ---
+  // Promote this panther to a player-side ally. Unlike configureAsBoss it keeps
+  // every panther stat (speed/size/visual/hp) — the flag only marks allegiance.
+  // Movement is driven by Game.updateAllyPanther (approach/escort via the shared
+  // Enemy.update pursuit, lunge/jump-back via tryMove), and Game stores the ally
+  // outside this.enemies so auto-fire, arrows, the contact-kill pass and the
+  // per-room parking all exclude it by construction (it follows the player like
+  // the player, not the enemies). Call once right after construction.
+  configureAsAlly(): void {
+    this.isAllyFlag = true;
+  }
+
+  getIsAlly(): boolean {
+    return this.isAllyFlag;
   }
 
   // --- Hunt state machine accessors (Step 4, roadmap §5.12) ---

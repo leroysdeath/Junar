@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Map-harness scratch output (regenerate with `npm run check:map`)
+scripts/map-harness/.last-audit.txt

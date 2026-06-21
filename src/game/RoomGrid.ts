@@ -4,8 +4,9 @@
 // regenerated every run. REQUIRED_ROOM_COUNT (11) cells are guaranteed each run
 // — the start (a random L-bend), the boss arena (one of four versions), the four
 // mini-boss arenas, and five mango dead-ends; the rest are connectors drawn from
-// CONNECTOR_TEMPLATE_POOL (which now also carries the demoted anchor-1/-5/-9
-// layouts). The player traverses room-to-room from the start toward the boss.
+// the FABRIC pool (canonical-edge rooms, which also carries the demoted
+// anchor-1/-5/-9 layouts, normalized to canonical doors). The player traverses
+// room-to-room from the start toward the boss.
 // See docs/ROADMAP-traversable-maps.md §5.1 (run structure), §5.2 (templates),
 // §5.3 (transitions).
 //
@@ -14,28 +15,35 @@
 //      MIN_ANCHOR_SPACING apart; two rings off the border so even a single-
 //      opening room's door faces a fully-connectable interior neighbour), then
 //      assign roles (farthest-from-start = boss; rest split mini-boss / mango).
-//   2. Fill every other cell with a connector whose openings are compatible with
-//      already-placed neighbors and the grid border.
-//   3. BFS path-existence from the start; if any required room is unreachable,
+//   2. Force off-centre ADAPTERS around the two arenas whose openings have no
+//      canonical mate (snake / gibbon), so their doorways flow into the fabric.
+//   3. Fill every other cell from the FABRIC pool, reciprocating every placed
+//      neighbour exactly (satisfiesNeighbors).
+//   4. BFS path-existence from the start; if any required room is unreachable,
 //      regenerate.
 //
-// ── Adjacency model (a pragmatic reading of §5.3) ───────────────────────────
-// Two adjacent CONNECTORS must have IDENTICAL opening sets on their shared edge
-// (a clean, gap-free corridor fabric). ANCHORS, however, are the existing level
-// layouts whose edge openings are NOT authored to canonical connector positions
-// (e.g. L1's top opening sits at cols 20–22, not the connector centre 13–15), so
-// a connector can't always mirror them exactly. Anchors therefore connect
-// PERMISSIVELY: a passage between any two adjacent rooms exists wherever their
-// openings on the shared edge OVERLAP. Connector selection biases toward
-// connecting adjacent anchors, and the BFS path-existence check (overlap-based)
-// guarantees the boss is reachable or the map regenerates. Transitions at
-// runtime use the same overlap rule (see roomsConnect / openingsOnEdge).
+// ── No-fake-lane guarantee (the adjacency model) ─────────────────────────────
+// Every opening on every placed room reciprocates into a walkable opening across
+// the border — no "lane into a wall". This holds because:
+//   • The FABRIC pool (the only random-fill pool) has CANONICAL openings only
+//     (N/S cols 13-15, E/W rows 7-9) and is CLOSED under opening-set equality, so
+//     the fill can always reciprocate a neighbour. satisfiesNeighbors requires
+//     IDENTICAL opening sets with EVERY placed neighbour, of any kind.
+//   • Special rooms either expose only canonical doors (boss / bear / panther /
+//     start / mango), are normalized to canonical (the demoted anchors, via
+//     normalizeToCardinal), or have their off-centre doors mated by a force-
+//     placed ADAPTER (the snake / gibbon arenas — see forceAdapter).
+//   • A solid GROVE backstops the rare fully-enclosed cell with no fake lane.
+// Verified at scale by scripts/map-harness/check-openings.mjs (0 fake lanes over
+// thousands of seeds). Runtime transitions still use opening OVERLAP (roomsConnect
+// / openingsOnEdge); with full reciprocity, overlap and identity now agree.
 
 import {
   Edge,
   RoomDef,
   RoomGridCoord,
   RoomOpening,
+  RoomTemplate,
   RunMap,
   Vector2,
 } from './types';
@@ -50,7 +58,11 @@ import {
   TILE_SIZE,
 } from './constants';
 import { levels } from './levels';
-import { CONNECTOR_TEMPLATE_POOL, deriveOpenings } from './RoomTemplates';
+import {
+  FABRIC_TEMPLATE_POOL,
+  ADAPTER_TEMPLATE_POOL,
+  deriveOpenings,
+} from './RoomTemplates';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Seeded PRNG (mulberry32). A numeric seed gives reproducible maps (used by the
@@ -189,6 +201,32 @@ function carveAnchorDoors(src: boolean[][]): boolean[][] {
   return walls;
 }
 
+// Seal every border opening that is NOT at a canonical doorway position (N/S
+// cols 13-15, E/W rows 7-9), so the room exposes ONLY canonical doors and slots
+// into the closed FABRIC pool with no fake lanes. Used on the demoted anchors:
+// their authored off-centre entries (e.g. L1's cols 20-22, L5's 9-11 / 17-19,
+// L9's 5-7 / 21-23) are vestigial — the carved canonical doors already connect
+// them. Operates on a copy; any corridor behind a sealed entry stays as a
+// harmless interior alcove (no edge opening, so it can't read as a fake lane).
+function normalizeToCardinal(src: boolean[][]): boolean[][] {
+  const walls = src.map((r) => r.slice());
+  const lastRow = GRID_HEIGHT - 1;
+  const lastCol = GRID_WIDTH - 1;
+  for (let col = 0; col < GRID_WIDTH; col++) {
+    if (!DOOR_COLS.includes(col)) {
+      walls[0][col] = true; // N edge
+      walls[lastRow][col] = true; // S edge
+    }
+  }
+  for (let row = 0; row < GRID_HEIGHT; row++) {
+    if (!DOOR_ROWS.includes(row)) {
+      walls[row][0] = true; // W edge
+      walls[row][lastCol] = true; // E edge
+    }
+  }
+  return walls;
+}
+
 // anchor-1 / -5 / -9 demoted to CONNECTORS (owner 2026-06-20): only the boss
 // (anchor-10, now its own four-version registry below) remains a required
 // hand-authored room. Their canonical carved doorways (cross-like, all four
@@ -200,7 +238,10 @@ function carveAnchorDoors(src: boolean[][]): boolean[][] {
 const ANCHOR_CONNECTOR_LEVEL_INDICES = [0, 4, 8]; // levels.ts: anchor-1, -5, -9
 const ANCHOR_CONNECTOR_DEFS: RoomDef[] = ANCHOR_CONNECTOR_LEVEL_INDICES.map(
   (lvlIdx) => {
-    const walls = carveAnchorDoors(levels[lvlIdx].walls);
+    // Carve the canonical doors, then seal the authored off-centre entries so
+    // these become clean canonical-door rooms that live in the FABRIC pool with
+    // no fake lanes (owner 2026-06-20).
+    const walls = normalizeToCardinal(carveAnchorDoors(levels[lvlIdx].walls));
     return {
       kind: 'connector' as const,
       templateId: `anchor-${lvlIdx + 1}`,
@@ -215,12 +256,11 @@ const ANCHOR_CONNECTOR_DEFS: RoomDef[] = ANCHOR_CONNECTOR_LEVEL_INDICES.map(
   },
 );
 
-// The connector pool as RoomDefs. Shared by reference across every cell that
-// uses the same template — they're read-only, so no per-cell copy is needed.
-// The demoted anchor rooms (above) ride along in the same pool.
-const CONNECTOR_DEFS: RoomDef[] = [
-  ...CONNECTOR_TEMPLATE_POOL.map((t) => ({
-    kind: 'connector' as const,
+// A connector RoomDef from a template. Shared by reference across every cell
+// that uses the same template — they're read-only, so no per-cell copy is needed.
+function connectorDef(t: RoomTemplate): RoomDef {
+  return {
+    kind: 'connector',
     templateId: t.id,
     anchorIndex: null,
     walls: t.walls,
@@ -229,9 +269,42 @@ const CONNECTOR_DEFS: RoomDef[] = [
     authoredStatics: t.authoredStatics,
     npcPositions: [],
     hutPositions: [],
-  })),
+  };
+}
+
+// FABRIC pool — the ONLY rooms the random connector fill draws from. Canonical-
+// edge-only templates (closed under the opening-set-equality adjacency rule) plus
+// the normalized demoted anchors (also canonical now). Because the set is closed,
+// the fill can always reciprocate every placed neighbour → no connector fake
+// lanes. See RoomTemplates.FABRIC_TEMPLATE_POOL and satisfiesNeighbors.
+const FABRIC_DEFS: RoomDef[] = [
+  ...FABRIC_TEMPLATE_POOL.map(connectorDef),
   ...ANCHOR_CONNECTOR_DEFS,
 ];
+
+// ADAPTER pool — the off-centre hubs/forks/links. NEVER random-placed; the
+// generator force-places one of these next to the specific special-room opening
+// it mates (see forceAdapter). Looked up by template id.
+const ADAPTER_DEF_BY_ID: Map<string, RoomDef> = new Map(
+  ADAPTER_TEMPLATE_POOL.map((t) => [t.id, connectorDef(t)]),
+);
+
+// A solid all-trees room, used ONLY as the fill's last resort when a cell is
+// hemmed in by closed-facing neighbours on every side (so no opening-bearing
+// fabric room fits). Having no openings, it reciprocates closed edges perfectly
+// and can never create a fake lane. Built directly (an opening-less room would
+// fail buildConnector's invariants).
+const GROVE_DEF: RoomDef = {
+  kind: 'connector',
+  templateId: 'grove-solid',
+  anchorIndex: null,
+  walls: Array.from({ length: GRID_HEIGHT }, () => Array(GRID_WIDTH).fill(true)),
+  openings: [],
+  candidates: [],
+  authoredStatics: [],
+  npcPositions: [],
+  hutPositions: [],
+};
 
 // Mini-boss arena templates (owner 2026-06-20). Hand-authored 29×17 arenas
 // ('#' = tree wall, '.' = dirt floor). Openings are authored into each grid and
@@ -571,7 +644,7 @@ const BOSS_VERSIONS: BossVersion[] = [
 // them in (anchorAgreement) and the reachability gate stays cheap. Statics are
 // suppressed (candidates [] — required rooms stay clean).
 function requiredFromTemplate(id: string): RoomDef {
-  const t = CONNECTOR_TEMPLATE_POOL.find((x) => x.id === id);
+  const t = FABRIC_TEMPLATE_POOL.find((x) => x.id === id);
   if (!t) throw new Error(`[Junar] required template not found: ${id}`);
   return {
     kind: 'anchor',
@@ -658,38 +731,6 @@ function shuffle<T>(rng: () => number, arr: T[]): T[] {
 // Connector fill.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Reward for placing `def` at (col,row) given already-placed ANCHOR or
-// MINI-BOSS neighbors: strongly prefer connecting to such a neighbor's opening,
-// and avoid opening into its wall. Both anchors and mini-bosses connect via
-// overlap (not the per-set equality the hard constraint enforces between
-// connectors), so both get this soft bias — otherwise a connector could wall
-// off a mini-boss doorway and strand the arena.
-function anchorAgreement(
-  def: RoomDef,
-  cells: (RoomDef | null)[][],
-  col: number,
-  row: number,
-): number {
-  let score = 0;
-  for (const [edge, dc, dr] of DIRS) {
-    const nc = col + dc;
-    const nr = row + dr;
-    if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS)
-      continue;
-    const nb = cells[nr][nc];
-    // Only anchors + mini-bosses use overlap-adjacency; connector↔connector
-    // seams are governed by the hard equality constraint in satisfiesNeighbors.
-    if (!nb || nb.kind === 'connector') continue;
-    const anchorOpensHere = openingsOnEdge(nb, oppositeEdge(edge)).length > 0;
-    if (anchorOpensHere) {
-      score += roomsConnect(def, edge, nb) ? 2 : -1;
-    } else {
-      score += edgeClosed(def, edge) ? 1 : -1;
-    }
-  }
-  return score;
-}
-
 // Border edges a connector at (col,row) must keep closed so no opening points
 // off the map.
 function satisfiesBorder(def: RoomDef, col: number, row: number): boolean {
@@ -700,9 +741,16 @@ function satisfiesBorder(def: RoomDef, col: number, row: number): boolean {
   return true;
 }
 
-// Hard constraints: border-closed + identical opening sets with already-placed
-// CONNECTOR neighbors (left = W↔E, up = N↔S). Anchor neighbors don't constrain
-// here (they connect via overlap; see anchorAgreement for the soft bias).
+// Hard constraint: border-closed + IDENTICAL opening sets with EVERY already-
+// placed neighbour, of ANY kind (connector, anchor, mini-boss). Identity — not
+// mere overlap — is what guarantees full reciprocity: every opening tile on the
+// shared edge has a walkable partner directly across it, so the seam can never
+// read as a fake lane on either side. Right/down neighbours are usually still
+// null during the row-major fill (constrained when those cells fill), but the
+// guaranteed special rooms and their forced adapters ARE pre-placed, so this
+// also pins the fabric to reciprocate them. Because the FABRIC pool is closed
+// under this rule and every special exposes only canonical / force-adapted
+// edges, a satisfying fabric room (or the grove) always exists.
 function satisfiesNeighbors(
   def: RoomDef,
   cells: (RoomDef | null)[][],
@@ -710,17 +758,14 @@ function satisfiesNeighbors(
   row: number,
 ): boolean {
   if (!satisfiesBorder(def, col, row)) return false;
-  const left = col > 0 ? cells[row][col - 1] : null;
-  if (
-    left &&
-    left.kind === 'connector' &&
-    !edgeOpeningsEqual(def, 'W', left, 'E')
-  ) {
-    return false;
-  }
-  const up = row > 0 ? cells[row - 1][col] : null;
-  if (up && up.kind === 'connector' && !edgeOpeningsEqual(def, 'N', up, 'S')) {
-    return false;
+  for (const [edge, dc, dr] of DIRS) {
+    const nc = col + dc;
+    const nr = row + dr;
+    if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS)
+      continue;
+    const nb = cells[nr][nc];
+    if (!nb) continue; // not yet placed — constrained when that cell fills
+    if (!edgeOpeningsEqual(def, edge, nb, oppositeEdge(edge))) return false;
   }
   return true;
 }
@@ -731,31 +776,34 @@ function pickConnector(
   col: number,
   row: number,
 ): RoomDef {
-  // Tier 1: fully matched (border-closed + connector-neighbor opening-set
-  // equality).
-  let pool = CONNECTOR_DEFS.filter((d) =>
-    satisfiesNeighbors(d, cells, col, row),
-  );
-  // Tier 2: border-only fallback when no Tier-1 template fits. This fires for
-  // ~10% of connector placements, not rarely: the multi-opening "double" hubs
-  // have a single mate and the two "fork" templates have none under the
-  // per-set equality rule, so a cell whose committed neighbor sits across such
-  // an edge drops here and accepts an asymmetric (one-sided) seam. That seam is
-  // cosmetic — it is never traversed, because BFS connectivity AND runtime
-  // transitions both use opening OVERLAP, not equality. Always non-empty: every
-  // border/corner configuration has at least one matching L-bend.
-  if (pool.length === 0) {
-    pool = CONNECTOR_DEFS.filter((d) => satisfiesBorder(d, col, row));
-  }
-  // Among the pool, prefer the choices that best connect to adjacent anchors.
-  // Score each candidate exactly once.
-  const scored = pool.map((d) => ({
-    d,
-    s: anchorAgreement(d, cells, col, row),
-  }));
-  const best = scored.reduce((m, x) => Math.max(m, x.s), -Infinity);
-  const top = scored.filter((x) => x.s === best);
-  return top[randInt(rng, top.length)].d;
+  const pool = FABRIC_DEFS.filter((d) => satisfiesNeighbors(d, cells, col, row));
+  if (pool.length > 0) return pool[randInt(rng, pool.length)];
+  // No opening-bearing fabric room fits ⟹ every placed neighbour is closed-
+  // facing here ⟹ the solid grove reciprocates them all with zero fake lanes.
+  // (The harness asserts this branch only ever yields closed seams.)
+  return GROVE_DEF;
+}
+
+// Force the matching off-centre adapter into the cell across `edge` from a
+// special room whose edge opening has no canonical mate (the snake / gibbon
+// arenas). The adapter's facing edge is authored to equal that arena edge
+// exactly (tile-identical → no fake lane); its other edges are canonical/closed
+// so the surrounding fabric reciprocates them normally. No-op if the target cell
+// is off-grid or already filled.
+function forceAdapter(
+  cells: (RoomDef | null)[][],
+  coord: RoomGridCoord,
+  edge: Edge,
+  adapterId: string,
+): void {
+  const dir = DIRS.find(([e]) => e === edge);
+  if (!dir) return;
+  const nc = coord.col + dir[1];
+  const nr = coord.row + dir[2];
+  if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS) return;
+  if (cells[nr][nc]) return; // occupied (e.g. another special) — leave it
+  const def = ADAPTER_DEF_BY_ID.get(adapterId);
+  if (def) cells[nr][nc] = def;
 }
 
 function fillConnectors(rng: () => number, cells: (RoomDef | null)[][]): void {
@@ -872,12 +920,15 @@ export function generateRunMap(seed?: number): RunMap {
     // Distinct arena per slot: the panther room gets the Empty Throne; the other
     // three empty rooms get the bear/snake/gibbon designs (rotated in order).
     let emptyIdx = 0;
+    let snakeCoord: RoomGridCoord | null = null;
+    let gibbonCoord: RoomGridCoord | null = null;
     minibossCoords.forEach((coord) => {
       const isPanther =
         coord.col === pantherBossCoord.col && coord.row === pantherBossCoord.row;
-      cells[coord.row][coord.col] = isPanther
-        ? PANTHER_DEF
-        : EMPTY_DEFS[emptyIdx++ % EMPTY_DEFS.length];
+      const def = isPanther ? PANTHER_DEF : EMPTY_DEFS[emptyIdx++ % EMPTY_DEFS.length];
+      cells[coord.row][coord.col] = def;
+      if (def.templateId === 'miniboss-snake') snakeCoord = coord;
+      if (def.templateId === 'miniboss-gibbon') gibbonCoord = coord;
     });
 
     // Mango dead-ends: five required dead-end rooms (random rotations) that hold
@@ -886,6 +937,22 @@ export function generateRunMap(seed?: number): RunMap {
       cells[coord.row][coord.col] =
         MANGO_DEADEND_DEFS[randInt(rng, MANGO_DEADEND_DEFS.length)];
     });
+
+    // Force the off-centre adapters around the two arenas whose openings have no
+    // canonical mate, so their doorways flow into the fabric with no fake lanes.
+    // The snake arena opens on all four edges; the gibbon arena only N/S (its
+    // closed E/W are reciprocated by the fabric). All other specials (boss, bear,
+    // panther, start, mango) expose only canonical doors, handled by the fill.
+    if (snakeCoord) {
+      forceAdapter(cells, snakeCoord, 'N', 't-snake-link-n');
+      forceAdapter(cells, snakeCoord, 'S', 't-snake-link-s');
+      forceAdapter(cells, snakeCoord, 'W', 't-snake-link-w');
+      forceAdapter(cells, snakeCoord, 'E', 't-snake-link-e');
+    }
+    if (gibbonCoord) {
+      forceAdapter(cells, gibbonCoord, 'N', 't-gibbon-link-n');
+      forceAdapter(cells, gibbonCoord, 'S', 't-gibbon-link-s');
+    }
 
     fillConnectors(rng, cells);
     const filled = cells as RoomDef[][];

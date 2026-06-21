@@ -77,6 +77,14 @@ import {
   BOSS_JUKE_LOOKAHEAD_MS,
   BOSS_JUKE_RADIUS_PX,
   BOSS_JUKE_SPEED_MULT,
+  ALLY_LEASH_PX,
+  ALLY_FOLLOW_DIST_PX,
+  ALLY_LUNGE_TRIGGER_PX,
+  ALLY_LUNGE_SPEED_MULT,
+  ALLY_LUNGE_MAX_MS,
+  ALLY_JUMPBACK_SPEED_MULT,
+  ALLY_JUMPBACK_MS,
+  ALLY_COOLDOWN_MS,
 } from './constants';
 
 type GameOverReason =
@@ -182,6 +190,20 @@ export class Game {
   private bossPhase: 'stalk' | 'lunge' | 'retreat' = 'stalk';
   private bossPhaseSince = 0;
   private bossLungeDir: Vector2 = { x: 0, y: 0 };
+  // Panther ally (owner 2026-06-20). Defeating the panther mini-boss converts it
+  // into an ally that hunts enemies with a committed first-strike lunge. Stored
+  // OUTSIDE this.enemies / roomEnemies (like this.player) so it follows the
+  // player room-to-room and is excluded from auto-fire, arrow hits, the
+  // contact-kill pass and per-room parking by construction. One per run; null
+  // until the mini-boss dies. Its phase machine mirrors updateBossPanther's.
+  private ally: Enemy | null = null;
+  private allyPhase: 'approach' | 'lunge' | 'jumpback' | 'cooldown' = 'approach';
+  private allyPhaseSince = 0;
+  private allyLungeDir: Vector2 = { x: 0, y: 0 };
+  private allyJumpbackDir: Vector2 = { x: 0, y: 0 };
+  // Id of the enemy the current lunge is striking. The ally is invulnerable to
+  // THIS enemy only while lunging (first-strike), and the lunge kills only it.
+  private allyTargetId: number | null = null;
   private globalWaveScheduler: GlobalWaveScheduler | null = null;
   // Boss-arena sub-state (Step 9). True while the player occupies the boss room
   // (anchor 10). It is NOT a separate GameState — the run stays 'playing' so
@@ -306,6 +328,12 @@ export class Game {
     this.mangosPlaced = 0;
     this.enteredRooms = new Set();
     this.enemies = [];
+    // No ally carries across runs (it's a per-run companion, gained from the
+    // mini-boss). Clear it and its phase state so a fresh run starts solo.
+    this.ally = null;
+    this.allyPhase = 'approach';
+    this.allyPhaseSince = 0;
+    this.allyTargetId = null;
     this.hasLineOfSight = false;
     // Drop any doorway kill grace left over from the previous run (e.g. dying
     // right after a transition, then restarting within the window).
@@ -614,6 +642,19 @@ export class Game {
     // moved/despawned and no i-frames are granted, so the contact-death
     // contract is untouched. No-op at run start (empty room) and clear doorways.
     this.clearLandingZone(entryPos);
+    // The ally follows the player through the hard cut like the player itself —
+    // it lives outside roomEnemies, so it is never parked. Drop it at the entry
+    // opening, cancel any mid-lunge, and re-poll its pursuit next frame. No-op at
+    // run start (ally is null until the mini-boss dies).
+    if (this.ally) {
+      this.ally.setPosition({ ...entryPos });
+      this.ally.resetPathfinding();
+      this.ally.setCurrentRoom(coord);
+      this.allyPhase = 'approach';
+      this.allyPhaseSince = 0;
+      this.allyLungeDir = { x: 0, y: 0 };
+      this.allyTargetId = null;
+    }
     this.arrows = []; // arrows don't carry across a hard cut
     this.hasLineOfSight = false;
     this.globalWaveScheduler?.setBands(this.bandsForRoom(def));
@@ -1412,6 +1453,14 @@ export class Game {
       staminaLow: this.stamina.isLow(),
       burstActive: this.stamina.isBurstActive(),
       burstMultiplier: round2(this.stamina.getBurstMultiplier()),
+      ally: this.ally
+        ? {
+            phase: this.allyPhase,
+            targetId: this.allyTargetId,
+            x: Math.round(this.ally.getPosition().x),
+            y: Math.round(this.ally.getPosition().y),
+          }
+        : null,
       pressedKeys,
       enemyPositions,
     };
@@ -1579,6 +1628,14 @@ export class Game {
       }
     });
 
+    // Drive the panther ally (owner 2026-06-20), if present. It lives outside
+    // this.enemies, so it's updated here on its own — hunting the nearest enemy
+    // near the player with a first-strike lunge, and escorting when none is in
+    // range. Its kills + its death are resolved in checkCollisions.
+    if (this.ally) {
+      this.updateAllyPanther(deltaTime, currentTime);
+    }
+
     // Hunt machine (Step 4, roadmap §5.12). tick() advances activation timers
     // and de-aggros hunters whose room is now out of range; then updateHunters
     // walks the remaining cross-room hunters toward the player through the
@@ -1738,6 +1795,10 @@ export class Game {
     let nearestDistance = Infinity;
 
     for (const enemy of this.enemies) {
+      // The ally lives outside this.enemies, but honour the faction explicitly so
+      // the player's auto-fire can never lock onto a friendly (defensive — the
+      // owner-asked contract is "targeting respects the faction").
+      if (enemy.getIsAlly()) continue;
       const enemyPos = enemy.getPosition();
       const enemyCenter: Vector2 = {
         x: enemyPos.x + TILE_SIZE / 2,
@@ -1849,6 +1910,7 @@ export class Game {
     // that just materialized in this room (owner-approved 2026-06-10).
     if (now >= this.arrivalKillGraceUntil) {
       for (const enemy of this.enemies) {
+        if (enemy.getIsAlly()) continue; // a friendly never contact-kills the player
         if (now < enemy.getArrivalGraceUntil()) continue;
         if (this.enemyTouchesPlayer(enemy, playerPos)) {
           const enemyPos = enemy.getPosition();
@@ -1875,6 +1937,7 @@ export class Game {
     this.arrows = this.arrows.filter((arrow) => {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const enemy = this.enemies[i];
+        if (enemy.getIsAlly()) continue; // arrows pass through a friendly
         const isBoss = enemy.getIsBoss();
         // Normal enemies use the full 32 px cell as the arrow-hit box (unchanged).
         // The enlarged boss uses its bigger AABB so its larger body is hittable.
@@ -1911,6 +1974,13 @@ export class Game {
               boss: isBoss,
               remaining: this.enemies.length,
             });
+            if (isBoss) {
+              // The defeated mini-boss panther joins the player as an ally
+              // (owner 2026-06-20). The kill score is already credited above —
+              // this is still a normal kill, NOT a run victory (the final plant
+              // boss keeps that). The ally spawns where the boss fell.
+              this.spawnAlly(enemy.getPosition(), now);
+            }
           } else {
             this.logger.log('hit', 'arrow->boss', { hpLeft: enemy.getHp() });
           }
@@ -1919,6 +1989,75 @@ export class Game {
       }
       return true; // Keep arrow
     });
+
+    // Pass 3: panther-ally death (owner 2026-06-20). The ally lives outside
+    // this.enemies, so it's resolved here separately. Its first-strike KILL is
+    // resolved during the lunge step in updateAllyPanther (allyStrikeContact), so
+    // it can't be lost to a same-frame phase flip; this pass only handles enemies
+    // killing the ally.
+    if (this.ally) {
+      this.resolveAllyCombat(now);
+    }
+  }
+
+  // Resolve the panther ally's death (owner 2026-06-20). Any enemy that touches
+  // the ally kills it — except, mid-lunge, the one enemy it's striking
+  // (first-strike immunity is target-specific; every other enemy can still hit
+  // it, and during jump-back/cooldown it's fully exposed). The ally's own KILL is
+  // handled in updateAllyPanther's lunge step (allyStrikeContact), not here. Ally
+  // death does NOT end the run (an ally beast is not family). The ally shares the
+  // player's post-transition doorway grace so a sitter parked at the entry
+  // opening can't invisibly kill it on the arrival frame (mirrors Pass 1).
+  private resolveAllyCombat(now: number): void {
+    const ally = this.ally;
+    if (!ally) return;
+    if (now < this.arrivalKillGraceUntil) return;
+    const allyBox = ally.getAABB();
+    for (const e of this.enemies) {
+      if (this.allyPhase === 'lunge' && e.getId() === this.allyTargetId) {
+        continue; // first-strike immunity — target only
+      }
+      if (this.collisionManager.checkCollision(allyBox, e.getAABB())) {
+        this.logger.log('collision', 'ally-died', {
+          type: e.getType(),
+          phase: this.allyPhase,
+        });
+        this.ally = null;
+        this.allyTargetId = null;
+        break;
+      }
+    }
+  }
+
+  // First-strike kill: while lunging, the ally kills its locked target on contact
+  // (+10, like any kill). Called from updateAllyPanther's lunge step — i.e. WHILE
+  // the ally is still in the lunge phase — so the kill (and the target-immunity
+  // it implies) can never be lost to a same-frame phase transition.
+  private allyStrikeContact(): void {
+    const ally = this.ally;
+    if (!ally || this.allyTargetId === null) return;
+    const allyBox = ally.getAABB();
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      if (e.getId() !== this.allyTargetId) continue;
+      if (this.collisionManager.checkCollision(allyBox, e.getAABB())) {
+        const enemyType = e.getType();
+        if (e.takeHit()) {
+          this.enemies.splice(i, 1);
+          this.score += 10;
+          this.enemiesKilled += 1;
+          this.callbacks.onScoreChange(this.score);
+          this.callbacks.onKillsChange(this.enemiesKilled);
+          this.callbacks.onEnemiesChange(this.enemies.length);
+          this.soundManager.play('enemy-hit');
+          this.logger.log('hit', 'ally->enemy', {
+            type: enemyType,
+            remaining: this.enemies.length,
+          });
+        }
+      }
+      return; // only the one target carries this id
+    }
   }
 
   private gameOver(reason: GameOverReason = { kind: 'manual' }) {
@@ -2196,6 +2335,179 @@ export class Game {
     return bestDir;
   }
 
+  // Bespoke panther-ally movement (owner 2026-06-20): hunt the nearest enemy
+  // within leash of the player with a committed first-strike lunge, else escort
+  // the player. APPROACH/COOLDOWN pursue via the shared BFS pursuit
+  // (Enemy.update); LUNGE/JUMPBACK are committed dashes via Enemy.tryMove (walls
+  // respected, no tunnelling), mirroring updateBossPanther. The kill and the
+  // ally's own death are resolved in resolveAllyCombat — this only moves it and
+  // runs the phase machine. All timing is gameLoop currentTime (Invariant 8).
+  private updateAllyPanther(deltaTime: number, currentTime: number): void {
+    const ally = this.ally;
+    if (!ally) return;
+    const dt = deltaTime / 1000;
+    const speed = ally.getSpeed();
+    const apos = ally.getPosition();
+    const acx = apos.x + TILE_SIZE / 2;
+    const acy = apos.y + TILE_SIZE / 2;
+
+    const target = this.nearestEnemyForAlly(acx, acy);
+    let dToTarget = Infinity;
+    let lungeUx = 0;
+    let lungeUy = 0;
+    if (target) {
+      const tpos = target.getPosition();
+      const tox = tpos.x + TILE_SIZE / 2 - acx;
+      const toy = tpos.y + TILE_SIZE / 2 - acy;
+      dToTarget = Math.hypot(tox, toy) || 1;
+      lungeUx = tox / dToTarget;
+      lungeUy = toy / dToTarget;
+    }
+
+    // LUNGE: committed straight dash along the locked direction (no homing), like
+    // the boss's lunge. Ends on time cap, a wall, or the target dying.
+    if (this.allyPhase === 'lunge') {
+      const res = ally.tryMove(
+        this.allyLungeDir.x * speed * ALLY_LUNGE_SPEED_MULT * dt,
+        this.allyLungeDir.y * speed * ALLY_LUNGE_SPEED_MULT * dt,
+        this.level,
+      );
+      // Land the first-strike WHILE still in the lunge phase, so the kill (and
+      // the implied target-immunity) can't be lost to the phase flip below.
+      this.allyStrikeContact();
+      const targetGone =
+        this.allyTargetId === null ||
+        !this.enemies.some((e) => e.getId() === this.allyTargetId);
+      if (
+        currentTime - this.allyPhaseSince >= ALLY_LUNGE_MAX_MS ||
+        !res.moved ||
+        targetGone
+      ) {
+        this.allyPhase = 'jumpback';
+        this.allyPhaseSince = currentTime;
+        this.allyJumpbackDir = this.allyRetreatDir();
+        this.allyTargetId = null;
+      }
+      return;
+    }
+
+    // JUMPBACK: a short retreat dash opposite the lunge, then into cooldown.
+    if (this.allyPhase === 'jumpback') {
+      const res = ally.tryMove(
+        this.allyJumpbackDir.x * speed * ALLY_JUMPBACK_SPEED_MULT * dt,
+        this.allyJumpbackDir.y * speed * ALLY_JUMPBACK_SPEED_MULT * dt,
+        this.level,
+      );
+      if (currentTime - this.allyPhaseSince >= ALLY_JUMPBACK_MS || !res.moved) {
+        this.allyPhase = 'cooldown';
+        this.allyPhaseSince = currentTime;
+      }
+      return;
+    }
+
+    // APPROACH + COOLDOWN: pursue the target but never walk inside the lunge ring
+    // (the lunge, not footwork, closes that last gap, so the ally doesn't
+    // body-contact a foe while vulnerable). Escort the player when no target is
+    // in leash, holding once close so it doesn't crowd them.
+    if (target && dToTarget > ALLY_LUNGE_TRIGGER_PX) {
+      ally.update(
+        deltaTime,
+        currentTime,
+        target.getPosition(),
+        this.level,
+        this.enemies,
+      );
+    } else if (!target) {
+      const ppos = this.player.getPosition();
+      if (Math.hypot(ppos.x - apos.x, ppos.y - apos.y) > ALLY_FOLLOW_DIST_PX) {
+        ally.update(deltaTime, currentTime, ppos, this.level, this.enemies);
+      }
+    }
+
+    if (this.allyPhase === 'cooldown') {
+      if (currentTime - this.allyPhaseSince >= ALLY_COOLDOWN_MS) {
+        this.allyPhase = 'approach';
+        this.allyPhaseSince = currentTime;
+      }
+      return;
+    }
+
+    // APPROACH: commit the first-strike lunge once within the ring.
+    if (target && dToTarget <= ALLY_LUNGE_TRIGGER_PX) {
+      this.allyPhase = 'lunge';
+      this.allyPhaseSince = currentTime;
+      this.allyLungeDir = { x: lungeUx, y: lungeUy };
+      this.allyTargetId = target.getId();
+    }
+  }
+
+  // Jump-back retreat direction: opposite the lunge, or — if the lunge direction
+  // was degenerate (target sat exactly on top of the ally) — directly away from
+  // the player, so a strike always ends in the ally gaining some space.
+  private allyRetreatDir(): Vector2 {
+    const lmag = Math.hypot(this.allyLungeDir.x, this.allyLungeDir.y);
+    if (lmag > 0.001) {
+      return { x: -this.allyLungeDir.x / lmag, y: -this.allyLungeDir.y / lmag };
+    }
+    const a = this.ally?.getPosition() ?? { x: 0, y: 0 };
+    const p = this.player.getPosition();
+    const ax = a.x - p.x;
+    const ay = a.y - p.y;
+    const am = Math.hypot(ax, ay) || 1;
+    return { x: ax / am, y: ay / am };
+  }
+
+  // Nearest enemy to the ally, restricted to foes within ALLY_LEASH_PX of the
+  // PLAYER (the leash keeps the ally fighting near the player rather than
+  // wandering the room). null when none qualify → the ally escorts the player.
+  private nearestEnemyForAlly(allyCx: number, allyCy: number): Enemy | null {
+    if (this.enemies.length === 0) return null;
+    const ppos = this.player.getPosition();
+    const pcx = ppos.x + TILE_SIZE / 2;
+    const pcy = ppos.y + TILE_SIZE / 2;
+    let nearest: Enemy | null = null;
+    let nearestD = Infinity;
+    for (const e of this.enemies) {
+      const ep = e.getPosition();
+      const ecx = ep.x + TILE_SIZE / 2;
+      const ecy = ep.y + TILE_SIZE / 2;
+      if (Math.hypot(ecx - pcx, ecy - pcy) > ALLY_LEASH_PX) continue;
+      const d = Math.hypot(ecx - allyCx, ecy - allyCy);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = e;
+      }
+    }
+    return nearest;
+  }
+
+  // Convert the defeated mini-boss into a player-side ally (owner 2026-06-20).
+  // A normal-stat panther stored OUTSIDE this.enemies, so it follows the player
+  // and is excluded from auto-fire / arrows / the contact-kill pass / per-room
+  // parking by construction. huntState 'hunting' only sets Enemy.update's repoll
+  // cadence to every-frame (the Hunt machine never sees it — it isn't in
+  // roomEnemies). Starts in a brief cooldown so it gathers itself before lunging.
+  private spawnAlly(pos: Vector2, now: number): void {
+    const ally = new Enemy(
+      { ...pos },
+      'panther',
+      this.nextEnemyId++,
+      this.level,
+    );
+    ally.configureAsAlly();
+    ally.setHuntState('hunting');
+    ally.setCurrentRoom(this.currentRoomCoord);
+    this.ally = ally;
+    this.allyPhase = 'cooldown';
+    this.allyPhaseSince = now;
+    this.allyLungeDir = { x: 0, y: 0 };
+    this.allyJumpbackDir = { x: 0, y: 0 };
+    this.allyTargetId = null;
+    this.logger.log('state', 'ally_spawn', {
+      room: { ...this.currentRoomCoord },
+    });
+  }
+
   // Win the run. Step 9 reintroduces this (dormant since Step 3 removed the
   // per-level clear flow): today it fires from the boss-room walk-on growth
   // trigger (or the V debug shortcut), and later from real boss-defeat logic.
@@ -2271,6 +2583,12 @@ export class Game {
         // lastTime drives the doorway-arrival materialize flash on hunters
         // that just crossed into this room (same clock as the player sprite).
         this.renderer.renderEnemies(this.enemies, this.lastTime);
+      }
+
+      // The panther ally draws over the enemy layer (a hero unit, kept readable
+      // on top) with its cured tint + no red eyes, distinct from enemy panthers.
+      if (this.ally) {
+        this.renderer.renderAlly(this.ally, this.lastTime);
       }
 
       if (this.arrows.length > 0) {

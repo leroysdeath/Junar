@@ -179,6 +179,17 @@ const GOO_HEART_CORE = '#D9F99D'; // pale core flash at peak pulse
 // the beasts are victims, and they should still look like animals.
 const INFECTED_EYE_RED = '#FF2B2B';
 
+// Cured-ally cue — the freed panther ally (owner 2026-06-20). Instead of the
+// infected red-eye stamp, the ally reads as "cured": a warm saffron-gold body
+// tint composited over the sprite's OWN pixels only (offscreen 'source-atop', so
+// the dirt floor under it is never tinted) and NO red eyes. Angle-robust (a body
+// tint shows from every facing, unlike the rejected neck collar) and
+// unmistakable against a black, red-eyed enemy panther — friend/foe confusion is
+// an instant-death risk (Pillar 5). The strong alpha visibly recolours the
+// black panther to bronze-gold so the two never blur together in a horde.
+const ALLY_CURED_TINT = '#FFC24D';
+const ALLY_CURED_TINT_ALPHA = 0.5;
+
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private playerSprite: HTMLImageElement;
@@ -193,12 +204,28 @@ export class Renderer {
     number,
     { x: number; y: number; facing: Facing }
   >();
+  // Facing tracker for the single panther ally (separate from beastTrack, which
+  // renderEnemies rebuilds each frame from the enemy list only).
+  private allyTrack: { x: number; y: number; facing: Facing } | null = null;
+  // Offscreen buffer for per-sprite tinting (the cured panther-ally cue): draw
+  // the panther frame here, tint only its opaque pixels ('source-atop'), then
+  // blit — so the dirt floor under the ally is never tinted. Canvas 2D only
+  // (Tauri-safe). Sized to a panther sheet cell; reused (cleared) every draw.
+  private tintCanvas: HTMLCanvasElement;
+  private tintCtx: CanvasRenderingContext2D;
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
     // Disable bilinear filtering so the pixel-art sprite stays crisp when
     // scaled. fillRect-based procedural drawing is unaffected by this flag.
     this.ctx.imageSmoothingEnabled = false;
+    this.tintCanvas = document.createElement('canvas');
+    this.tintCanvas.width = BEAST_SHEET.panther.cellW;
+    this.tintCanvas.height = BEAST_SHEET.panther.cellH;
+    const tctx = this.tintCanvas.getContext('2d');
+    if (!tctx) throw new Error('2D context unavailable for ally tint buffer');
+    this.tintCtx = tctx;
+    this.tintCtx.imageSmoothingEnabled = false;
     this.playerSprite = new Image();
     this.playerSprite.src = playerSpriteUrl;
     // Wife, son, daughter — N markers cycle through these by position index
@@ -467,6 +494,86 @@ export class Renderer {
         );
       }
     }
+  }
+
+  // The freed panther ally (owner 2026-06-20): the same panther sheet as the
+  // enemy panther, but drawn with a warm "cured" body tint (composited over the
+  // sprite's own pixels only) and NO red eyes — an angle-robust friend cue that
+  // can't be confused with a black, red-eyed enemy panther (Pillar 5). Facing +
+  // walk frame derive from frame-to-frame movement exactly like renderEnemies.
+  renderAlly(ally: Enemy, currentTime = 0) {
+    const pos = ally.getPosition();
+    const prev = this.allyTrack;
+    const dx = prev ? pos.x - prev.x : 0;
+    const dy = prev ? pos.y - prev.y : 0;
+    // A teleport (fresh spawn, room-transition reposition, or a new run reusing
+    // the persistent tracker) yields an implausibly large one-frame delta — don't
+    // infer a walk facing from it (a panther moves only ~7 px/frame).
+    const teleport = Math.abs(dx) > 2 * TILE_SIZE || Math.abs(dy) > 2 * TILE_SIZE;
+    const moving = !teleport && (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01);
+    let facing: Facing = prev?.facing ?? 'down';
+    if (moving) {
+      facing =
+        Math.abs(dx) > Math.abs(dy)
+          ? dx < 0
+            ? 'left'
+            : 'right'
+          : dy < 0
+            ? 'up'
+            : 'down';
+    }
+    this.allyTrack = { x: pos.x, y: pos.y, facing };
+
+    const frameCol = moving
+      ? BEAST_WALK_CYCLE[
+          Math.floor(currentTime / BEAST_WALK_FRAME_MS) % BEAST_WALK_CYCLE.length
+        ]
+      : BEAST_STAND_COL;
+
+    this.drawCuredPanther(pos, facing, frameCol, ally.getVisualSize());
+  }
+
+  // Draw a panther frame with the cured body tint (no red eyes). The frame is
+  // rendered into the offscreen buffer, tinted over its own pixels only, then
+  // blitted into the per-type visual box centred in the cell — identical sizing
+  // to drawBeast, so the ally and an enemy panther read at the same scale.
+  private drawCuredPanther(
+    pos: Vector2,
+    facing: Facing,
+    frameCol: number,
+    visual: number,
+  ) {
+    const spec = BEAST_SHEET.panther;
+    const t = this.tintCtx;
+    t.clearRect(0, 0, spec.cellW, spec.cellH);
+    t.globalCompositeOperation = 'source-over';
+    t.globalAlpha = 1;
+    t.drawImage(
+      this.beastSprites.panther,
+      frameCol * spec.cellW,
+      SPRITE_DIR_ROW[facing] * spec.cellH,
+      spec.cellW,
+      spec.cellH,
+      0,
+      0,
+      spec.cellW,
+      spec.cellH,
+    );
+    // Tint only the sprite's opaque pixels (source-atop), then restore defaults.
+    t.globalCompositeOperation = 'source-atop';
+    t.globalAlpha = ALLY_CURED_TINT_ALPHA;
+    t.fillStyle = ALLY_CURED_TINT;
+    t.fillRect(0, 0, spec.cellW, spec.cellH);
+    t.globalCompositeOperation = 'source-over';
+    t.globalAlpha = 1;
+
+    const box = visual;
+    const k = box / Math.max(spec.cellW, spec.cellH);
+    const destW = Math.round(spec.cellW * k);
+    const destH = Math.round(spec.cellH * k);
+    const dx = pos.x + Math.round((TILE_SIZE - destW) / 2);
+    const dy = pos.y + Math.round((TILE_SIZE - destH) / 2);
+    this.ctx.drawImage(this.tintCanvas, dx, dy, destW, destH);
   }
 
   // Panther — Time Fantasy sheet; black-panther silhouette, drawn at its 29 px
