@@ -2,6 +2,7 @@ import {
   Vector2,
   EnemySpawn,
   EnemyType,
+  Hut,
   LevelData,
   DelayedSpawnConfig,
   LevelWaveConfig,
@@ -50,6 +51,20 @@ export class Level {
 
   getHutPositions(): Vector2[] {
     return this.data.hutPositions.map((pos) => ({ ...pos }));
+  }
+
+  // Sized village huts (owner 2026-06-21); empty for non-village rooms.
+  getHuts(): Hut[] {
+    return (this.data.huts ?? []).map((h) => ({
+      pos: { ...h.pos },
+      size: h.size,
+    }));
+  }
+
+  // Per-tile hut-footprint mask (solid-but-not-tree); undefined for non-village
+  // rooms. Read by renderLevel to draw dirt under the hut sprite.
+  getHutTiles(): boolean[][] | undefined {
+    return this.data.hutTiles;
   }
 
   getDelayedSpawnConfig(): DelayedSpawnConfig | undefined {

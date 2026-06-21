@@ -1,7 +1,7 @@
 import { Player } from './Player';
 import { Enemy } from './Enemy';
 import { Level } from './Level';
-import { EnemyType, Facing, Vector2, Mango } from './types';
+import { EnemyType, Facing, Vector2, Mango, Hut } from './types';
 import { TILE_SIZE, MANGO_VISUAL_PX } from './constants';
 // Player sprite: composited from Time Elements "Character Core Set"
 // (finalbossblues / Jason Perry, timefantasy.net) — paid royalty-free, the
@@ -39,6 +39,13 @@ import jungleTilesUrl from '../assets/sprites/jungle-tiles.png';
 // 32×32 mango cropped from "Pixel Art Fruits" by Thiago Zen (CC-BY 4.0, no AI;
 // attribution in docs/ART-CREDITS.md).
 import mangoSpriteUrl from '../assets/sprites/mango.png';
+// Village huts (owner-approved 2026-06-21) — small + large thatch huts, cropped
+// from "Serene Village - revamped" by LimeZu (CC-BY 4.0, "No generative AI was
+// used") and roof-recolored red→thatch-gold for the Adivasi village. Drawn
+// foot-anchored on the village's s/S footprints. Attribution in
+// docs/ART-CREDITS.md.
+import hutSmallUrl from '../assets/sprites/hut-small.png';
+import hutLargeUrl from '../assets/sprites/hut-large.png';
 
 // Sprite-sheet layout — the player sheet is 16-wide × 32-tall cells: 4 walk
 // columns (stand / step / stand / step, so col 0 is the idle pose) × 4
@@ -68,6 +75,11 @@ const JUNGLE_INTERIOR = [1, 2, 3, 4];
 const JUNGLE_CROWN = [5, 6];
 const JUNGLE_UNDERSIDE = [7, 8];
 const JUNGLE_TRUNK = 9;
+// Village hut draw widths (owner 2026-06-21). Drawn a touch wider than the
+// footprint (small 2×2 = 64px, large 3×3 = 96px) so the thatch roof overflows
+// upward like a tree; height follows the sprite's aspect. Render-only.
+const HUT_SMALL_DRAW_W = 72;
+const HUT_LARGE_DRAW_W = 108;
 const SPRITE_DIR_ROW: Record<Facing, number> = {
   down: 0,
   right: 1,
@@ -197,6 +209,8 @@ export class Renderer {
   private beastSprites: Record<EnemyType, HTMLImageElement>;
   private jungleTiles: HTMLImageElement;
   private mangoSprite: HTMLImageElement;
+  private hutSmallSprite: HTMLImageElement;
+  private hutLargeSprite: HTMLImageElement;
   // Render-side movement tracking so beast sprites face their walk direction
   // and idle on the stand frame. Rebuilt every frame from the live enemy
   // list (no leak across deaths/rooms); purely visual — AI owns real motion.
@@ -250,6 +264,8 @@ export class Renderer {
     };
     this.jungleTiles = load(jungleTilesUrl);
     this.mangoSprite = load(mangoSpriteUrl);
+    this.hutSmallSprite = load(hutSmallUrl);
+    this.hutLargeSprite = load(hutLargeUrl);
   }
 
   // A cell counts as "open" (corridor floor) for tree-edge selection when it's
@@ -268,6 +284,7 @@ export class Renderer {
 
   renderLevel(level: Level) {
     const walls = level.getWalls();
+    const hutTiles = level.getHutTiles();
     const w = level.getWidth();
     const h = level.getHeight();
 
@@ -303,6 +320,9 @@ export class Renderer {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!walls[y][x]) continue;
+        // Hut footprints are solid walls but render as the hut sprite over dirt
+        // (drawn in pass 1), not as trees — so skip the tree paint here.
+        if (hutTiles?.[y][x]) continue;
         const openAbove = Renderer.isOpen(walls, x, y - 1, w, h);
         const openBelow = Renderer.isOpen(walls, x, y + 1, w, h);
         const hash = ((x * 73856093) ^ (y * 19349663)) >>> 0;
@@ -666,6 +686,27 @@ export class Renderer {
         m.tile.y + off,
         MANGO_VISUAL_PX,
         MANGO_VISUAL_PX,
+      );
+    }
+  }
+
+  // Village huts (owner 2026-06-21): the small/large thatch sprites, foot-
+  // anchored at each footprint's bottom-centre (Hut.pos) and drawn overflowing
+  // upward — same ground-feature layering as the trees. Width is a touch over
+  // the footprint; height follows the sprite aspect. imageSmoothingEnabled is
+  // off (constructor) so the pixel art stays crisp when scaled.
+  renderVillageHuts(huts: Hut[]) {
+    for (const h of huts) {
+      const img = h.size === 'large' ? this.hutLargeSprite : this.hutSmallSprite;
+      if (img.naturalWidth === 0) continue; // not decoded yet
+      const drawW = h.size === 'large' ? HUT_LARGE_DRAW_W : HUT_SMALL_DRAW_W;
+      const drawH = Math.round(drawW * (img.naturalHeight / img.naturalWidth));
+      this.ctx.drawImage(
+        img,
+        Math.round(h.pos.x - drawW / 2),
+        Math.round(h.pos.y - drawH),
+        drawW,
+        drawH,
       );
     }
   }
