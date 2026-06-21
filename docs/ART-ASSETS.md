@@ -151,11 +151,17 @@ Cultural-representation guardrails (CLAUDE.md §9, `protagonist-and-family-tone`
 skill) apply to every candidate sheet; when in doubt, show the owner before
 committing.
 
-## Tier 3 — Environment tiles (PARTIAL — tree walls + floor GREENLIT 2026-06-15 & LANDED; hut NOT greenlit)
+## Tier 3 — Environment tiles (PARTIAL — tree walls + floor GREENLIT 2026-06-15 & LANDED; village hut GREENLIT 2026-06-21 & LANDED)
 
 **Status: partial.** Tree walls + dirt floor were reopened and **greenlit
-2026-06-15** and **landed** the same day; the **hut** remains procedural (not
-greenlit). Source: the free **"Jungle Tileset"** Time Fantasy mini-expansion
+2026-06-15** and **landed** the same day. The **village huts** (the village
+cluster's `s` small / `S` large footprints) were **greenlit and landed
+2026-06-21** — small + large thatch sprites cropped & roof-recolored from
+LimeZu's "Serene Village - revamped" (CC-BY 4.0, "No generative AI was used";
+`docs/ART-CREDITS.md`), shipped as `src/assets/sprites/hut-small.png` /
+`hut-large.png` and drawn by `Renderer.renderVillageHuts`. The generic
+`H`-marker hut placeholder (`renderHuts`) stays procedural. Tree/floor source:
+the free **"Jungle Tileset"** Time Fantasy mini-expansion
 by Jason Perry (finalbossblues),
 https://finalbossblues.itch.io/tf-jungle-tileset — royalty-free commercial +
 edits, human-made ("No generative AI was used"), credited in
@@ -167,7 +173,8 @@ trunk/roots base, all sliced from the pack's own tree objects) that
 `Renderer.renderLevel` selects neighbour-aware — crowns on floor-facing top
 edges, trunks/leafy overhang at corridor bases, dense interior, plus a
 procedural canopy depth-shadow. Verified in-engine (live dev-server
-screenshots). Do not land **hut** tiles without a fresh owner decision.
+screenshots). The **village hut** sprite landed 2026-06-21 (above); extending
+sprites to any *other* hut/structure still needs a fresh owner decision.
 
 The most visible swap per pixel: every frame is mostly walls and floor.
 
@@ -175,7 +182,8 @@ The most visible swap per pixel: every frame is mostly walls and floor.
 |-----|----------|------------|----------------------|
 | `jungle-tiles` (walls) | wall branch of `renderLevel` | ✅ LANDED 2026-06-15; re-sliced to neighbour-aware tree objects 2026-06-19 — crowns/undersides/trunk + 4 interiors, atlas tiles 1–9 | A stand of jungle trees — reads as impassable tree mass, not flat squares |
 | `jungle-tiles` (floor) | floor branch of `renderLevel` | ✅ LANDED 2026-06-15 — dirt recolored from the set's grass autotile, atlas tile 0 | Tan jungle path — stays quiet so entities pop (readability pillar) |
-| `hut` | `renderHuts` | ❌ still procedural (not greenlit) | Family hut — thatch/wood, pre-industrial, warm |
+| `hut` (village) | `renderVillageHuts` | ✅ LANDED 2026-06-21 — small + large thatch sprites (LimeZu Serene Village, CC-BY, roof-recolored), on the village `s`/`S` footprints | Thatch/wood jungle-village huts, warm earth tones |
+| `hut` (generic `H`) | `renderHuts` | ❌ still procedural (placeholder) | Family hut — thatch/wood, pre-industrial, warm |
 
 ArMM1998's pack (the player sprite's source) includes LTTP-style tilesets —
 first candidate for guaranteed coherence.

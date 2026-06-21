@@ -435,6 +435,8 @@ export class Game {
       enemySpawns: [],
       npcPositions: def.npcPositions,
       hutPositions: def.hutPositions,
+      huts: def.huts,
+      hutTiles: def.hutTiles,
     };
     return new Level(data);
   }
@@ -2557,6 +2559,9 @@ export class Game {
     // Render the current room only (one canvas, one room).
     if (this.level && this.player) {
       this.renderer.renderLevel(this.level);
+      // Village huts (sprite, owner 2026-06-21) drawn over the floor, under the
+      // player so the player walks in front of them.
+      this.renderer.renderVillageHuts(this.level.getHuts());
       this.renderer.renderHuts(this.level.getHutPositions());
       this.renderer.renderNpcs(this.level.getNpcPositions());
       // Corrupted growth (boss-arena stub win trigger), drawn over the version's

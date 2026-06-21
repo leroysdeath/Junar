@@ -77,6 +77,16 @@ export interface Mango {
   collected: boolean;
 }
 
+// A village hut (owner 2026-06-21). Parsed from the village arena's hut
+// footprints — 's' = small (2×2), 'S' = large (3×3) — into a foot-anchor: `pos`
+// is the bottom-centre of the footprint in world px, so the renderer draws the
+// hut sprite centred on it and overflowing upward (like a tree/player). Render-
+// only decoration; the footprint tiles stay walkable floor (collision = walls).
+export interface Hut {
+  pos: Vector2;
+  size: 'small' | 'large';
+}
+
 // A rectangular band, in world-space pixels, where enemies can appear.
 // Typically positioned just outside the canvas so they walk in.
 export interface SpawnEntryway {
@@ -107,6 +117,8 @@ export interface LevelData {
   enemySpawns: EnemySpawn[];
   npcPositions: Vector2[];
   hutPositions: Vector2[];
+  huts?: Hut[];
+  hutTiles?: boolean[][];
   delayedSpawns?: DelayedSpawnConfig;
   waveConfig?: LevelWaveConfig;
 }
@@ -256,6 +268,12 @@ export interface RoomDef {
   authoredStatics: { type: EnemyType; pos: Vector2 }[];
   npcPositions: Vector2[];
   hutPositions: Vector2[];
+  // Sized village huts parsed from the arena's 's'/'S' footprints (owner
+  // 2026-06-21). Only the village def populates this; undefined elsewhere.
+  huts?: Hut[];
+  // Per-tile mask of the hut footprints (owner 2026-06-21): these tiles are
+  // SOLID in `walls` but render as dirt (not trees) under the hut sprite.
+  hutTiles?: boolean[][];
 }
 
 // A generated run: the room grid plus the guaranteed-room placements.

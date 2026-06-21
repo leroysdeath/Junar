@@ -70,6 +70,28 @@ Steam-page credits screen when it gets built.
   (https://thiagozen.itch.io/pixel-art-fruits) — CC BY 4.0; mango sprite
   cropped for Jungle X."
 
+### Village hut sprites — small + large
+
+- **Status: LANDED 2026-06-21** (owner greenlit a hut sprite for the village
+  cluster — extends the approved sprite set. The generic `H`-marker hut
+  placeholder stays procedural; only the village's `s`/`S` footprints use these
+  sprites.)
+- **Title:** "Serene Village - revamped - RPG Tileset [16x16]"
+- **Author:** LimeZu (limezu)
+- **Source:** https://limezu.itch.io/serenevillagerevamped
+- **License:** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+  Listing tagged "No generative AI was used" — clean for the human-made-only
+  policy.
+- **Changes:** cropped two houses from the 16×16 master sheet (a compact 43×51
+  and a wide 67×54) via connected-component segmentation; recolored the red
+  shingle roofs to straw-thatch (red-dominant pixels remapped to a gold→brown
+  ramp) for the Adivasi village; walls and door kept. Shipped as
+  `src/assets/sprites/hut-small.png` and `hut-large.png`, drawn foot-anchored on
+  the village arena's hut footprints.
+- **Required credit line:** "'Serene Village - revamped' by LimeZu
+  (https://limezu.itch.io/serenevillagerevamped) — CC BY 4.0; houses cropped and
+  roof-recolored for Jungle X."
+
 ---
 
 ## Paid royalty-free licenses (recorded, attribution optional)

@@ -43,6 +43,7 @@
 
 import {
   Edge,
+  Hut,
   RoomDef,
   RoomGridCoord,
   RoomKind,
@@ -542,14 +543,76 @@ const EMPTY_ARENAS = [
   MINIBOSS_ARENAS.gibbon,
 ];
 
-// Build a RoomDef from an authored arena: walls straight from the ASCII ('#' =
-// wall, everything else floor — so 's'/'S'/'N'/'H' markers parse as walkable),
+// Build a RoomDef from an authored arena: '#' = tree wall and 's'/'S' = solid
+// hut footprints (owner 2026-06-21), everything else ('.', 'N', 'H') floor;
 // openings derived from geometry, no statics. Shared by reference (read-only).
+// Parse hut footprints out of an arena's ASCII (owner 2026-06-21, the village).
+// 's' = small hut, 'S' = large hut. Each footprint is a 4-connected blob of the
+// same marker; we emit one Hut per blob, foot-anchored at the bottom-centre of
+// its bounding box (world px), so the renderer draws the sprite overflowing
+// upward. Arenas without 's'/'S' (every miniboss) yield []. The footprint tiles
+// are SOLID walls (buildArenaDef) so huts block movement / LOS / pathfinding;
+// the hutTiles mask makes renderLevel draw dirt (not trees) on them, under the
+// hut sprite.
+function parseHuts(ascii: readonly string[]): Hut[] {
+  const rows = ascii.length;
+  const cols = ascii[0]?.length ?? 0;
+  const seen: boolean[][] = ascii.map((r) => [...r].map(() => false));
+  const huts: Hut[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = ascii[r][c];
+      if ((ch !== 's' && ch !== 'S') || seen[r][c]) continue;
+      // Flood the contiguous same-marker blob, tracking its bounding box.
+      let minC = c,
+        maxC = c,
+        minR = r,
+        maxR = r;
+      const stack: [number, number][] = [[r, c]];
+      seen[r][c] = true;
+      while (stack.length) {
+        const [cr, cc] = stack.pop() as [number, number];
+        if (cc < minC) minC = cc;
+        if (cc > maxC) maxC = cc;
+        if (cr < minR) minR = cr;
+        if (cr > maxR) maxR = cr;
+        for (const [dr, dc] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const nr = cr + dr;
+          const nc = cc + dc;
+          if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+          if (seen[nr][nc] || ascii[nr][nc] !== ch) continue;
+          seen[nr][nc] = true;
+          stack.push([nr, nc]);
+        }
+      }
+      huts.push({
+        pos: {
+          x: ((minC + maxC + 1) / 2) * TILE_SIZE,
+          y: (maxR + 1) * TILE_SIZE,
+        },
+        size: ch === 'S' ? 'large' : 'small',
+      });
+    }
+  }
+  return huts;
+}
+
 function buildArenaDef(
   arena: { id: string; ascii: readonly string[] },
   kind: RoomKind,
 ): RoomDef {
-  const walls = arena.ascii.map((row) => [...row].map((ch) => ch === '#'));
+  const isHut = (ch: string) => ch === 's' || ch === 'S';
+  // Tree walls AND solid hut footprints both block; the hutTiles mask lets the
+  // renderer draw dirt (not trees) under the hut sprite on the footprint tiles.
+  const walls = arena.ascii.map((row) =>
+    [...row].map((ch) => ch === '#' || isHut(ch)),
+  );
+  const hutTiles = arena.ascii.map((row) => [...row].map((ch) => isHut(ch)));
   return {
     kind,
     templateId: arena.id,
@@ -560,6 +623,8 @@ function buildArenaDef(
     authoredStatics: [],
     npcPositions: [],
     hutPositions: [],
+    huts: parseHuts(arena.ascii),
+    hutTiles,
   };
 }
 const buildMinibossDef = (arena: { id: string; ascii: readonly string[] }) =>
