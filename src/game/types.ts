@@ -279,4 +279,8 @@ export interface RunMap {
   // The five dead-end rooms (owner 2026-06-20) that hold the run's mangos; Game
   // places one mango per room on first entry.
   mangoRoomCoords: RoomGridCoord[];
+  // The "village" required room (owner 2026-06-21). Its four orthogonal
+  // neighbours are force-placed "arrow" rooms, each pointing inward at the
+  // village (RoomGrid: N=arrow-s, S=arrow-n, W=arrow-e, E=arrow-w).
+  villageCoord: RoomGridCoord;
 }

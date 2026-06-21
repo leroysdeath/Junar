@@ -1,22 +1,24 @@
 // Room-grid generator for the traversable-maps refactor (Step 3).
 //
 // A run is a ROOM_GRID_COLS × ROOM_GRID_ROWS grid of rooms (493 total),
-// regenerated every run. REQUIRED_ROOM_COUNT (11) cells are guaranteed each run
+// regenerated every run. REQUIRED_ROOM_COUNT (12) cells are guaranteed each run
 // — the start (a random L-bend), the boss arena (one of four versions), the four
-// mini-boss arenas, and five mango dead-ends; the rest are connectors drawn from
-// the FABRIC pool (canonical-edge rooms, which also carries the demoted
-// anchor-1/-5/-9 layouts, normalized to canonical doors). The player traverses
-// room-to-room from the start toward the boss.
+// mini-boss arenas, five mango dead-ends, and the village; the rest are
+// connectors drawn from the FABRIC pool (canonical-edge rooms, which also
+// carries the demoted anchor-1/-5/-9 layouts, normalized to canonical doors).
+// The player traverses room-to-room from the start toward the boss.
 // See docs/ROADMAP-traversable-maps.md §5.1 (run structure), §5.2 (templates),
 // §5.3 (transitions).
 //
 // Generation pipeline (generateRunMap):
-//   1. Poisson-disk place the 11 required rooms in the INNER interior (≥
+//   1. Poisson-disk place the 12 required rooms in the INNER interior (≥
 //      MIN_ANCHOR_SPACING apart; two rings off the border so even a single-
 //      opening room's door faces a fully-connectable interior neighbour), then
-//      assign roles (farthest-from-start = boss; rest split mini-boss / mango).
+//      assign roles (farthest-from-start = boss; rest split mini-boss / mango /
+//      village).
 //   2. Force off-centre ADAPTERS around the two arenas whose openings have no
-//      canonical mate (snake / gibbon), so their doorways flow into the fabric.
+//      canonical mate (snake / gibbon), and the four inward-pointing ARROW rooms
+//      around the village, so their doorways flow into the fabric.
 //   3. Fill every other cell from the FABRIC pool, reciprocating every placed
 //      neighbour exactly (satisfiesNeighbors).
 //   4. BFS path-existence from the start; if any required room is unreachable,
@@ -30,9 +32,10 @@
 //     the fill can always reciprocate a neighbour. satisfiesNeighbors requires
 //     IDENTICAL opening sets with EVERY placed neighbour, of any kind.
 //   • Special rooms either expose only canonical doors (boss / bear / panther /
-//     start / mango), are normalized to canonical (the demoted anchors, via
-//     normalizeToCardinal), or have their off-centre doors mated by a force-
-//     placed ADAPTER (the snake / gibbon arenas — see forceAdapter).
+//     start / mango / village), or have their off-centre doors mated by a force-
+//     placed ADAPTER (the snake / gibbon arenas + the village arrows — see
+//     forceAdapter / forceVillageArrows). (The demoted anchors are no longer
+//     placed at all — reclassified as defined-only hubs, see ANCHOR_HUB_DEFS.)
 //   • A solid GROVE backstops the rare fully-enclosed cell with no fake lane.
 // Verified at scale by scripts/map-harness/check-openings.mjs (0 fake lanes over
 // thousands of seeds). Runtime transitions still use opening OVERLAP (roomsConnect
@@ -42,6 +45,7 @@ import {
   Edge,
   RoomDef,
   RoomGridCoord,
+  RoomKind,
   RoomOpening,
   RoomTemplate,
   RunMap,
@@ -201,47 +205,26 @@ function carveAnchorDoors(src: boolean[][]): boolean[][] {
   return walls;
 }
 
-// Seal every border opening that is NOT at a canonical doorway position (N/S
-// cols 13-15, E/W rows 7-9), so the room exposes ONLY canonical doors and slots
-// into the closed FABRIC pool with no fake lanes. Used on the demoted anchors:
-// their authored off-centre entries (e.g. L1's cols 20-22, L5's 9-11 / 17-19,
-// L9's 5-7 / 21-23) are vestigial — the carved canonical doors already connect
-// them. Operates on a copy; any corridor behind a sealed entry stays as a
-// harmless interior alcove (no edge opening, so it can't read as a fake lane).
-function normalizeToCardinal(src: boolean[][]): boolean[][] {
-  const walls = src.map((r) => r.slice());
-  const lastRow = GRID_HEIGHT - 1;
-  const lastCol = GRID_WIDTH - 1;
-  for (let col = 0; col < GRID_WIDTH; col++) {
-    if (!DOOR_COLS.includes(col)) {
-      walls[0][col] = true; // N edge
-      walls[lastRow][col] = true; // S edge
-    }
-  }
-  for (let row = 0; row < GRID_HEIGHT; row++) {
-    if (!DOOR_ROWS.includes(row)) {
-      walls[row][0] = true; // W edge
-      walls[row][lastCol] = true; // E edge
-    }
-  }
-  return walls;
-}
-
-// anchor-1 / -5 / -9 demoted to CONNECTORS (owner 2026-06-20): only the boss
-// (anchor-10, now its own four-version registry below) remains a required
-// hand-authored room. Their canonical carved doorways (cross-like, all four
-// edges) make them ordinary corridor fabric — big rooms the player passes
-// through. NPC/hut markers are STRIPPED here: connector defs are shared by
-// reference across many cells, so keeping the markers would duplicate the
-// family across the map. Family rendering is paused until the FamilyMember
-// entity lands and re-places them (CLAUDE.md §6).
-const ANCHOR_CONNECTOR_LEVEL_INDICES = [0, 4, 8]; // levels.ts: anchor-1, -5, -9
-const ANCHOR_CONNECTOR_DEFS: RoomDef[] = ANCHOR_CONNECTOR_LEVEL_INDICES.map(
+// anchor-1 / -5 / -9 reclassified as DEFINED-ONLY HUB CONNECTORS (owner
+// 2026-06-21). They were briefly demoted into the random-fill FABRIC pool
+// (2026-06-20) as canonical crosses — but sealing their authored off-centre
+// entries to make them fabric-safe left vestigial dead-end strips, and a sealed
+// cross is just a redundant t-cross. Instead we COMPLETE those off-centre
+// pathways (carve the canonical doors, then keep the authored off-centre
+// corridors open through to the edge) so each becomes a genuine MULTI-OPENING
+// hub: anchor-1 a double-N, anchor-5 an N/S Z-hub, anchor-9 a triple-N/triple-S
+// grid hub. Because those off-centre openings have no canonical mate they'd
+// fake-lane in random fill, so these are NOT in FABRIC — they're a defined-only
+// library (like the unplaced double-*/fork-* hubs), kept for the catalog and any
+// future force-placement. NPC/hut markers are dropped (family rendering paused,
+// CLAUDE.md §6). The boss (its own four-version registry below) remains the only
+// required hand-authored room.
+const ANCHOR_HUB_LEVEL_INDICES = [0, 4, 8]; // levels.ts: anchor-1, -5, -9
+export const ANCHOR_HUB_DEFS: RoomDef[] = ANCHOR_HUB_LEVEL_INDICES.map(
   (lvlIdx) => {
-    // Carve the canonical doors, then seal the authored off-centre entries so
-    // these become clean canonical-door rooms that live in the FABRIC pool with
-    // no fake lanes (owner 2026-06-20).
-    const walls = normalizeToCardinal(carveAnchorDoors(levels[lvlIdx].walls));
+    // Carve the canonical cross, but DON'T normalize: the authored off-centre
+    // corridors stay open to the edge (completed pathways → multi-opening hub).
+    const walls = carveAnchorDoors(levels[lvlIdx].walls);
     return {
       kind: 'connector' as const,
       templateId: `anchor-${lvlIdx + 1}`,
@@ -273,13 +256,26 @@ function connectorDef(t: RoomTemplate): RoomDef {
 }
 
 // FABRIC pool — the ONLY rooms the random connector fill draws from. Canonical-
-// edge-only templates (closed under the opening-set-equality adjacency rule) plus
-// the normalized demoted anchors (also canonical now). Because the set is closed,
+// edge-only templates, closed under the opening-set-equality adjacency rule, so
 // the fill can always reciprocate every placed neighbour → no connector fake
-// lanes. See RoomTemplates.FABRIC_TEMPLATE_POOL and satisfiesNeighbors.
+// lanes. See FABRIC_TEMPLATE_POOL and satisfiesNeighbors.
+//
+// Junction-density weighting: the 4-way cross is the only room that reciprocates
+// all four neighbours, so it carries the fabric's connectivity (the fill picks
+// uniformly over the satisfying defs). The demoted anchors used to sit in this
+// pool as three extra canonical-cross defs; pulling them out (reclassified as
+// ANCHOR_HUB_DEFS, 2026-06-21) thinned junction density enough to strand a
+// required room in ~0.7% of seeds. We re-weight the cross by that same count —
+// it's opening-identical to those normalized anchors, so this restores the exact
+// prior fill distribution with no redundant room defs (verified by
+// check-openings.mjs: back to 0 unreachable seeds).
+const FABRIC_CROSS_WEIGHT = 3; // = the 3 ex-anchor crosses this replaces
+const crossTemplate = FABRIC_TEMPLATE_POOL.find((t) => t.id === 't-cross');
+if (!crossTemplate) throw new Error('[Junar] FABRIC pool missing t-cross');
+const crossDef = connectorDef(crossTemplate);
 const FABRIC_DEFS: RoomDef[] = [
   ...FABRIC_TEMPLATE_POOL.map(connectorDef),
-  ...ANCHOR_CONNECTOR_DEFS,
+  ...Array.from({ length: FABRIC_CROSS_WEIGHT }, () => crossDef),
 ];
 
 // ADAPTER pool — the off-centre hubs/forks/links. NEVER random-placed; the
@@ -294,7 +290,7 @@ const ADAPTER_DEF_BY_ID: Map<string, RoomDef> = new Map(
 // fabric room fits). Having no openings, it reciprocates closed edges perfectly
 // and can never create a fake lane. Built directly (an opening-less room would
 // fail buildConnector's invariants).
-const GROVE_DEF: RoomDef = {
+export const GROVE_DEF: RoomDef = {
   kind: 'connector',
   templateId: 'grove-solid',
   anchorIndex: null,
@@ -546,15 +542,16 @@ const EMPTY_ARENAS = [
   MINIBOSS_ARENAS.gibbon,
 ];
 
-// Build a mini-boss RoomDef from an authored arena: walls straight from the ASCII,
-// openings derived from geometry. Shared by reference (read-only).
-function buildMinibossDef(arena: {
-  id: string;
-  ascii: readonly string[];
-}): RoomDef {
+// Build a RoomDef from an authored arena: walls straight from the ASCII ('#' =
+// wall, everything else floor — so 's'/'S'/'N'/'H' markers parse as walkable),
+// openings derived from geometry, no statics. Shared by reference (read-only).
+function buildArenaDef(
+  arena: { id: string; ascii: readonly string[] },
+  kind: RoomKind,
+): RoomDef {
   const walls = arena.ascii.map((row) => [...row].map((ch) => ch === '#'));
   return {
-    kind: 'miniboss',
+    kind,
     templateId: arena.id,
     anchorIndex: null,
     walls,
@@ -565,8 +562,205 @@ function buildMinibossDef(arena: {
     hutPositions: [],
   };
 }
+const buildMinibossDef = (arena: { id: string; ascii: readonly string[] }) =>
+  buildArenaDef(arena, 'miniboss');
 const PANTHER_DEF = buildMinibossDef(PANTHER_ARENA);
 const EMPTY_DEFS = EMPTY_ARENAS.map(buildMinibossDef);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Village cluster (owner 2026-06-21).
+// ───────────────────────────────────────────────────────────────────────────
+// A required "village" room ringed by four "arrow" rooms — one per orthogonal
+// neighbour, each pointing INWARD at the village (the arrowhead decoration faces
+// the village it guards). The arrows are FORCE-PLACED around the village cell
+// (like the snake/gibbon link adapters), so the cluster always reads the same:
+//
+//        [arrow-s]                 village's N neighbour = arrow-s (points S↓)
+//   [arrow-e][village][arrow-w]    W = arrow-e (→),  E = arrow-w (←)
+//        [arrow-n]                 S neighbour = arrow-n (points N↑)
+//
+// Every arrow keeps the full canonical cross of openings (N/S 13-15, E/W 7-9),
+// so it mates the village on the arrow side and threads the corridor fabric on
+// the other three — no fake lanes (the fabric is closed under canonical opening
+// sets). The village's 's'/'S' tiles are hut footprints (2×2 / 3×3), NOT enemy-
+// static candidates, so it's built with candidates [] (huts render procedurally
+// in a later pass; for now they're plain floor). MIN_ANCHOR_SPACING (5) keeps
+// the village ≥5 from every other required room, so its four arrow cells are
+// always free and in-grid (the village is placed inner-interior).
+//
+// arrow-s is the owner-authored source; arrow-n is its 180° turn. arrow-w is
+// owner-authored; arrow-e is arrow-w mirrored left↔right (a literal 90° turn
+// would make a 17×29 room pointing N/S — the mirror is the valid east arrow).
+const VILLAGE_ARENA = {
+  id: 'village',
+  ascii: [
+    '#############...#############',
+    '#...........................#',
+    '#..................ss.......#',
+    '#..ss..ss...ss.....ss....ss.#',
+    '#..ss..ss...ss...........ss.#',
+    '#..................ss.......#',
+    '#...ss...ss........ss.ss....#',
+    '....ss...ss..SSS......ss.....',
+    '.............SSS.............',
+    '.............SSS...ss........',
+    '#..................ss.......#',
+    '#.....ss................ss..#',
+    '#.....ss...ss.....ss....ss..#',
+    '#..ss......ss.....ss.ss.....#',
+    '#..ss................ss.....#',
+    '#...........................#',
+    '#############...#############',
+  ],
+} as const;
+
+// One entry per village edge: the arrow placed in that neighbour cell, pointing
+// back at the village. `face` is the arrow's village-facing edge (must be open).
+const ARROW_ARENAS = {
+  // village N neighbour — arrow-s (arrow points S, down into the village).
+  N: {
+    face: 'S' as Edge,
+    id: 'arrow-s',
+    ascii: [
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#######...#########...#######',
+      '########...#######...########',
+      '#########...#####...#########',
+      '##########...###...##########',
+      '###########.......###########',
+      '############.....############',
+      '#############...#############',
+    ],
+  },
+  // village S neighbour — arrow-n (180° of arrow-s; arrow points N, up into it).
+  S: {
+    face: 'N' as Edge,
+    id: 'arrow-n',
+    ascii: [
+      '#############...#############',
+      '############.....############',
+      '###########.......###########',
+      '##########...###...##########',
+      '#########...#####...#########',
+      '########...#######...########',
+      '#######...#########...#######',
+      '.............................',
+      '.............................',
+      '.............................',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+      '#############...#############',
+    ],
+  },
+  // village W neighbour — arrow-e (arrow-w mirrored; arrow points E, into it).
+  W: {
+    face: 'E' as Edge,
+    id: 'arrow-e',
+    ascii: [
+      '#############...#############',
+      '#############..........######',
+      '#############...........#####',
+      '#############............####',
+      '#############...######....###',
+      '#############...#######....##',
+      '#############...########....#',
+      '................#########....',
+      '................##########...',
+      '................#########....',
+      '#############...########....#',
+      '#############...#######....##',
+      '#############...######....###',
+      '#############............####',
+      '#############...........#####',
+      '#############..........######',
+      '#############...#############',
+    ],
+  },
+  // village E neighbour — arrow-w (owner-authored; arrow points W, into it).
+  E: {
+    face: 'W' as Edge,
+    id: 'arrow-w',
+    ascii: [
+      '#############...#############',
+      '######..........#############',
+      '#####...........#############',
+      '####............#############',
+      '###....######...#############',
+      '##....#######...#############',
+      '#....########...#############',
+      '....#########................',
+      '...##########................',
+      '....#########................',
+      '#....########...#############',
+      '##....#######...#############',
+      '###....######...#############',
+      '####............#############',
+      '#####...........#############',
+      '######..........#############',
+      '#############...#############',
+    ],
+  },
+} as const;
+
+const VILLAGE_DEF = buildArenaDef(VILLAGE_ARENA, 'anchor');
+// village edge → the arrow RoomDef to force into that neighbour cell.
+const ARROW_DEF_BY_VILLAGE_EDGE: Record<Edge, RoomDef> = {
+  N: buildArenaDef(ARROW_ARENAS.N, 'connector'),
+  S: buildArenaDef(ARROW_ARENAS.S, 'connector'),
+  W: buildArenaDef(ARROW_ARENAS.W, 'connector'),
+  E: buildArenaDef(ARROW_ARENAS.E, 'connector'),
+};
+
+// Fail-fast authoring guard (runs at module load): the village and every arrow
+// must expose ONLY canonical openings (N/S 13-15, E/W 7-9) so the cluster never
+// fake-lanes into the fabric, and each arrow's village-facing edge must be open
+// so the cluster actually connects. Catches a bad hand-edit to any arrow ASCII.
+function isCanonicalOpening(o: RoomOpening): boolean {
+  return o.edge === 'N' || o.edge === 'S'
+    ? o.rangeStart === DOOR_COLS[0] && o.rangeEnd === DOOR_COLS[2]
+    : o.rangeStart === DOOR_ROWS[0] && o.rangeEnd === DOOR_ROWS[2];
+}
+(function assertVillageCluster() {
+  for (const def of [VILLAGE_DEF, ...Object.values(ARROW_DEF_BY_VILLAGE_EDGE)]) {
+    for (const o of def.openings) {
+      if (!isCanonicalOpening(o)) {
+        throw new Error(
+          `[Junar] village cluster "${def.templateId}" has a non-canonical opening ${o.edge}:${o.rangeStart}-${o.rangeEnd} (would fake-lane)`,
+        );
+      }
+    }
+  }
+  for (const edge of ['N', 'S', 'W', 'E'] as Edge[]) {
+    const arrow = ARROW_ARENAS[edge];
+    const def = ARROW_DEF_BY_VILLAGE_EDGE[edge];
+    if (!def.openings.some((o) => o.edge === arrow.face)) {
+      throw new Error(
+        `[Junar] arrow "${arrow.id}" has no ${arrow.face} opening to mate the village`,
+      );
+    }
+  }
+})();
+
+// Debug/tooling (room-catalog renderer): every mini-boss arena built as a def,
+// keyed by its MINIBOSS_ARENAS key — includes the saved alternates that the
+// generator does not currently place. Not used by the game loop. See
+// scripts/map-harness/render-room-catalog.mjs.
+export const MINIBOSS_DEFS: { key: string; def: RoomDef }[] = Object.entries(
+  MINIBOSS_ARENAS,
+).map(([key, arena]) => ({ key, def: buildMinibossDef(arena) }));
 
 // ───────────────────────────────────────────────────────────────────────────
 // Boss arena (anchor-10) — four versions (owner 2026-06-20).
@@ -577,7 +771,7 @@ const EMPTY_DEFS = EMPTY_ARENAS.map(buildMinibossDef);
 // RunMap.bossStumpCenter). One version is picked at random per run. The single
 // opening is why the boss is placed inner-interior (placeRequired) — its door
 // always faces a fully-connectable interior neighbour.
-interface BossVersion {
+export interface BossVersion {
   def: RoomDef;
   stumpCenter: Vector2;
 }
@@ -631,7 +825,7 @@ function buildBossVersion(
 }
 // Door at one end, stump at the FAR end. Stump centres (px): v1 (464,112),
 // v2 (464,432), v3 (816,272), v4 (112,272).
-const BOSS_VERSIONS: BossVersion[] = [
+export const BOSS_VERSIONS: BossVersion[] = [
   buildBossVersion('boss-v1', 'S', 14, 3),
   buildBossVersion('boss-v2', 'N', 14, 13),
   buildBossVersion('boss-v3', 'W', 25, 8),
@@ -671,8 +865,10 @@ const MANGO_DEADEND_DEFS: RoomDef[] = [
   't-deadend-w',
 ].map(requiredFromTemplate);
 
-// Required rooms per run: start L-bend + boss + mini-bosses + mango dead-ends.
-const REQUIRED_ROOM_COUNT = 2 + MINIBOSS_COUNT + MANGO_RUN_CAP; // 11
+// Required rooms per run (Poisson-placed): start L-bend + boss + mini-bosses +
+// mango dead-ends + the village (its four arrow neighbours are force-placed
+// around it, not Poisson-placed, so they don't count here).
+const REQUIRED_ROOM_COUNT = 2 + MINIBOSS_COUNT + MANGO_RUN_CAP + 1; // 12
 
 // ───────────────────────────────────────────────────────────────────────────
 // Required-room placement (Poisson-disk, inner-interior).
@@ -784,26 +980,50 @@ function pickConnector(
   return GROVE_DEF;
 }
 
+// Place `def` into the cell across `edge` from `coord`. No-op if that cell is
+// off-grid or already filled. The shared primitive behind forceAdapter (snake /
+// gibbon link rooms) and the village-cluster arrow placement.
+function placeAcross(
+  cells: (RoomDef | null)[][],
+  coord: RoomGridCoord,
+  edge: Edge,
+  def: RoomDef | undefined,
+): void {
+  const dir = DIRS.find(([e]) => e === edge);
+  if (!dir || !def) return;
+  const nc = coord.col + dir[1];
+  const nr = coord.row + dir[2];
+  if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS) return;
+  if (cells[nr][nc]) return; // occupied (e.g. another special) — leave it
+  cells[nr][nc] = def;
+}
+
 // Force the matching off-centre adapter into the cell across `edge` from a
 // special room whose edge opening has no canonical mate (the snake / gibbon
 // arenas). The adapter's facing edge is authored to equal that arena edge
 // exactly (tile-identical → no fake lane); its other edges are canonical/closed
-// so the surrounding fabric reciprocates them normally. No-op if the target cell
-// is off-grid or already filled.
+// so the surrounding fabric reciprocates them normally.
 function forceAdapter(
   cells: (RoomDef | null)[][],
   coord: RoomGridCoord,
   edge: Edge,
   adapterId: string,
 ): void {
-  const dir = DIRS.find(([e]) => e === edge);
-  if (!dir) return;
-  const nc = coord.col + dir[1];
-  const nr = coord.row + dir[2];
-  if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS) return;
-  if (cells[nr][nc]) return; // occupied (e.g. another special) — leave it
-  const def = ADAPTER_DEF_BY_ID.get(adapterId);
-  if (def) cells[nr][nc] = def;
+  placeAcross(cells, coord, edge, ADAPTER_DEF_BY_ID.get(adapterId));
+}
+
+// Force the village cluster: the four arrow rooms into the village's orthogonal
+// neighbour cells, each pointing inward (ARROW_DEF_BY_VILLAGE_EDGE). With
+// MIN_ANCHOR_SPACING (5) those cells are always free and in-grid, so all four
+// land — but placeAcross degrades gracefully (leaves the fabric to reciprocate)
+// in the impossible event one is occupied.
+function forceVillageArrows(
+  cells: (RoomDef | null)[][],
+  villageCoord: RoomGridCoord,
+): void {
+  for (const edge of ['N', 'S', 'W', 'E'] as Edge[]) {
+    placeAcross(cells, villageCoord, edge, ARROW_DEF_BY_VILLAGE_EDGE[edge]);
+  }
 }
 
 function fillConnectors(rng: () => number, cells: (RoomDef | null)[][]): void {
@@ -889,16 +1109,21 @@ export function generateRunMap(seed?: number): RunMap {
     );
 
     // Roles: [0] = start (random L-bend). Of the rest, the farthest from start
-    // is the boss (so the final goal reads as distant); the remaining nine split
-    // into 4 mini-bosses + 5 mango dead-ends. Panther = farthest mini-boss.
+    // is the boss (so the final goal reads as distant); the remaining ten split
+    // into 4 mini-bosses + 5 mango dead-ends + 1 village. Panther = farthest
+    // mini-boss.
     const startCoord = required[0];
     const rest = required
       .slice(1)
       .sort((a, b) => manhattan(b, startCoord) - manhattan(a, startCoord));
     const bossCoord = rest[0];
-    const others = shuffle(rng, rest.slice(1)); // 9 coords
+    const others = shuffle(rng, rest.slice(1)); // 10 coords
     const minibossCoords = others.slice(0, MINIBOSS_COUNT); // 4
-    const mangoRoomCoords = others.slice(MINIBOSS_COUNT); // 5
+    const mangoRoomCoords = others.slice(
+      MINIBOSS_COUNT,
+      MINIBOSS_COUNT + MANGO_RUN_CAP,
+    ); // 5
+    const villageCoord = others[MINIBOSS_COUNT + MANGO_RUN_CAP]; // 1
 
     // Start: one of four L-bend rotations, random per run.
     cells[startCoord.row][startCoord.col] =
@@ -938,6 +1163,11 @@ export function generateRunMap(seed?: number): RunMap {
         MANGO_DEADEND_DEFS[randInt(rng, MANGO_DEADEND_DEFS.length)];
     });
 
+    // Village cluster: the village room plus its four inward-pointing arrow
+    // neighbours, force-placed around the village cell (see forceVillageArrows).
+    cells[villageCoord.row][villageCoord.col] = VILLAGE_DEF;
+    forceVillageArrows(cells, villageCoord);
+
     // Force the off-centre adapters around the two arenas whose openings have no
     // canonical mate, so their doorways flow into the fabric with no fake lanes.
     // The snake arena opens on all four edges; the gibbon arena only N/S (its
@@ -967,14 +1197,18 @@ export function generateRunMap(seed?: number): RunMap {
       minibossCoords,
       pantherBossCoord,
       mangoRoomCoords,
+      villageCoord,
     };
     // Require EVERY required room reachable from start: boss, the 4 mini-bosses,
-    // and the 5 mango dead-ends (start is trivially reachable). The connector
-    // fabric is highly connected, so the rare stranding just re-seeds — cheap.
+    // the 5 mango dead-ends, and the village (start is trivially reachable). The
+    // connector fabric is highly connected, so the rare stranding just re-seeds —
+    // cheap. The four arrows bridge the village to the fabric, so they're
+    // reachable iff the village is.
     const allRequired = [
       bossCoord,
       ...minibossCoords,
       ...mangoRoomCoords,
+      villageCoord,
     ];
     if (allRequired.every((c) => findPath(filled, startCoord, c) !== null)) {
       return last;
@@ -997,8 +1231,8 @@ export function roomAt(map: RunMap, coord: RoomGridCoord): RoomDef {
 // ───────────────────────────────────────────────────────────────────────────
 // Debug ASCII render (used by the generation harness / not shipped in the loop).
 // Each room is a 3×3 block: centre glyph (S=start, B=boss, M=mini-boss,
-// g=mango dead-end, '.'=connector) framed by door marks on its open edges. Path
-// rooms upper-cased to '*' centres when `markPath` is set.
+// g=mango dead-end, V=village, a=arrow, '.'=connector) framed by door marks on
+// its open edges. Path rooms upper-cased to '*' centres when `markPath` is set.
 // ───────────────────────────────────────────────────────────────────────────
 export function renderRunMapAscii(map: RunMap, markPath = true): string {
   const path = markPath
@@ -1023,6 +1257,9 @@ export function renderRunMapAscii(map: RunMap, markPath = true): string {
       else if (col === map.bossCoord.col && row === map.bossCoord.row)
         centre = 'B';
       else if (def.kind === 'miniboss') centre = 'M';
+      else if (col === map.villageCoord.col && row === map.villageCoord.row)
+        centre = 'V';
+      else if (def.templateId.startsWith('arrow-')) centre = 'a';
       else if (mango.has(cellKey(col, row))) centre = 'g';
       if (onPath.has(cellKey(col, row)) && centre === '.') centre = '*';
       r0.push(' ', n, ' ');

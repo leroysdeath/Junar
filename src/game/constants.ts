@@ -171,12 +171,14 @@ export const WAVE_POOL_LATE_UNLOCK = 9;
 export const ROOM_GRID_COLS = 29;
 export const ROOM_GRID_ROWS = 17;
 
-// Required rooms placed every run (owner 2026-06-20): the start L-bend, the boss
-// arena (one of four versions), MINIBOSS_COUNT mini-boss arenas, and
-// MANGO_RUN_CAP mango dead-ends — REQUIRED_ROOM_COUNT (= 2 + 4 + 5 = 11) total,
-// see RoomGrid.ts. The hand-authored anchor-1/-5/-9 layouts are demoted to the
-// connector pool; only the boss remains a required hand-authored room. The rest
-// of the grid is connectors.
+// Required rooms placed every run: the start L-bend, the boss arena (one of four
+// versions), MINIBOSS_COUNT mini-boss arenas, MANGO_RUN_CAP mango dead-ends, and
+// the village (owner 2026-06-21) — REQUIRED_ROOM_COUNT (= 2 + 4 + 5 + 1 = 12)
+// total, see RoomGrid.ts. The village's four orthogonal neighbours are force-
+// placed "arrow" rooms pointing inward (not counted here). The hand-authored
+// anchor-1/-5/-9 layouts are demoted to the connector pool; the boss and the
+// village are the required hand-authored rooms. The rest of the grid is
+// connectors.
 
 // Mini-boss rooms (owner 2026-06-19): wide-open arenas. Three are empty (no
 // effect yet); one spawns the enlarged panther mini-boss. They connect via

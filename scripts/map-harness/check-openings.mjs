@@ -188,11 +188,11 @@ let minibossReach = 0;
 let minibossTot = 0;
 let mangoReach = 0;
 let mangoTot = 0;
-// Demoted anchors (former L1/L5/L9) — now ordinary fabric connectors, NOT
-// required, so NOT guaranteed reachable. Tracked to show that nuance.
-let demotedAnchorReach = 0;
-let demotedAnchorTot = 0;
-const DEMOTED_ANCHOR_IDS = new Set(['anchor-1', 'anchor-5', 'anchor-9']);
+// Anchor hubs (former L1/L5/L9) — reclassified 2026-06-21 as defined-only
+// multi-opening hubs (pulled from the random-fill pool), so they must NEVER
+// appear in a generated map. Counted as a regression guard (expect 0).
+let anchorHubPlacements = 0;
+const ANCHOR_HUB_IDS = new Set(['anchor-1', 'anchor-5', 'anchor-9']);
 
 function auditMap(map) {
   const cells = map.cells;
@@ -287,10 +287,7 @@ for (let s = 0; s < SEEDS; s++) {
         if (isReachable) totalWalkableReachable++;
         else strandedThis++;
       }
-      if (DEMOTED_ANCHOR_IDS.has(def.templateId)) {
-        demotedAnchorTot++;
-        if (isReachable) demotedAnchorReach++;
-      }
+      if (ANCHOR_HUB_IDS.has(def.templateId)) anchorHubPlacements++;
     }
   }
   totalGrove += groveThis;
@@ -337,10 +334,7 @@ console.log(`      boss ............. ${bossReach}/${SEEDS}`);
 console.log(`      mini-bosses ...... ${minibossReach}/${minibossTot}`);
 console.log(`      mango dead-ends .. ${mangoReach}/${mangoTot}`);
 console.log(
-  `      demoted anchors .. ${demotedAnchorReach}/${demotedAnchorTot} (${(
-    (100 * demotedAnchorReach) /
-    Math.max(1, demotedAnchorTot)
-  ).toFixed(1)}%) — NOT required, not guaranteed`,
+  `  anchor hubs placed       : ${anchorHubPlacements} (expect 0 — defined-only since 2026-06-21)`,
 );
 console.log(
   `  intra-room connectivity  : ${
@@ -421,16 +415,21 @@ if (ASCII_SEED != null) {
 }
 
 const pass =
-  totalFakeTiles === 0 && unreachableSeeds === 0 && intraFailSeeds === 0;
+  totalFakeTiles === 0 &&
+  unreachableSeeds === 0 &&
+  intraFailSeeds === 0 &&
+  anchorHubPlacements === 0;
 console.log('');
 if (pass) {
-  console.log('✓ PASS — zero fake lanes; required rooms reachable; rooms internally connected.');
+  console.log('✓ PASS — zero fake lanes; required rooms reachable; rooms internally connected; no defined-only anchor hubs placed.');
 } else {
   const reasons = [];
   if (totalFakeTiles > 0)
     reasons.push(`${totalFakeTiles} fake-lane tiles across ${seedsWithFail} seeds`);
   if (unreachableSeeds > 0) reasons.push(`${unreachableSeeds} seeds with an unreachable required room`);
   if (intraFailSeeds > 0) reasons.push(`${intraFailSeeds} seeds with an internally-split room`);
+  if (anchorHubPlacements > 0)
+    reasons.push(`${anchorHubPlacements} defined-only anchor hubs placed (should be 0)`);
   console.log(`✗ FAIL — ${reasons.join('; ')}.`);
 }
 process.exit(pass ? 0 : 1);

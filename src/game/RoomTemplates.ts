@@ -935,6 +935,117 @@ const T_MAZE_CHICANE_EW: ConnectorSource = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
+// New rooms (owner 2026-06-21). Two canonical "diamond" chambers for the active
+// FABRIC pool (a centre tree pillar / ring gives interior cover), plus two
+// defined-only set-pieces for the ADAPTER (parked) pool.
+// ───────────────────────────────────────────────────────────────────────────
+
+// Diamond-NS — a hollow rhombus chamber with a centre tree pillar, threaded by a
+// canonical N↔S corridor (openings cols 13-15). Opening-equivalent to a NS
+// straight, so it's FABRIC-safe; the pillar splits the room into two loops for
+// cover/weaving.
+const T_DIAMOND_NS: ConnectorSource = {
+  id: 't-diamond-ns',
+  ascii: [
+    '#############...#############',
+    '#############...#############',
+    '############.....############',
+    '###########.......###########',
+    '##########.........##########',
+    '#########.....#.....#########',
+    '########.....###.....########',
+    '#######.....#####.....#######',
+    '######.....#######.....######',
+    '#######.....#####.....#######',
+    '########.....###.....########',
+    '#########.....#.....#########',
+    '##########.........##########',
+    '###########.......###########',
+    '############.....############',
+    '#############...#############',
+    '#############...#############',
+  ],
+};
+
+// Diamond-Cross — the diamond ring opened on all four canonical edges (N/S cols
+// 13-15, E/W rows 7-9). Opening-equivalent to the 4-way cross → FABRIC-safe; the
+// centre pillar forces players around it at a junction.
+const T_DIAMOND_CROSS: ConnectorSource = {
+  id: 't-diamond-cross',
+  ascii: [
+    '#############...#############',
+    '#############...#############',
+    '############.....############',
+    '###########.......###########',
+    '##########.........##########',
+    '#########.....#.....#########',
+    '########.....###.....########',
+    '............#####............',
+    '...........#######...........',
+    '............#####............',
+    '########.....###.....########',
+    '#########.....#.....#########',
+    '##########.........##########',
+    '###########.......###########',
+    '############.....############',
+    '#############...#############',
+    '#############...#############',
+  ],
+};
+
+// Grotto-Fork-N (DEFINED-ONLY) — three N openings (cols 7-9 / 13-15 / 19-21) over
+// a pillared grotto, with canonical S/E/W. The off-centre N prongs have no
+// canonical mate, so this can only ever be force-placed (parked for now).
+const T_GROTTO_FORK_N: ConnectorSource = {
+  id: 't-grotto-fork-n',
+  ascii: [
+    '#######...###...###...#######',
+    '#######...###...###...#######',
+    '#######...##.....##...#######',
+    '#######...#.......#...#######',
+    '#######...............#######',
+    '#######.......#.......#######',
+    '#######......###......#######',
+    '............#####............',
+    '...........#######...........',
+    '............#####............',
+    '########.....###.....########',
+    '#########.....#.....#########',
+    '##########.........##########',
+    '###########.......###########',
+    '############.....############',
+    '#############...#############',
+    '#############...#############',
+  ],
+};
+
+// Cleft-Cross (DEFINED-ONLY) — an asymmetric cleft chamber, canonical on all four
+// edges (so it COULD random-fill) but parked in the defined-only pool by owner
+// choice (a distinctive set-piece, reserved rather than in random rotation).
+const T_CLEFT_CROSS: ConnectorSource = {
+  id: 't-cleft-cross',
+  ascii: [
+    '#############...#############',
+    '############....#############',
+    '###########.....#############',
+    '##########......#############',
+    '#########.......#############',
+    '########....#...#############',
+    '#######....##...#############',
+    '..........###................',
+    '.........####................',
+    '..........###................',
+    '#######....##...#############',
+    '########....#...#############',
+    '#########.......#############',
+    '##########......#############',
+    '###########.....#############',
+    '############....#############',
+    '#############...#############',
+  ],
+};
+
+// ───────────────────────────────────────────────────────────────────────────
 // Pool partition (owner 2026-06-20): no-fake-lane guarantee.
 //
 // FABRIC — every edge opening sits at a CANONICAL position (N/S cols 13-15, E/W
@@ -944,11 +1055,13 @@ const T_MAZE_CHICANE_EW: ConnectorSource = {
 // fill can ALWAYS reciprocate a neighbour and never strands an opening against a
 // wall. These are the only rooms the random fill draws from.
 //
-// ADAPTER — the multi-opening hubs/forks and the mini-boss link rooms. Each has
-// at least one OFF-CENTRE opening, so it has no canonical mate and would fake-
-// lane if dropped into the open fabric. They are NEVER random-placed; RoomGrid
-// force-places them adjacent to the specific special-room opening they mate
-// (e.g. the snake / gibbon arenas). See RoomGrid.forceAdapter.
+// ADAPTER — the defined-only / force-placed-only pool: multi-opening hubs/forks,
+// the mini-boss link rooms, plus owner-parked set-pieces. Most have at least one
+// OFF-CENTRE opening, so they have no canonical mate and would fake-lane if
+// dropped into the open fabric. They are NEVER random-placed; RoomGrid force-
+// places the links adjacent to the special-room opening they mate (e.g. the
+// snake / gibbon arenas — see RoomGrid.forceAdapter). A few (e.g. t-cleft-cross)
+// are canonical but parked here by owner choice — reserved, not in rotation.
 // ───────────────────────────────────────────────────────────────────────────
 export const FABRIC_TEMPLATE_SOURCES: ConnectorSource[] = [
   // Straights.
@@ -973,6 +1086,9 @@ export const FABRIC_TEMPLATE_SOURCES: ConnectorSource[] = [
   T_DEADEND_W,
   // Interior maze (canonical E/W corridor).
   T_MAZE_CHICANE_EW,
+  // Diamond chambers — centre-pillar cover (owner 2026-06-21).
+  T_DIAMOND_NS,
+  T_DIAMOND_CROSS,
 ];
 
 export const ADAPTER_TEMPLATE_SOURCES: ConnectorSource[] = [
@@ -992,6 +1108,10 @@ export const ADAPTER_TEMPLATE_SOURCES: ConnectorSource[] = [
   T_SNAKE_LINK_W,
   T_GIBBON_LINK_N,
   T_GIBBON_LINK_S,
+  // Defined-only set-pieces (owner 2026-06-21): off-centre grotto fork + a
+  // canonical cleft chamber parked out of random rotation.
+  T_GROTTO_FORK_N,
+  T_CLEFT_CROSS,
 ];
 
 export const FABRIC_TEMPLATE_POOL: RoomTemplate[] =
