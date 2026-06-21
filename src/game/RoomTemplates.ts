@@ -826,6 +826,33 @@ const T_SNAKE_LINK_W: ConnectorSource = {
   ],
 };
 
+// Snake-link S — N openings 5-7/21-23 (mate snake arena's S) bridge to a canonical
+// S (cols 13-15). The snake arena's S openings (5-7/21-23) sit one column left of
+// its N openings (6-8/20-22), so this is its own template — t-snake-link-n can't
+// double as the S mate. Force-placed BELOW the snake arena (RoomGrid.forceAdapter).
+const T_SNAKE_LINK_S: ConnectorSource = {
+  id: 't-snake-link-s',
+  ascii: [
+    '#####...#############...#####',
+    '#####...#############...#####',
+    '#####...#############...#####',
+    '#####...#############...#####',
+    '#####...#############...#####',
+    '#####...#############...#####',
+    '#####...#############...#####',
+    '#####...................#####',
+    '#####...................#####',
+    '#####...................#####',
+    '#############...#############',
+    '#############...#############',
+    '#############...#############',
+    '#############...#############',
+    '#############...#############',
+    '#############...#############',
+    '#############...#############',
+  ],
+};
+
 // Gibbon-link N — S openings 1-3/13-15 (mate gibbon's N) bridge to a canonical N.
 const T_GIBBON_LINK_N: ConnectorSource = {
   id: 't-gibbon-link-n',
@@ -907,27 +934,48 @@ const T_MAZE_CHICANE_EW: ConnectorSource = {
   ],
 };
 
-// The connector template pool (~20). The map generator (Step 3) draws from
-// this; the per-run static roll (Steps 5+6) uses each template's candidates.
-export const CONNECTOR_TEMPLATE_SOURCES: ConnectorSource[] = [
-  // Roadmap T1–T6.
+// ───────────────────────────────────────────────────────────────────────────
+// Pool partition (owner 2026-06-20): no-fake-lane guarantee.
+//
+// FABRIC — every edge opening sits at a CANONICAL position (N/S cols 13-15, E/W
+// rows 7-9). This set is *closed* under the opening-set-equality adjacency rule
+// (RoomGrid.satisfiesNeighbors): for any (left.E, up.S) pair of canonical-or-
+// closed edges there's a fabric room with the matching (W, N), so the connector
+// fill can ALWAYS reciprocate a neighbour and never strands an opening against a
+// wall. These are the only rooms the random fill draws from.
+//
+// ADAPTER — the multi-opening hubs/forks and the mini-boss link rooms. Each has
+// at least one OFF-CENTRE opening, so it has no canonical mate and would fake-
+// lane if dropped into the open fabric. They are NEVER random-placed; RoomGrid
+// force-places them adjacent to the specific special-room opening they mate
+// (e.g. the snake / gibbon arenas). See RoomGrid.forceAdapter.
+// ───────────────────────────────────────────────────────────────────────────
+export const FABRIC_TEMPLATE_SOURCES: ConnectorSource[] = [
+  // Straights.
   T_STRAIGHT_EW,
   T_STRAIGHT_NS,
+  // L-bends (all four rotations).
   T_LBEND_NE,
-  T_CROSS,
+  T_LBEND_NW,
+  T_LBEND_SE,
+  T_LBEND_SW,
+  // T-junctions (all four rotations).
+  T_TJUNC_OPEN_N,
   T_TJUNC_OPEN_S,
+  T_TJUNC_OPEN_E,
+  T_TJUNC_OPEN_W,
+  // 4-way cross.
+  T_CROSS,
+  // Dead-end "teardrop" chambers (also the mango rooms; all four rotations).
   T_DEADEND_N,
   T_DEADEND_S,
   T_DEADEND_E,
   T_DEADEND_W,
-  // L-bends.
-  T_LBEND_NW,
-  T_LBEND_SE,
-  T_LBEND_SW,
-  // T-junctions.
-  T_TJUNC_OPEN_N,
-  T_TJUNC_OPEN_E,
-  T_TJUNC_OPEN_W,
+  // Interior maze (canonical E/W corridor).
+  T_MAZE_CHICANE_EW,
+];
+
+export const ADAPTER_TEMPLATE_SOURCES: ConnectorSource[] = [
   // Multi-opening hubs.
   T_MULTIOPEN_DOUBLE_N,
   T_MULTIOPEN_DOUBLE_S,
@@ -939,13 +987,25 @@ export const CONNECTOR_TEMPLATE_SOURCES: ConnectorSource[] = [
   T_MULTIOPEN_FORK_W,
   // Mini-boss link adapters (clean connections into the snake / gibbon arenas).
   T_SNAKE_LINK_N,
+  T_SNAKE_LINK_S,
   T_SNAKE_LINK_E,
   T_SNAKE_LINK_W,
   T_GIBBON_LINK_N,
   T_GIBBON_LINK_S,
-  // Interior mazes (t-maze-cross-pillars moved to the panther Empty Throne).
-  T_MAZE_CHICANE_EW,
 ];
 
-export const CONNECTOR_TEMPLATE_POOL: RoomTemplate[] =
-  CONNECTOR_TEMPLATE_SOURCES.map(buildConnector);
+export const FABRIC_TEMPLATE_POOL: RoomTemplate[] =
+  FABRIC_TEMPLATE_SOURCES.map(buildConnector);
+export const ADAPTER_TEMPLATE_POOL: RoomTemplate[] =
+  ADAPTER_TEMPLATE_SOURCES.map(buildConnector);
+
+// Backward-compatible combined view (fabric + adapters). Retained for any
+// tooling that wants the full set; the generator uses the two pools above.
+export const CONNECTOR_TEMPLATE_SOURCES: ConnectorSource[] = [
+  ...FABRIC_TEMPLATE_SOURCES,
+  ...ADAPTER_TEMPLATE_SOURCES,
+];
+export const CONNECTOR_TEMPLATE_POOL: RoomTemplate[] = [
+  ...FABRIC_TEMPLATE_POOL,
+  ...ADAPTER_TEMPLATE_POOL,
+];
