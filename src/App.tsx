@@ -5,15 +5,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import {
-  Play,
-  RotateCcw,
-  Volume2,
-  VolumeX,
-  Target,
-  Zap,
-  X,
-} from 'lucide-react';
+import { Play, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
@@ -229,6 +221,14 @@ function CreditLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+// Format a run duration (ms) as m:ss for the Game Over screen.
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -239,6 +239,9 @@ function App() {
   const [waveNum, setWaveNum] = useState(0);
   const [score, setScore] = useState(0);
   const [kills, setKills] = useState(0);
+  // Run duration (ms) captured at game over via onRunEnd; shown on the Game
+  // Over screen as a m:ss "Time" stat.
+  const [runElapsedMs, setRunElapsedMs] = useState(0);
   // Live in-room enemy count from onEnemiesChange. Kept wired (the signal is
   // used elsewhere in the game) but no longer shown in the HUD — only the
   // setter is needed, so the value binding is dropped to satisfy noUnusedLocals.
@@ -315,6 +318,7 @@ function App() {
         onBossArenaChange: (active) => setBossArena(active),
         onScoreChange: setScore,
         onKillsChange: setKills,
+        onRunEnd: setRunElapsedMs,
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
@@ -414,10 +418,7 @@ function App() {
     // to signal the surplus (104 → 4% green band). 1 energy point = 1% of the
     // STAMINA_MAX-wide bar, so the surplus maps 1:1 to percent width; clamp to
     // 25 (the 5-mango ceiling) so the band can't overrun the track.
-    const overcapPct = Math.max(
-      0,
-      Math.min(25, stamina.value - STAMINA_MAX),
-    );
+    const overcapPct = Math.max(0, Math.min(25, stamina.value - STAMINA_MAX));
     const fillColor = stamina.isLow
       ? 'bg-red-500'
       : burst.active
@@ -425,35 +426,19 @@ function App() {
         : 'bg-amber-500';
     return (
       <div className="flex justify-between items-start text-white font-mono gap-2">
-        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-          <div className="flex items-center gap-2 text-sm">
-            <Target size={16} className="text-amber-400" />
-            <span>
-              Room ({roomCoord.col}, {roomCoord.row})
-            </span>
+        <div className="bg-black/70 px-2 py-1.5 rounded border border-amber-500">
+          <div className="text-xs text-amber-300">
+            Room ({roomCoord.col}, {roomCoord.row})
           </div>
           <div className="text-xs text-amber-300 mt-1">Wave: {waveNum}</div>
           <div className="text-xs text-amber-300">Killed: {kills}</div>
         </div>
 
-        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px]">
+        <div className="bg-black/70 px-2 py-1 rounded border border-amber-500 min-w-[120px] ml-auto">
           <div className="flex items-center gap-2 text-xs">
-            <Zap
-              size={14}
-              className={
-                burst.active
-                  ? 'text-amber-300'
-                  : stamina.isLow
-                    ? 'text-red-400'
-                    : 'text-amber-400'
-              }
-            />
             <span>Energy</span>
-            <span className="ml-auto tabular-nums">
-              {Math.floor(stamina.value)}/{STAMINA_MAX}
-            </span>
           </div>
-          <div className="relative mt-1 h-2 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
+          <div className="relative mt-1 h-1 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
             <div
               className={`h-full ${fillColor} transition-[width] duration-100`}
               style={{ width: `${fillPct}%` }}
@@ -476,13 +461,6 @@ function App() {
             </div>
           )}
         </div>
-
-        <button
-          onClick={toggleSound}
-          className="bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors"
-        >
-          {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-        </button>
       </div>
     );
   };
@@ -494,6 +472,12 @@ function App() {
       </h2>
       <p className="text-lg text-amber-200 mb-2 drop-shadow">
         You reached room ({roomCoord.col}, {roomCoord.row})
+      </p>
+      <p className="text-base text-amber-300 mb-1 drop-shadow">
+        Time Elapsed: {formatDuration(runElapsedMs)}
+      </p>
+      <p className="text-base text-amber-300 mb-1 drop-shadow">
+        Total Kills: {kills}
       </p>
       <p className="text-base text-amber-300 mb-8 drop-shadow">
         Final Score: {score}
@@ -586,7 +570,18 @@ function App() {
             on both desktop and mobile. The A/B action buttons sit lower-right
             (MobileControls), so the HUD needs no clearance padding. */}
         {gameState === 'playing' && (
-          <div className="absolute top-4 left-4 right-4">{renderHud()}</div>
+          <div className="absolute top-1 left-1 right-1">{renderHud()}</div>
+        )}
+
+        {/* Sound toggle — pinned to the lower-left corner of the board, clear of
+            the lower-right A/B action buttons on mobile. */}
+        {gameState === 'playing' && (
+          <button
+            onClick={toggleSound}
+            className="absolute bottom-1 left-1 bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors text-white"
+          >
+            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+          </button>
         )}
 
         {/* "Reached Boss" banner (Step 9). Non-blocking placeholder shown on
