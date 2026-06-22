@@ -163,13 +163,21 @@ export const WAVE_POOL_LATE_UNLOCK = 9;
 
 // --- Room grid (Step 3 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §4 (glossary), §5.1 (run structure).
-// A run is a ROOM_GRID_COLS × ROOM_GRID_ROWS grid of rooms (493 total),
-// regenerated each run. Each room is itself one 29×17-tile playfield (the
-// GRID_WIDTH × GRID_HEIGHT above) — the room-grid dimensions equalling the
-// tile-grid dimensions is a coincidence of the chosen numbers, not a
-// dependency; keep them as separate names.
-export const ROOM_GRID_COLS = 29;
-export const ROOM_GRID_ROWS = 17;
+// A run is a ROOM_GRID_COLS × ROOM_GRID_ROWS grid of rooms, regenerated each
+// run. Each room is itself one 29×17-tile playfield (the GRID_WIDTH ×
+// GRID_HEIGHT above) — the room grid and the tile grid are independent
+// dimensions; keep them as separate names.
+//
+// DEMO GRID (owner 2026-06-21): 17×10 (170 cells) for the itch.io demo — a
+// shorter run than the full map while still hosting all REQUIRED_ROOM_COUNT
+// structured rooms. The generator is dimension-agnostic; the full map is 29×17
+// (493 cells). To restore it, set these back to 29 / 17 and MIN_ANCHOR_SPACING
+// (below) back to 5. NOTE: shrinking the grid crowds the structured rooms, so a
+// single placement can leave a non-reciprocating opening ("fake lane"); the
+// generator re-seeds until a fake-lane-free map lands (see generateRunMap /
+// mapHasZeroFakeLanes), keeping every shipped map clean at any supported size.
+export const ROOM_GRID_COLS = 17; // demo grid; 29 for the full map
+export const ROOM_GRID_ROWS = 10; // demo grid; 17 for the full map
 
 // Required rooms placed every run: the start L-bend, the boss arena (one of four
 // versions), MINIBOSS_COUNT mini-boss arenas, MANGO_RUN_CAP mango dead-ends, and
@@ -187,8 +195,10 @@ export const MINIBOSS_COUNT = 4;
 
 // Poisson-disk spacing: a newly placed required room must be at least this far
 // (in Manhattan room-grid distance) from every already-placed required room.
-// Tunable 4–6 per roadmap §5.1.
-export const MIN_ANCHOR_SPACING = 5;
+// 5 on the full 29×17 map (roadmap §5.1, tunable 4–6); 3 on the 17×10 demo
+// grid, whose smaller inner interior can't hold the required rooms at 5 (the
+// placer would silently relax toward 1). Use 5 for the full map.
+export const MIN_ANCHOR_SPACING = 3; // demo grid; 5 for the full 29×17 map
 
 // --- Per-enemy AABB sizing (Step 2 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.7.
