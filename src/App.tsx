@@ -221,6 +221,14 @@ function CreditLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+// Format a run duration (ms) as m:ss for the Game Over screen.
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -231,6 +239,9 @@ function App() {
   const [waveNum, setWaveNum] = useState(0);
   const [score, setScore] = useState(0);
   const [kills, setKills] = useState(0);
+  // Run duration (ms) captured at game over via onRunEnd; shown on the Game
+  // Over screen as a m:ss "Time" stat.
+  const [runElapsedMs, setRunElapsedMs] = useState(0);
   // Live in-room enemy count from onEnemiesChange. Kept wired (the signal is
   // used elsewhere in the game) but no longer shown in the HUD — only the
   // setter is needed, so the value binding is dropped to satisfy noUnusedLocals.
@@ -307,6 +318,7 @@ function App() {
         onBossArenaChange: (active) => setBossArena(active),
         onScoreChange: setScore,
         onKillsChange: setKills,
+        onRunEnd: setRunElapsedMs,
         onEnemiesChange: setEnemiesRemaining,
         onStaminaChange: (value, isLow) => setStamina({ value, isLow }),
         onBurstChange: (active, multiplier) => setBurst({ active, multiplier }),
@@ -460,6 +472,12 @@ function App() {
       </h2>
       <p className="text-lg text-amber-200 mb-2 drop-shadow">
         You reached room ({roomCoord.col}, {roomCoord.row})
+      </p>
+      <p className="text-base text-amber-300 mb-1 drop-shadow">
+        Time Elapsed: {formatDuration(runElapsedMs)}
+      </p>
+      <p className="text-base text-amber-300 mb-1 drop-shadow">
+        Total Kills: {kills}
       </p>
       <p className="text-base text-amber-300 mb-8 drop-shadow">
         Final Score: {score}

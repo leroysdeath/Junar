@@ -197,7 +197,8 @@ export class Game {
   // contact-kill pass and per-room parking by construction. One per run; null
   // until the mini-boss dies. Its phase machine mirrors updateBossPanther's.
   private ally: Enemy | null = null;
-  private allyPhase: 'approach' | 'lunge' | 'jumpback' | 'cooldown' = 'approach';
+  private allyPhase: 'approach' | 'lunge' | 'jumpback' | 'cooldown' =
+    'approach';
   private allyPhaseSince = 0;
   private allyLungeDir: Vector2 = { x: 0, y: 0 };
   private allyJumpbackDir: Vector2 = { x: 0, y: 0 };
@@ -2066,6 +2067,14 @@ export class Game {
     if (this.gameState === 'gameOver') return;
     this.gameState = 'gameOver';
     this.callbacks.onStateChange('gameOver');
+    // Surface the run's wall-clock duration for the Game Over screen. Matches
+    // the performance.now() clock levelStartedAt was stamped with (set once at
+    // run start, never reset on room transitions, so this is the full run).
+    this.callbacks.onRunEnd?.(
+      this.levelStartedAt
+        ? Math.round(performance.now() - this.levelStartedAt)
+        : 0,
+    );
     // Fade the beds out so the loss sting lands over silence.
     this.soundManager.setScene('silent');
     this.soundManager.play('game-over');

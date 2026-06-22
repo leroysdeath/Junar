@@ -33,6 +33,10 @@ export interface GameCallbacks {
   // enemy count — see Game.enemiesKilled.
   onKillsChange: (kills: number) => void;
   onEnemiesChange: (count: number) => void;
+  // Fires once when a run ends in game over, with the run's wall-clock
+  // duration in ms (performance.now() − run start). Drives the "Time" stat on
+  // the Game Over screen; total kills/score come from their own signals.
+  onRunEnd?: (elapsedMs: number) => void;
   // Energy (stamina) + burst + sprint signals. isLow is bundled with value to
   // avoid a render race between the bar value and its low-state styling.
   onStaminaChange?: (value: number, isLow: boolean) => void;
