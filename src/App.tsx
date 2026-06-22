@@ -5,15 +5,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import {
-  Play,
-  RotateCcw,
-  Volume2,
-  VolumeX,
-  Target,
-  Zap,
-  X,
-} from 'lucide-react';
+import { Play, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
@@ -422,35 +414,19 @@ function App() {
         : 'bg-amber-500';
     return (
       <div className="flex justify-between items-start text-white font-mono gap-2">
-        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500">
-          <div className="flex items-center gap-2 text-sm">
-            <Target size={16} className="text-amber-400" />
-            <span>
-              Room ({roomCoord.col}, {roomCoord.row})
-            </span>
+        <div className="bg-black/70 px-2 py-1.5 rounded border border-amber-500">
+          <div className="text-xs text-amber-300">
+            Room ({roomCoord.col}, {roomCoord.row})
           </div>
           <div className="text-xs text-amber-300 mt-1">Wave: {waveNum}</div>
           <div className="text-xs text-amber-300">Killed: {kills}</div>
         </div>
 
-        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px] ml-auto">
+        <div className="bg-black/70 px-2 py-1 rounded border border-amber-500 min-w-[120px] ml-auto">
           <div className="flex items-center gap-2 text-xs">
-            <Zap
-              size={14}
-              className={
-                burst.active
-                  ? 'text-amber-300'
-                  : stamina.isLow
-                    ? 'text-red-400'
-                    : 'text-amber-400'
-              }
-            />
             <span>Energy</span>
-            <span className="ml-auto tabular-nums">
-              {Math.floor(stamina.value)}/{STAMINA_MAX}
-            </span>
           </div>
-          <div className="relative mt-1 h-2 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
+          <div className="relative mt-1 h-1 w-full bg-black/60 rounded overflow-hidden border border-amber-500/40">
             <div
               className={`h-full ${fillColor} transition-[width] duration-100`}
               style={{ width: `${fillPct}%` }}
@@ -576,7 +552,7 @@ function App() {
             on both desktop and mobile. The A/B action buttons sit lower-right
             (MobileControls), so the HUD needs no clearance padding. */}
         {gameState === 'playing' && (
-          <div className="absolute top-2 left-2 right-2">{renderHud()}</div>
+          <div className="absolute top-1 left-1 right-1">{renderHud()}</div>
         )}
 
         {/* Sound toggle — pinned to the lower-left corner of the board, clear of
@@ -584,7 +560,7 @@ function App() {
         {gameState === 'playing' && (
           <button
             onClick={toggleSound}
-            className="absolute bottom-2 left-2 bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors text-white"
+            className="absolute bottom-1 left-1 bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors text-white"
           >
             {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
