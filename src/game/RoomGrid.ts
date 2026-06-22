@@ -1147,14 +1147,45 @@ export function findPath(
   return null;
 }
 
+// True iff the fully-filled map has zero "fake lanes": every opening tile faces
+// a reciprocating opening across its border, and no opening points off-grid.
+// The connector fill only constrains each cell against its already-placed
+// (up/left) neighbours, so a late grove fallback can still leave a down/right
+// opening unmated — invisible to the fill but a walk-into-a-wall pocket in play.
+// This whole-map pass is a generation acceptance gate (alongside reachability)
+// so generateRunMap re-seeds past such maps. On the full 29×17 map fake lanes
+// never occur; on a smaller demo grid the structured rooms crowd enough that a
+// single placement occasionally leaves one, so the re-seed is what keeps every
+// shipped map clean. Mirrors scripts/map-harness/check-openings.mjs.
+function mapHasZeroFakeLanes(cells: RoomDef[][]): boolean {
+  for (let row = 0; row < ROOM_GRID_ROWS; row++) {
+    for (let col = 0; col < ROOM_GRID_COLS; col++) {
+      const def = cells[row][col];
+      // An opening on a map-border edge points off-grid → fake lane.
+      if (!satisfiesBorder(def, col, row)) return false;
+      // Every in-grid neighbour must reciprocate this edge's openings exactly.
+      for (const [edge, dc, dr] of DIRS) {
+        const nc = col + dc;
+        const nr = row + dr;
+        if (nc < 0 || nr < 0 || nc >= ROOM_GRID_COLS || nr >= ROOM_GRID_ROWS)
+          continue;
+        if (!edgeOpeningsEqual(def, edge, cells[nr][nc], oppositeEdge(edge)))
+          return false;
+      }
+    }
+  }
+  return true;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Public API.
 // ───────────────────────────────────────────────────────────────────────────
 
 // Generate a run map. With a numeric `seed` the result is reproducible. Retries
-// (re-seeding deterministically) until the boss is reachable from the start;
-// the connector fabric is highly connected, so this nearly always succeeds on
-// the first attempt.
+// (re-seeding deterministically) until every required room is reachable from the
+// start AND the map has zero fake lanes (mapHasZeroFakeLanes); the connector
+// fabric is highly connected and most maps are already clean, so this nearly
+// always succeeds within a few attempts.
 export function generateRunMap(seed?: number): RunMap {
   const baseSeed = seed ?? Math.floor(Math.random() * 0xffffffff);
   const MAX_ATTEMPTS = 200;
@@ -1275,15 +1306,20 @@ export function generateRunMap(seed?: number): RunMap {
       ...mangoRoomCoords,
       villageCoord,
     ];
-    if (allRequired.every((c) => findPath(filled, startCoord, c) !== null)) {
+    const allReachable = allRequired.every(
+      (c) => findPath(filled, startCoord, c) !== null,
+    );
+    if (allReachable && mapHasZeroFakeLanes(filled)) {
       return last;
     }
   }
 
-  // Essentially unreachable (P(200 disconnected fabrics) ≈ 0). Return the last
-  // attempt so the game still runs; warn so it surfaces if it ever happens.
+  // No reachable, fake-lane-free map in MAX_ATTEMPTS (P ≈ 0 on supported grids —
+  // most maps pass on the first attempt). Return the last attempt so the game
+  // still runs; warn so it surfaces if a grid is ever sized too small to
+  // generate cleanly.
   console.warn(
-    '[Junar] generateRunMap: required rooms unreachable after max attempts',
+    '[Junar] generateRunMap: no reachable, fake-lane-free map after max attempts',
   );
   return last!;
 }
