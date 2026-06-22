@@ -414,10 +414,7 @@ function App() {
     // to signal the surplus (104 → 4% green band). 1 energy point = 1% of the
     // STAMINA_MAX-wide bar, so the surplus maps 1:1 to percent width; clamp to
     // 25 (the 5-mango ceiling) so the band can't overrun the track.
-    const overcapPct = Math.max(
-      0,
-      Math.min(25, stamina.value - STAMINA_MAX),
-    );
+    const overcapPct = Math.max(0, Math.min(25, stamina.value - STAMINA_MAX));
     const fillColor = stamina.isLow
       ? 'bg-red-500'
       : burst.active
@@ -436,7 +433,7 @@ function App() {
           <div className="text-xs text-amber-300">Killed: {kills}</div>
         </div>
 
-        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px]">
+        <div className="bg-black/70 px-3 py-2 rounded border border-amber-500 min-w-[180px] ml-auto">
           <div className="flex items-center gap-2 text-xs">
             <Zap
               size={14}
@@ -476,13 +473,6 @@ function App() {
             </div>
           )}
         </div>
-
-        <button
-          onClick={toggleSound}
-          className="bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors"
-        >
-          {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-        </button>
       </div>
     );
   };
@@ -586,7 +576,18 @@ function App() {
             on both desktop and mobile. The A/B action buttons sit lower-right
             (MobileControls), so the HUD needs no clearance padding. */}
         {gameState === 'playing' && (
-          <div className="absolute top-4 left-4 right-4">{renderHud()}</div>
+          <div className="absolute top-2 left-2 right-2">{renderHud()}</div>
+        )}
+
+        {/* Sound toggle — pinned to the lower-left corner of the board, clear of
+            the lower-right A/B action buttons on mobile. */}
+        {gameState === 'playing' && (
+          <button
+            onClick={toggleSound}
+            className="absolute bottom-2 left-2 bg-black/70 p-2 rounded border border-amber-500 hover:bg-amber-500/20 transition-colors text-white"
+          >
+            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+          </button>
         )}
 
         {/* "Reached Boss" banner (Step 9). Non-blocking placeholder shown on
