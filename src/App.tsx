@@ -620,9 +620,9 @@ function App() {
           >
             <div className="text-center text-white max-w-md mx-auto px-6">
               <h1
-                className={`${isMobile ? 'text-4xl mb-6' : 'text-6xl mb-8'} font-bold text-amber-400 font-serif`}
+                className={`${isMobile ? 'text-4xl mb-6' : 'text-6xl mb-8'} font-bold text-amber-400 font-serif whitespace-nowrap`}
               >
-                Jungle Archer
+                Jungle X
               </h1>
 
               <div className="space-y-4">

@@ -8,7 +8,7 @@ This file is the source of truth for the game's vision, mechanics, and rules of 
 
 The player is a male indigenous (Adivasi-coded) archer surviving with his family in the Indian jungle. He auto-fires arrows at the nearest enemy in line of sight (any angle, walls block) while hordes of crazed beasts — panthers, bears, snakes, and gibbons — pour through narrow paths cut between dense, untraversible trees. The family — wife, son, daughter — once lived in harmony with the jungle; now something is corrupting it. As the player advances, his family joins him as passive escorts, and protecting them becomes the central tension. The corruption traces back to a monstrous plant deep in the jungle that exudes black goo and infects the wildlife. In the final battle, the family stands and fights with the player to destroy the source and free the jungle.
 
-**Title:** "Jungle X" is the final release title. The entry screen currently shows **"Jungle Archer"** as the working title during prototyping; it will be swapped to "Jungle X" at release. Repo codename remains "Junar". Other in-engine menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) are placeholder and will be replaced in a dedicated copy pass.
+**Title:** "Jungle X" is the final release title, and the entry screen now shows **"Jungle X"** (the earlier "Jungle Archer" working title was swapped out during prototyping). Repo codename remains "Junar". Other in-engine menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", victory text) are placeholder and will be replaced in a dedicated copy pass.
 
 ## 2. Prototype goals
 
@@ -155,7 +155,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 
 **Audio palette** (current code) — `SoundManager` is file-first (rewritten 2026-06-11): one shared `AudioContext`, created/resumed inside the start-gesture (`Game.startRun`, plus a window-level first-gesture hook so the menu bed can start pre-run), disposed from `Game.cleanup()`. Sound keys follow `docs/AUDIO-ASSETS.md` (the sourcing spec); `.ogg`/`.mp3` files dropped in `src/assets/audio/` are auto-discovered (build-time glob) with round-robin variants. **Real files landed 2026-06-12** (all CC0, provenance logged in `docs/AUDIO-CREDITS.md`): the four §1 SFX (arrow-fire ×3 variants, enemy-hit, game-over, victory) plus the greenlit §3/§4 beds (ambience-jungle, ambience-corrupted, music-menu, music-boss). Beds are scene-driven looping (`SoundManager.setScene`: menu → music-menu, gameplay → ambience-jungle, boss arena → music-boss + ambience-corrupted, terminal screens → silent), crossfaded, driven by `Game` state transitions. The synth tones remain as per-key fallbacks only if a file fails to decode. §2 event keys (sprint, burst-activate, stamina-low, room-transition) are deliberately skipped — wired but silent; per-key approval statuses live in the manifest's §2 Status column (room-transition and family-death are not approved). The old `dash` key was renamed to `sprint` when the dash mechanic became the timed sprint (2026-06-19). All shipped audio must be human-made, not AI-generated (see §9).
 
-**Working in-engine copy** — title "Jungle X" is final. The entry screen still shows "Jungle Archer" (working title for prototyping); will be swapped at release. The other menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", "You have conquered the jungle!") are still placeholder and will be replaced in a dedicated copy pass once tone is locked.
+**Working in-engine copy** — title "Jungle X" is final, and the entry screen now shows "Jungle X" (the earlier "Jungle Archer" working title was swapped out). The other menu strings ("Survive the Ancient Forest", "Defeat the Ancient Tree Guardian", "You have conquered the jungle!") are still placeholder and will be replaced in a dedicated copy pass once tone is locked.
 
 ## 7. Scope & roadmap
 
@@ -184,7 +184,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 
 **Ordered next steps:**
 1. ✅ Critical bug fixes (input leak, setTimeout race, cardinal edge cases) — done in commit `e8a224b`.
-2. **In-engine title swap to "Jungle X"** — release-time change; "Jungle Archer" remains the working title until then.
+2. ✅ **In-engine title swap to "Jungle X"** — the entry screen now shows "Jungle X" (swapped from the "Jungle Archer" working title).
 3. ✅ Protagonist visual update — Adivasi-coded archer (deep skin tone, cream dhoti, dark sash, no headdress) live in `Renderer.renderPlayer` via a Time Elements modular composite (replaced the original CC0 sprite 2026-06-18).
 4. ✅ **Infected-beast visual cue** — done 2026-06-11. Owner decision replaced the black-goo-accent plan: all four beasts carry red eyes (`INFECTED_EYE_RED`) and otherwise look like normal wildlife; the goo palette stays boss-only.
 5. **Family rendering & combat** — rendering half landed 2026-06-11 (sprite swap, idle frames at `N` markers; beast sprites followed 2026-06-12); still to build: the `FamilyMember` entity (movement, collision, walk animation from the existing sheets, death-triggers-game-over, simple combat behavior for the boss fight).
