@@ -176,7 +176,7 @@ When stamina drops below the low threshold (10 points), both movement speed and 
 - Multiple-endings system (hut-attack branch, family-survival carryover into later levels). Documented direction; do not implement without owner sign-off. See §5 and the `protagonist-and-family-tone` skill.
 - Sprite assets beyond the approved set: player (2026-05-10), the four beasts and the family (Tiers 1–2 of `docs/ART-ASSETS.md`, greenlit 2026-06-11), the jungle tree-walls + dirt-floor (Tier 3, partial — greenlit 2026-06-15), the **mango pickup** (first in-world item sprite, greenlit 2026-06-19 — ThiagoZen "Pixel Art Fruits", CC-BY 4.0), and the **village huts** (small/large thatch, greenlit 2026-06-21 — LimeZu "Serene Village", CC-BY 4.0). Arrows, FX, HUD, the plant boss, and the generic `H`-marker hut placeholder (Tier 4 — keep-procedural confirmed) stay procedural; extending sprites to any of them needs fresh owner approval. License policy for sourced art: CC0 / CC-BY / paid royalty-free only — **share-alike is rejected** (no CC-BY-SA, no GPL, hence no LPC; resolved in `docs/IDEATION.md` §8), no NC/ND, nothing AI-generated.
 - New input methods (gamepad, mouse-aim). Touch input is now supported for mobile testing — phones and tablets get a floating joystick over the left half of the screen plus on-screen A/B buttons via `src/MobileControls.tsx`. Detection uses `(pointer: coarse)` so desktop touchscreens stay on keyboard. Don't add additional input methods without owner sign-off.
-- Saves, accounts, leaderboards.
+- Saves, accounts. (**Leaderboard exception, owner-authorized 2026-06-24:** a web-only, email-gated initials/tag leaderboard — two boards, High Score + Time Elapsed — plus an anonymous feedback box, both on the Game Over / Victory screens. Backed by **Supabase behind a Vercel Edge route** (`api/leaderboard.ts`, `api/feedback.ts`): the browser never holds a Supabase key — it calls the same-origin route, which uses the `service_role` key server-side. Tags are globally unique (3–8 chars), one row per email (private dedupe handle, never displayed, no verification mail). Schema record: `supabase/leaderboard.sql`. This is a **web/Vercel** demo feature; the eventual Steam build uses Steamworks' own leaderboard, so don't couple game logic to it. Steamworks/native leaderboards remain out of scope.)
 - Multiplayer, online features.
 - Migration to Phaser, Godot, or any other engine.
 - New runtime dependencies. Ask before adding any package.
@@ -238,8 +238,10 @@ When working in this repo:
 
 ```
 src/
-├── App.tsx                       React shell: canvas + HUD overlays (room coord, wave #, kills, Energy bar + burst/sprint multipliers) + menu/game-over/victory + "Reached Boss" banner; useIsMobile/useIsPortrait hooks, CSS force-landscape rotation, mobile fullscreen + orientation lock
+├── App.tsx                       React shell: canvas + HUD overlays (room coord, wave #, kills, Energy bar + burst/sprint multipliers) + menu/game-over/victory + "Reached Boss" banner + Leaderboard modal; useIsMobile/useIsPortrait hooks, CSS force-landscape rotation, mobile fullscreen + orientation lock
 ├── MobileControls.tsx            Floating left-half joystick + lower-right A/B buttons (rendered by App when (pointer: coarse) matches); pointer-capture tracking; remaps coordinates when the root is CSS force-rotated to landscape
+├── SubmitScoreForm.tsx           Game Over / Victory submit surface: tag (3–8, live uniqueness check) + split email picker (local-part box + @ + domain dropdown / Other) → high-score entry returning both board ranks, plus an independent anonymous feedback box; LeaderboardBoards (two-tab top-20 view for the menu modal)
+├── leaderboard.ts                Client helper for the /api/leaderboard + /api/feedback Edge routes (submitScore/fetchLeaderboard/checkTag/submitFeedback, COMMON_EMAIL_DOMAINS) — same-origin, holds no keys
 ├── main.tsx                      React entry point
 ├── index.css                     Global styles (Tailwind)
 └── game/                         All game logic — pure TS, no React
@@ -263,5 +265,7 @@ src/
 
 api/
 ├── crash.ts                      Vercel Edge crash sink — POST target of Logger's /api/crash reports; opens/updates GitHub issues by crash fingerprint (typechecked via tsconfig.api.json, linted)
+├── leaderboard.ts                Vercel Edge route — sole gatekeeper to Supabase (service_role key, server-only): POST submit (returns both board ranks or 409 tag_taken), GET ?checkTag (live username check), GET ?board=score|time (top 20). See supabase/leaderboard.sql
+├── feedback.ts                   Vercel Edge route — anonymous feedback sink (no email); inserts into the Supabase feedback table
 └── env.d.ts                      Ambient process.env declaration for the Edge runtime (no @types/node)
 ```

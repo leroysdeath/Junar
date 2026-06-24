@@ -2528,6 +2528,13 @@ export class Game {
     if (this.gameState === 'victory') return;
     this.gameState = 'victory';
     this.callbacks.onStateChange('victory');
+    // Mirror gameOver(): surface the run's wall-clock duration so the victory
+    // screen's leaderboard submit has a Time value (same levelStartedAt clock).
+    this.callbacks.onRunEnd?.(
+      this.levelStartedAt
+        ? Math.round(performance.now() - this.levelStartedAt)
+        : 0,
+    );
     this.logger.log('state', 'victory', {
       trigger,
       room: { ...this.currentRoomCoord },
