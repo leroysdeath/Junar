@@ -2,7 +2,7 @@
 
 A browser-based 2D top-down survival prototype. You are an Adivasi-coded archer in a pre-industrial Indian jungle, auto-firing arrows at infected wildlife while traversing a procedurally generated maze of jungle paths toward the corrupted plant poisoning it all. Your family is your reason — and, eventually, your escort.
 
-**Working title:** "Jungle Archer" (shown in-game during prototyping). **Release title:** "Jungle X". **Repo codename:** Junar.
+**Title:** "Jungle X" (shown in-game). **Repo codename:** Junar.
 
 The beasts — black panther, sloth bear, Indian rat snake, Hoolock gibbon — are not villains. They are victims of a corruption seeping from a monstrous plant deep in the jungle. The tone is tragic, not bloodthirsty: you kill wildlife because there is no other choice, and the world is worth saving.
 
