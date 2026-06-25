@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import {
   COMMON_EMAIL_DOMAINS,
   checkTag,
@@ -27,6 +28,88 @@ function formatDuration(ms: number): string {
 }
 
 type TagStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken';
+
+// Centered feedback modal. Rendered as a full-viewport `fixed` overlay so it
+// sits in front of everything (on mobile force-landscape the transformed root is
+// the containing block, so it stays inside the rotated frame). Dismissed via the
+// header ✕, a backdrop click, or Escape. Keeping feedback here — rather than
+// stacked inline on the end screen — is what lets the Game Over / Victory
+// content fit the play area without a scrollbar.
+function FeedbackModal({
+  text,
+  setText,
+  sending,
+  onSubmit,
+  onClose,
+}: {
+  text: string;
+  setText: (v: string) => void;
+  sending: boolean;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  // Escape-to-close, read through a ref so the listener stays mount-once and
+  // never swallows keys after unmount.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Feedback"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md bg-black/90 border border-amber-500 rounded-lg shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-amber-500/40 px-5 py-3">
+          <h3 className="text-amber-400 font-bold text-lg">Feedback</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close feedback"
+            className="text-amber-300 hover:text-amber-100 transition-colors"
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value.slice(0, MAX_FEEDBACK))}
+            maxLength={MAX_FEEDBACK}
+            rows={5}
+            autoFocus
+            placeholder="Tell us what you think…"
+            aria-label="Feedback"
+            className="w-full bg-black/60 border border-amber-500/50 rounded px-3 py-2 text-sm text-white placeholder-amber-200/40 focus:outline-none focus:border-amber-400 resize-none"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-amber-200/50">
+              {text.length}/{MAX_FEEDBACK}
+            </span>
+            <button
+              onClick={onSubmit}
+              disabled={text.trim().length === 0 || sending}
+              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 px-5 rounded text-sm border border-amber-500 transition-colors"
+            >
+              {sending ? 'Sending…' : 'Submit'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Shared submit surface rendered on the Game Over and Victory screens. Holds two
 // fully independent areas: the high-score entry (tag + private email, returns
@@ -119,14 +202,17 @@ export function SubmitScoreForm({
       outcome,
     });
     setFeedbackSending(false);
-    if (ok) setFeedbackSent(true);
+    if (ok) {
+      setFeedbackSent(true);
+      setFeedbackOpen(false);
+    }
   };
 
   const inputCls =
     'w-full bg-black/60 border border-amber-500/50 rounded px-2 py-1.5 text-sm text-white placeholder-amber-200/40 focus:outline-none focus:border-amber-400';
 
   return (
-    <div className="mt-6 space-y-3 text-left">
+    <div className="mt-3 space-y-2 text-left">
       {/* High-score entry */}
       {result ? (
         <div className="bg-black/60 border border-emerald-500 rounded-lg px-4 py-3 text-center">
@@ -207,8 +293,7 @@ export function SubmitScoreForm({
           )}
 
           <p className="text-[11px] text-amber-200/50">
-            Email is private — used only to keep one entry per player. We never
-            email you.
+            Email is a private dedupe key — never shown, never emailed.
           </p>
           {submitError && (
             <p className="text-[11px] text-red-400">{submitError}</p>
@@ -223,38 +308,14 @@ export function SubmitScoreForm({
         </div>
       )}
 
-      {/* Feedback — fully independent of the entry above */}
+      {/* Feedback — opens a centered modal (FeedbackModal) so it never
+          lengthens the end screen, which must fit the play area without
+          scrolling. Independent of the high-score entry above. */}
       {feedbackSent ? (
         <div className="bg-black/60 border border-emerald-500/60 rounded-lg px-4 py-2 text-center">
           <p className="text-emerald-300 text-sm">
             Thank you for your feedback!
           </p>
-        </div>
-      ) : feedbackOpen ? (
-        <div className="bg-black/50 border border-amber-500/60 rounded-lg px-4 py-3 space-y-2">
-          <textarea
-            value={feedbackText}
-            onChange={(e) =>
-              setFeedbackText(e.target.value.slice(0, MAX_FEEDBACK))
-            }
-            maxLength={MAX_FEEDBACK}
-            rows={3}
-            placeholder="Tell us what you think…"
-            aria-label="Feedback"
-            className="w-full bg-black/60 border border-amber-500/50 rounded px-2 py-1.5 text-sm text-white placeholder-amber-200/40 focus:outline-none focus:border-amber-400 resize-none"
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-amber-200/50">
-              {feedbackText.length}/{MAX_FEEDBACK}
-            </span>
-            <button
-              onClick={onSubmitFeedback}
-              disabled={feedbackText.trim().length === 0 || feedbackSending}
-              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-1.5 px-4 rounded text-sm border border-amber-500 transition-colors"
-            >
-              {feedbackSending ? 'Sending…' : 'Submit'}
-            </button>
-          </div>
         </div>
       ) : (
         <button
@@ -263,6 +324,16 @@ export function SubmitScoreForm({
         >
           Submit Feedback?
         </button>
+      )}
+
+      {feedbackOpen && !feedbackSent && (
+        <FeedbackModal
+          text={feedbackText}
+          setText={setFeedbackText}
+          sending={feedbackSending}
+          onSubmit={onSubmitFeedback}
+          onClose={() => setFeedbackOpen(false)}
+        />
       )}
     </div>
   );
