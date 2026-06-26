@@ -12,6 +12,8 @@
 // Required env vars (set in Vercel Project Settings / .env.local for `vercel dev`):
 //   SUPABASE_URL                - e.g. https://abcd.supabase.co
 //   SUPABASE_SERVICE_ROLE_KEY   - service_role key (bypasses RLS; server-only)
+//   LEADERBOARD_EMAIL_PEPPER    - secret HMAC key for the email hash (POST only;
+//                                 without it submits 500, reads still work)
 
 export const config = { runtime: 'edge' };
 
@@ -63,6 +65,31 @@ function clampInt(v: unknown, max: number): number {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n) || n < 0) return 0;
   return Math.min(n, max);
+}
+
+// One-way HMAC-SHA256 of the normalized email, keyed by a server-only pepper.
+// Only this digest is stored as the per-player dedupe key — the plaintext email
+// never rests in the database. HMAC (keyed) rather than a bare hash so the
+// small, guessable email keyspace can't be reversed by precomputation without
+// the secret pepper. Returns lowercase hex. Uses Web Crypto (present in the
+// Edge runtime) so no dependency is added.
+async function hashEmail(email: string, pepper: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(pepper),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    enc.encode(email.trim().toLowerCase()),
+  );
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export default async function handler(request: Request): Promise<Response> {
@@ -123,14 +150,20 @@ export default async function handler(request: Request): Promise<Response> {
   if (!EMAIL_RE.test(email)) {
     return json(400, { error: 'invalid email' });
   }
+  const pepper = process.env.LEADERBOARD_EMAIL_PEPPER;
+  if (!pepper) {
+    return json(500, { error: 'email pepper not configured' });
+  }
   const score = clampInt(body.score, MAX_SCORE);
   const elapsedMs = clampInt(body.elapsedMs, MAX_ELAPSED_MS);
+  // Store only a one-way digest — the plaintext email never reaches Postgres.
+  const emailHash = await hashEmail(email, pepper);
 
   const res = await db('rpc/submit_score', {
     method: 'POST',
     body: JSON.stringify({
       p_tag: tag,
-      p_email: email,
+      p_email_hash: emailHash,
       p_score: score,
       p_elapsed_ms: elapsedMs,
     }),

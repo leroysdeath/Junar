@@ -8,12 +8,14 @@
 -- Vercel Edge route (api/leaderboard.ts, api/feedback.ts), which uses the
 -- service_role key — that role bypasses RLS. Both tables have RLS enabled with
 -- NO policies, so without the service key they are completely inaccessible
--- (the anon key is never issued to anyone). Emails therefore never leave the DB.
+-- (the anon key is never issued to anyone). Only a one-way HMAC digest of the
+-- email is ever stored (email_hash, computed by api/leaderboard.ts) — the
+-- plaintext email never reaches the database.
 
 -- ── Leaderboard ──────────────────────────────────────────────────────────────
 create table if not exists public.leaderboard (
   id              uuid primary key default gen_random_uuid(),
-  email           text not null unique,        -- private dedupe handle (never displayed)
+  email_hash      text not null unique,        -- HMAC-SHA256 of the email; private dedupe key (plaintext never stored)
   tag             text not null,               -- public display name, 3–8 chars
   best_score      integer not null default 0,
   best_elapsed_ms integer not null default 0,
@@ -45,13 +47,15 @@ create table if not exists public.feedback (
 alter table public.feedback enable row level security;
 
 -- ── submit_score RPC ─────────────────────────────────────────────────────────
--- One row per email. Keeps the player's best score and best time independently
--- (GREATEST on each axis), enforces a globally unique tag, and returns the
--- player's rank on both boards. Returns tag_taken=true WITHOUT writing when the
--- requested tag is held by a different email (or loses a concurrent race).
+-- One row per player (keyed by the email hash). Keeps the player's best score
+-- and best time independently (GREATEST on each axis), enforces a globally
+-- unique tag, and returns the player's rank on both boards. Returns
+-- tag_taken=true WITHOUT writing when the requested tag is held by a different
+-- player (or loses a concurrent race). p_email_hash is the opaque HMAC digest
+-- computed by the Edge route — the plaintext email never reaches Postgres.
 create or replace function public.submit_score(
   p_tag        text,
-  p_email      text,
+  p_email_hash text,
   p_score      integer,
   p_elapsed_ms integer
 )
@@ -62,7 +66,7 @@ set search_path = public
 as $$
 declare
   v_tag          text    := btrim(p_tag);
-  v_email        text    := lower(btrim(p_email));
+  v_email_hash   text    := btrim(p_email_hash);
   v_score        integer := greatest(0, coalesce(p_score, 0));
   v_elapsed      integer := greatest(0, coalesce(p_elapsed_ms, 0));
   v_best_score   integer;
@@ -73,20 +77,20 @@ begin
     raise exception 'invalid tag length';
   end if;
 
-  -- Reject a tag already held by a DIFFERENT email (the same email may keep or
-  -- change to any free tag).
+  -- Reject a tag already held by a DIFFERENT player (the same player may keep
+  -- or change to any free tag).
   if exists (
     select 1 from public.leaderboard
-    where lower(tag) = lower(v_tag) and email <> v_email
+    where lower(tag) = lower(v_tag) and email_hash <> v_email_hash
   ) then
     return query select true, null::integer, null::integer;
     return;
   end if;
 
-  -- Upsert one row per email, keeping the best value on each axis.
-  insert into public.leaderboard as l (email, tag, best_score, best_elapsed_ms, updated_at)
-  values (v_email, v_tag, v_score, v_elapsed, now())
-  on conflict (email) do update
+  -- Upsert one row per player, keeping the best value on each axis.
+  insert into public.leaderboard as l (email_hash, tag, best_score, best_elapsed_ms, updated_at)
+  values (v_email_hash, v_tag, v_score, v_elapsed, now())
+  on conflict (email_hash) do update
     set tag             = excluded.tag,
         best_score      = greatest(l.best_score, excluded.best_score),
         best_elapsed_ms = greatest(l.best_elapsed_ms, excluded.best_elapsed_ms),

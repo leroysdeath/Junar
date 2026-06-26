@@ -11,7 +11,11 @@ import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, STAMINA_MAX } from './game/constants';
 import { MobileControls, Action } from './MobileControls';
-import { SubmitScoreForm, LeaderboardBoards } from './SubmitScoreForm';
+import {
+  SubmitScoreForm,
+  LeaderboardBoards,
+  PrivacyNoticeBody,
+} from './SubmitScoreForm';
 
 // Detect touch-primary devices via the (pointer: coarse) media query.
 // Matches phones and tablets; spares desktop touchscreens (which have a
@@ -250,6 +254,7 @@ function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
   const [burst, setBurst] = useState({ active: false, multiplier: 1 });
@@ -652,9 +657,8 @@ function App() {
                 indicator sit — clipping the label to "Cred…". So we inset it the
                 same way the in-play A/B buttons do (safe-area + toolbar
                 clearance) to keep it fully on-screen. */}
-            <button
-              onClick={() => setShowCredits(true)}
-              className="absolute text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+            <div
+              className="absolute flex items-center gap-2"
               style={{
                 bottom: forceLandscape
                   ? 'calc(env(safe-area-inset-left, 0px) + 0.75rem)'
@@ -664,8 +668,19 @@ function App() {
                   : '0.75rem',
               }}
             >
-              Credits
-            </button>
+              <button
+                onClick={() => setShowPrivacy(true)}
+                className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+              >
+                Privacy
+              </button>
+              <button
+                onClick={() => setShowCredits(true)}
+                className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+              >
+                Credits
+              </button>
+            </div>
           </div>
         )}
 
@@ -820,6 +835,20 @@ function App() {
                 AI generated assets were used in this game.
               </p>
             </div>
+          </TitleModal>
+        )}
+
+        {/* Privacy modal — opened from the menu's "Privacy" link. Reuses the
+            same PrivacyNoticeBody rendered by the submit form's modal so the
+            disclosure text lives in one place. */}
+        {gameState === 'menu' && showPrivacy && (
+          <TitleModal
+            title="Privacy"
+            isMobile={isMobile}
+            centerTitle
+            onClose={() => setShowPrivacy(false)}
+          >
+            <PrivacyNoticeBody />
           </TitleModal>
         )}
 
