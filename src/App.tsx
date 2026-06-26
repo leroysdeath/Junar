@@ -5,13 +5,17 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
+import { Play, RotateCcw, Trophy, Volume2, VolumeX, X } from 'lucide-react';
 import { Game } from './game/Game';
 import { GameState, RoomGridCoord } from './game/types';
 import { Direction } from './game/InputManager';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, STAMINA_MAX } from './game/constants';
 import { MobileControls, Action } from './MobileControls';
-import { SubmitScoreForm, LeaderboardBoards } from './SubmitScoreForm';
+import {
+  SubmitScoreForm,
+  LeaderboardBoards,
+  PrivacyNoticeBody,
+} from './SubmitScoreForm';
 
 // Detect touch-primary devices via the (pointer: coarse) media query.
 // Matches phones and tablets; spares desktop touchscreens (which have a
@@ -250,6 +254,7 @@ function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [stamina, setStamina] = useState({ value: STAMINA_MAX, isLow: false });
   const [burst, setBurst] = useState({ active: false, multiplier: 1 });
@@ -468,37 +473,28 @@ function App() {
   };
 
   const renderGameOverContent = () => (
-    <div className="text-center text-white max-w-md mx-auto px-6 py-6 max-h-full overflow-y-auto opacity-90">
-      <h2 className="text-4xl font-bold text-red-400 mb-4 drop-shadow-lg">
+    <div className="text-center text-white max-w-md mx-auto px-6 py-3 max-h-full overflow-y-auto opacity-90">
+      <h2 className="text-3xl font-bold text-red-400 mb-1 drop-shadow-lg">
         Game Over
       </h2>
-      <p className="text-lg text-amber-200 mb-2 drop-shadow">
-        You reached room ({roomCoord.col}, {roomCoord.row})
-      </p>
-      <p className="text-base text-amber-300 mb-1 drop-shadow">
-        Time Elapsed: {formatDuration(runElapsedMs)}
-      </p>
-      <p className="text-base text-amber-300 mb-1 drop-shadow">
-        Total Kills: {kills}
-      </p>
-      <p className="text-base text-amber-300 mb-8 drop-shadow">
-        Final Score: {score}
+      <p className="text-sm text-amber-300 mb-2 drop-shadow">
+        Time {formatDuration(runElapsedMs)} · Kills {kills} · Score {score}
       </p>
 
       <SubmitScoreForm score={score} elapsedMs={runElapsedMs} outcome="death" />
 
-      <div className="space-y-4 mt-6">
+      <div className="space-y-2 mt-3">
         <button
           onClick={restartGame}
-          className="w-full bg-gradient-to-r from-red-600/90 to-red-700/90 hover:from-red-500 hover:to-red-600 text-white font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-red-500"
+          className="w-full bg-gradient-to-r from-red-600/90 to-red-700/90 hover:from-red-500 hover:to-red-600 text-white font-bold py-2.5 px-8 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-base border-2 border-red-500"
         >
-          <RotateCcw size={24} />
+          <RotateCcw size={20} />
           Try Again
         </button>
 
         <button
           onClick={goToMenu}
-          className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+          className="w-full bg-gradient-to-r from-amber-600/90 to-amber-700/90 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-2 px-8 rounded-lg transition-all duration-200 text-sm border-2 border-amber-500"
         >
           Main Menu
         </button>
@@ -507,12 +503,14 @@ function App() {
   );
 
   const renderVictoryContent = () => (
-    <div className="text-center text-white max-w-md mx-auto px-6 py-6 max-h-full overflow-y-auto">
-      <h2 className="text-4xl font-bold text-yellow-400 mb-4">Victory!</h2>
-      <p className="text-lg text-amber-200 mb-2">
+    <div className="text-center text-white max-w-md mx-auto px-6 py-3 max-h-full overflow-y-auto">
+      <h2 className="text-3xl font-bold text-yellow-400 mb-1">Victory!</h2>
+      <p className="text-sm text-amber-200 mb-0.5">
         You have conquered the jungle!
       </p>
-      <p className="text-base text-yellow-300 mb-8">Final Score: {score}</p>
+      <p className="text-sm text-yellow-300 mb-2">
+        Time {formatDuration(runElapsedMs)} · Kills {kills} · Score {score}
+      </p>
 
       <SubmitScoreForm
         score={score}
@@ -520,18 +518,18 @@ function App() {
         outcome="victory"
       />
 
-      <div className="space-y-4 mt-6">
+      <div className="space-y-2 mt-3">
         <button
           onClick={startGame}
-          className="w-full bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-black font-bold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-3 text-lg border-2 border-yellow-500"
+          className="w-full bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-black font-bold py-2.5 px-8 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-base border-2 border-yellow-500"
         >
-          <Play size={24} />
+          <Play size={20} />
           Play Again
         </button>
 
         <button
           onClick={goToMenu}
-          className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+          className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-2 px-8 rounded-lg transition-all duration-200 text-sm border-2 border-amber-500"
         >
           Main Menu
         </button>
@@ -642,9 +640,11 @@ function App() {
 
                 <button
                   onClick={() => setShowLeaderboard(true)}
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500"
+                  aria-label="Leaderboard"
+                  title="Leaderboard"
+                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500 flex items-center justify-center"
                 >
-                  Leaderboard
+                  <Trophy size={24} />
                 </button>
               </div>
             </div>
@@ -657,9 +657,8 @@ function App() {
                 indicator sit — clipping the label to "Cred…". So we inset it the
                 same way the in-play A/B buttons do (safe-area + toolbar
                 clearance) to keep it fully on-screen. */}
-            <button
-              onClick={() => setShowCredits(true)}
-              className="absolute text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+            <div
+              className="absolute flex items-center gap-2"
               style={{
                 bottom: forceLandscape
                   ? 'calc(env(safe-area-inset-left, 0px) + 0.75rem)'
@@ -669,8 +668,19 @@ function App() {
                   : '0.75rem',
               }}
             >
-              Credits
-            </button>
+              <button
+                onClick={() => setShowPrivacy(true)}
+                className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+              >
+                Privacy
+              </button>
+              <button
+                onClick={() => setShowCredits(true)}
+                className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+              >
+                Credits
+              </button>
+            </div>
           </div>
         )}
 
@@ -825,6 +835,20 @@ function App() {
                 AI generated assets were used in this game.
               </p>
             </div>
+          </TitleModal>
+        )}
+
+        {/* Privacy modal — opened from the menu's "Privacy" link. Reuses the
+            same PrivacyNoticeBody rendered by the submit form's modal so the
+            disclosure text lives in one place. */}
+        {gameState === 'menu' && showPrivacy && (
+          <TitleModal
+            title="Privacy"
+            isMobile={isMobile}
+            centerTitle
+            onClose={() => setShowPrivacy(false)}
+          >
+            <PrivacyNoticeBody />
           </TitleModal>
         )}
 

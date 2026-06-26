@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import {
   COMMON_EMAIL_DOMAINS,
   checkTag,
@@ -17,6 +18,11 @@ const OTHER_DOMAIN = '__other__';
 const MAX_FEEDBACK = 500;
 const CHECK_DEBOUNCE_MS = 400;
 
+// Public contact shown on the privacy notice for data access/deletion requests.
+// TODO(owner): replace this placeholder with the real address before launch —
+// the notice's deletion-request line is non-functional until you do.
+export const PRIVACY_CONTACT_EMAIL = 'privacy@example.com';
+
 // Local copy of App's m:ss formatter for the Time column (kept here so this
 // component is self-contained; App.tsx has its own for the end-screen stats).
 function formatDuration(ms: number): string {
@@ -27,6 +33,184 @@ function formatDuration(ms: number): string {
 }
 
 type TagStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken';
+
+// Centered feedback modal. Rendered as a full-viewport `fixed` overlay so it
+// sits in front of everything (on mobile force-landscape the transformed root is
+// the containing block, so it stays inside the rotated frame). Dismissed via the
+// header ✕, a backdrop click, or Escape. Keeping feedback here — rather than
+// stacked inline on the end screen — is what lets the Game Over / Victory
+// content fit the play area without a scrollbar.
+function FeedbackModal({
+  text,
+  setText,
+  sending,
+  onSubmit,
+  onClose,
+}: {
+  text: string;
+  setText: (v: string) => void;
+  sending: boolean;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  // Escape-to-close, read through a ref so the listener stays mount-once and
+  // never swallows keys after unmount.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Feedback"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md bg-black/90 border border-amber-500 rounded-lg shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-amber-500/40 px-5 py-3">
+          <h3 className="text-amber-400 font-bold text-lg">Feedback</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close feedback"
+            className="text-amber-300 hover:text-amber-100 transition-colors"
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value.slice(0, MAX_FEEDBACK))}
+            maxLength={MAX_FEEDBACK}
+            rows={5}
+            autoFocus
+            placeholder="Tell us what you think…"
+            aria-label="Feedback"
+            className="w-full bg-black/60 border border-amber-500/50 rounded px-3 py-2 text-sm text-white placeholder-amber-200/40 focus:outline-none focus:border-amber-400 resize-none"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-amber-200/50">
+              {text.length}/{MAX_FEEDBACK}
+            </span>
+            <button
+              onClick={onSubmit}
+              disabled={text.trim().length === 0 || sending}
+              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 px-5 rounded text-sm border border-amber-500 transition-colors"
+            >
+              {sending ? 'Sending…' : 'Submit'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Privacy notice body — the shared content of the privacy disclosure. Rendered
+// inside the submit form's PrivacyModal and the menu's Privacy TitleModal
+// (App.tsx) so the legal text lives in exactly one place. Covers what the
+// optional leaderboard stores (tag/score/time public; email only as a one-way
+// hash), the anonymous feedback box, consent + deletion rights, and the
+// storage backend — the GDPR Art. 13 / CalOPPA essentials for a web demo.
+export function PrivacyNoticeBody() {
+  return (
+    <div className="space-y-3">
+      <p>
+        <strong>Jungle X</strong> is a free web demo. The leaderboard is
+        optional — you only share data if you choose to submit a score.
+      </p>
+      <section>
+        <h4 className="text-amber-400 font-semibold mb-1">
+          What we store when you submit a score
+        </h4>
+        <ul className="list-disc list-inside space-y-1">
+          <li>
+            Your <strong>name/tag</strong> and your{' '}
+            <strong>score and time</strong> — shown publicly on the leaderboard.
+          </li>
+          <li>
+            A one-way <strong>hash of your email</strong> — used only to keep
+            one entry per player. We never store your actual email address,
+            never display it, never email you, and never sell or share it.
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h4 className="text-amber-400 font-semibold mb-1">Feedback</h4>
+        <p>The feedback box is anonymous — no email is attached.</p>
+      </section>
+      <section>
+        <h4 className="text-amber-400 font-semibold mb-1">
+          Your choices &amp; rights
+        </h4>
+        <p>
+          Submitting is voluntary (your consent). To request access to or
+          deletion of your entry, contact{' '}
+          <span className="text-amber-300">{PRIVACY_CONTACT_EMAIL}</span>. We
+          keep entries until you ask us to remove them.
+        </p>
+      </section>
+      <p className="text-xs text-amber-200/70">
+        Data is stored via Supabase; the game never holds a database key.
+      </p>
+    </div>
+  );
+}
+
+// Centered privacy modal for the submit form's "Privacy" link. Same overlay
+// shape as FeedbackModal (full-viewport fixed, ✕ / backdrop / Escape to close),
+// but height-capped with internal scroll so the longer notice never clips on a
+// short frame (mobile landscape).
+function PrivacyModal({ onClose }: { onClose: () => void }) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Privacy"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex flex-col w-full max-w-md max-h-full overflow-hidden bg-black/90 border border-amber-500 rounded-lg shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-amber-500/40 px-5 py-3 shrink-0">
+          <h3 className="text-amber-400 font-bold text-lg">Privacy</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close privacy notice"
+            className="text-amber-300 hover:text-amber-100 transition-colors"
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto text-sm text-amber-100 px-5 py-4">
+          <PrivacyNoticeBody />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Shared submit surface rendered on the Game Over and Victory screens. Holds two
 // fully independent areas: the high-score entry (tag + private email, returns
@@ -60,6 +244,9 @@ export function SubmitScoreForm({
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // Privacy notice modal (opened from the disclaimer link under the email).
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   // Debounced live "is this username free?" check.
   useEffect(() => {
@@ -119,14 +306,17 @@ export function SubmitScoreForm({
       outcome,
     });
     setFeedbackSending(false);
-    if (ok) setFeedbackSent(true);
+    if (ok) {
+      setFeedbackSent(true);
+      setFeedbackOpen(false);
+    }
   };
 
   const inputCls =
     'w-full bg-black/60 border border-amber-500/50 rounded px-2 py-1.5 text-sm text-white placeholder-amber-200/40 focus:outline-none focus:border-amber-400';
 
   return (
-    <div className="mt-6 space-y-3 text-left">
+    <div className="mt-3 space-y-2 text-left">
       {/* High-score entry */}
       {result ? (
         <div className="bg-black/60 border border-emerald-500 rounded-lg px-4 py-3 text-center">
@@ -207,8 +397,15 @@ export function SubmitScoreForm({
           )}
 
           <p className="text-[11px] text-amber-200/50">
-            Email is private — used only to keep one entry per player. We never
-            email you.
+            Email is a private dedupe key — stored only as a one-way hash, never
+            shown or emailed.{' '}
+            <button
+              type="button"
+              onClick={() => setPrivacyOpen(true)}
+              className="underline underline-offset-2 hover:text-amber-200"
+            >
+              Privacy
+            </button>
           </p>
           {submitError && (
             <p className="text-[11px] text-red-400">{submitError}</p>
@@ -223,38 +420,14 @@ export function SubmitScoreForm({
         </div>
       )}
 
-      {/* Feedback — fully independent of the entry above */}
+      {/* Feedback — opens a centered modal (FeedbackModal) so it never
+          lengthens the end screen, which must fit the play area without
+          scrolling. Independent of the high-score entry above. */}
       {feedbackSent ? (
         <div className="bg-black/60 border border-emerald-500/60 rounded-lg px-4 py-2 text-center">
           <p className="text-emerald-300 text-sm">
             Thank you for your feedback!
           </p>
-        </div>
-      ) : feedbackOpen ? (
-        <div className="bg-black/50 border border-amber-500/60 rounded-lg px-4 py-3 space-y-2">
-          <textarea
-            value={feedbackText}
-            onChange={(e) =>
-              setFeedbackText(e.target.value.slice(0, MAX_FEEDBACK))
-            }
-            maxLength={MAX_FEEDBACK}
-            rows={3}
-            placeholder="Tell us what you think…"
-            aria-label="Feedback"
-            className="w-full bg-black/60 border border-amber-500/50 rounded px-2 py-1.5 text-sm text-white placeholder-amber-200/40 focus:outline-none focus:border-amber-400 resize-none"
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-amber-200/50">
-              {feedbackText.length}/{MAX_FEEDBACK}
-            </span>
-            <button
-              onClick={onSubmitFeedback}
-              disabled={feedbackText.trim().length === 0 || feedbackSending}
-              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-1.5 px-4 rounded text-sm border border-amber-500 transition-colors"
-            >
-              {feedbackSending ? 'Sending…' : 'Submit'}
-            </button>
-          </div>
         </div>
       ) : (
         <button
@@ -264,6 +437,18 @@ export function SubmitScoreForm({
           Submit Feedback?
         </button>
       )}
+
+      {feedbackOpen && !feedbackSent && (
+        <FeedbackModal
+          text={feedbackText}
+          setText={setFeedbackText}
+          sending={feedbackSending}
+          onSubmit={onSubmitFeedback}
+          onClose={() => setFeedbackOpen(false)}
+        />
+      )}
+
+      {privacyOpen && <PrivacyModal onClose={() => setPrivacyOpen(false)} />}
     </div>
   );
 }
