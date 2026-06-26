@@ -17,6 +17,13 @@ import {
   PrivacyNoticeBody,
 } from './SubmitScoreForm';
 
+// Feature flag — the email-gated leaderboard + anonymous feedback surfaces
+// (title-screen Leaderboard button, the Privacy link that documents them, and
+// the SubmitScoreForm on the Game Over / Victory screens) are hidden for live
+// testing while the backend isn't fully working. The code is intact; flip this
+// to true to re-enable the whole leaderboard/feedback feature set.
+const LEADERBOARD_FEATURE_ENABLED = false;
+
 // Detect touch-primary devices via the (pointer: coarse) media query.
 // Matches phones and tablets; spares desktop touchscreens (which have a
 // fine pointer alongside their touch screen).
@@ -481,7 +488,15 @@ function App() {
         Time {formatDuration(runElapsedMs)} · Kills {kills} · Score {score}
       </p>
 
-      <SubmitScoreForm score={score} elapsedMs={runElapsedMs} outcome="death" />
+      {/* Leaderboard + feedback prompts hidden for live testing — not fully
+          working yet. Keep the code; flip this guard back to re-enable. */}
+      {LEADERBOARD_FEATURE_ENABLED && (
+        <SubmitScoreForm
+          score={score}
+          elapsedMs={runElapsedMs}
+          outcome="death"
+        />
+      )}
 
       <div className="space-y-2 mt-3">
         <button
@@ -512,11 +527,15 @@ function App() {
         Time {formatDuration(runElapsedMs)} · Kills {kills} · Score {score}
       </p>
 
-      <SubmitScoreForm
-        score={score}
-        elapsedMs={runElapsedMs}
-        outcome="victory"
-      />
+      {/* Leaderboard + feedback prompts hidden for live testing — not fully
+          working yet. Keep the code; flip this guard back to re-enable. */}
+      {LEADERBOARD_FEATURE_ENABLED && (
+        <SubmitScoreForm
+          score={score}
+          elapsedMs={runElapsedMs}
+          outcome="victory"
+        />
+      )}
 
       <div className="space-y-2 mt-3">
         <button
@@ -638,14 +657,19 @@ function App() {
                   How to Play
                 </button>
 
-                <button
-                  onClick={() => setShowLeaderboard(true)}
-                  aria-label="Leaderboard"
-                  title="Leaderboard"
-                  className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500 flex items-center justify-center"
-                >
-                  <Trophy size={24} />
-                </button>
+                {/* Leaderboard button hidden for live testing — the
+                    leaderboard isn't fully working yet. Keep the code; flip
+                    this guard back to re-enable. */}
+                {LEADERBOARD_FEATURE_ENABLED && (
+                  <button
+                    onClick={() => setShowLeaderboard(true)}
+                    aria-label="Leaderboard"
+                    title="Leaderboard"
+                    className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 text-base border-2 border-amber-500 flex items-center justify-center"
+                  >
+                    <Trophy size={24} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -668,12 +692,17 @@ function App() {
                   : '0.75rem',
               }}
             >
-              <button
-                onClick={() => setShowPrivacy(true)}
-                className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
-              >
-                Privacy
-              </button>
+              {/* Privacy link hidden for live testing alongside the
+                  leaderboard/feedback features it documents. Keep the code;
+                  flip this guard back to re-enable. */}
+              {LEADERBOARD_FEATURE_ENABLED && (
+                <button
+                  onClick={() => setShowPrivacy(true)}
+                  className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
+                >
+                  Privacy
+                </button>
+              )}
               <button
                 onClick={() => setShowCredits(true)}
                 className="text-xs font-semibold text-amber-300 hover:text-white py-1.5 px-3 rounded-md border border-amber-500 hover:bg-amber-600/80 transition-colors"
