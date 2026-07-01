@@ -265,15 +265,15 @@ export const ENEMY_VISUAL_PX: Record<EnemyType, number> = {
 // its base panther value — Game.checkCollisions branches on the isBoss flag.
 // Gibbon carries a value for completeness though it currently never spawns.
 export const ENEMY_KILL_SCORE: Record<EnemyType, number> = {
-  snake: 5,
-  gibbon: 10,
-  panther: 25,
-  bear: 50,
+  snake: 10,
+  gibbon: 20,
+  panther: 50,
+  bear: 100,
 };
 
 // Score for defeating a mini-boss (the enlarged panther mini-boss today; any
 // future mini-boss reuses this). Still a normal kill — NOT a run victory.
-export const BOSS_KILL_SCORE = 500;
+export const BOSS_KILL_SCORE = 10000;
 
 // --- Hunt system (Step 4 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.11 (static aggro) and §5.12 (the
