@@ -259,6 +259,22 @@ export const ENEMY_VISUAL_PX: Record<EnemyType, number> = {
   snake: 16, // thin rat snake; abstracted to the readability floor
 };
 
+// Per-type score awarded on a normal kill (owner 2026-07-01, replacing the flat
+// +10-per-kill rule). Tougher/faster beasts are worth more than the trivial
+// snake. The enlarged panther mini-boss is worth BOSS_KILL_SCORE (below), NOT
+// its base panther value — Game.checkCollisions branches on the isBoss flag.
+// Gibbon carries a value for completeness though it currently never spawns.
+export const ENEMY_KILL_SCORE: Record<EnemyType, number> = {
+  snake: 10,
+  gibbon: 10,
+  panther: 25,
+  bear: 50,
+};
+
+// Score for defeating a mini-boss (the enlarged panther mini-boss today; any
+// future mini-boss reuses this). Still a normal kill — NOT a run victory.
+export const BOSS_KILL_SCORE = 500;
+
 // --- Hunt system (Step 4 of the traversable-maps refactor) ---
 // See docs/ROADMAP-traversable-maps.md §5.11 (static aggro) and §5.12 (the
 // 4-state Hunt machine). All Hunt timing flows from the gameLoop currentTime
@@ -312,7 +328,6 @@ export const BOSS_HALO_RADIUS = 6;
 // (C modifier = floor(waveNum / WAVE_PER_C_INCREMENT)). ~+1 static per 2
 // triplets.
 export const WAVE_PER_C_INCREMENT = 6;
-
 
 // --- Boss-arena stub win trigger (input-agnostic walk-on) ---
 // Until boss combat lands (roadmap §5.15), the run is won by walking into the

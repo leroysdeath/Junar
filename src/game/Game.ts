@@ -85,6 +85,8 @@ import {
   ALLY_JUMPBACK_SPEED_MULT,
   ALLY_JUMPBACK_MS,
   ALLY_COOLDOWN_MS,
+  ENEMY_KILL_SCORE,
+  BOSS_KILL_SCORE,
 } from './constants';
 
 type GameOverReason =
@@ -1967,7 +1969,9 @@ export class Game {
           this.soundManager.play('enemy-hit');
           if (dead) {
             this.enemies.splice(i, 1);
-            this.score += 10;
+            this.score += isBoss
+              ? BOSS_KILL_SCORE
+              : ENEMY_KILL_SCORE[enemyType];
             this.enemiesKilled += 1;
             this.callbacks.onScoreChange(this.score);
             this.callbacks.onKillsChange(this.enemiesKilled);
@@ -2047,7 +2051,7 @@ export class Game {
         const enemyType = e.getType();
         if (e.takeHit()) {
           this.enemies.splice(i, 1);
-          this.score += 10;
+          this.score += ENEMY_KILL_SCORE[enemyType];
           this.enemiesKilled += 1;
           this.callbacks.onScoreChange(this.score);
           this.callbacks.onKillsChange(this.enemiesKilled);
