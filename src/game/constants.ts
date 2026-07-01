@@ -265,7 +265,7 @@ export const ENEMY_VISUAL_PX: Record<EnemyType, number> = {
 // its base panther value — Game.checkCollisions branches on the isBoss flag.
 // Gibbon carries a value for completeness though it currently never spawns.
 export const ENEMY_KILL_SCORE: Record<EnemyType, number> = {
-  snake: 10,
+  snake: 5,
   gibbon: 10,
   panther: 25,
   bear: 50,
